@@ -1,0 +1,8 @@
+node_modules
+dist
+out
+minecraft_data
+.idea
+.vscode
+*.log
+.DS_Store

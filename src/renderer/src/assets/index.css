@@ -1,0 +1,138 @@
+@import url('https://fonts.googleapis.com/css2?family=Kanit:wght@200;300;400;500;600;700&display=swap');
+
+:root {
+  --sidebar-bg: #1a1b1e;
+  --main-bg: #121212;
+  --accent: #ffd700;
+  --text-primary: #ffffff;
+  --text-secondary: #aaaaaa;
+}
+
+* {
+  box-sizing: border-box;
+  font-family: 'Kanit', sans-serif !important;
+}
+
+body {
+  margin: 0;
+  font-family: 'Kanit', sans-serif !important;
+  background-color: var(--main-bg);
+  color: var(--text-primary);
+  user-select: none;
+  overflow: hidden;
+  /* Cute Star Cursor */
+  cursor: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg'  width='40' height='48' viewport='0 0 100 100' style='fill:black;font-size:24px;'><text y='50%'>⭐</text></svg>") 16 0, auto; 
+}
+
+/* Make clickable elements show a different cute cursor (e.g. Hand) */
+a, button, .titlebar-button, .sidebar-item, input, select, .pointer {
+  cursor: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg'  width='40' height='48' viewport='0 0 100 100' style='fill:black;font-size:24px;'><text y='50%'>👆</text></svg>") 16 0, pointer !important;
+}
+
+/* ... Scrollbar ... */
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #555;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #888;
+}
+
+/* Animations */
+.bg-animation {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: -1;
+    overflow: hidden;
+    background: linear-gradient(to bottom, #1a1b1e, #000);
+}
+
+.cube {
+    position: absolute;
+    bottom: -100px;
+    width: 40px;
+    height: 40px;
+    background: rgba(255, 255, 255, 0.05); /* Pale white */
+    border: 1px solid rgba(255, 255, 255, 0.1); /* Pale white border */
+    /* Use translate and rotate properties to avoid transform conflict */
+    translate: 0 0;
+    rotate: 0deg;
+    animation: rise 20s infinite ease-in, rotate 20s infinite linear; /* Slower rise and rotation */
+    will-change: translate, rotate, opacity; /* Optimize performance */
+    /* Hardware acceleration hint */
+    transform: translateZ(0);
+}
+
+/* Pause animations when hidden */
+.animations-paused .cube {
+    animation-play-state: paused !important;
+}
+
+/* Removed extra cubes to reduce GPU load */
+
+@keyframes rise {
+    0% { translate: 0 0; opacity: 0; }
+    10% { opacity: 0.8; } /* Lower max opacity */
+    90% { opacity: 0.8; }
+    100% { translate: 0 -120vh; opacity: 0; }
+}
+
+@keyframes rotate {
+    0% { rotate: 0deg; }
+    100% { rotate: 360deg; }
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.titlebar {
+  -webkit-app-region: drag;
+  height: 30px;
+  background: transparent;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  display: flex;
+  justify-content: flex-end;
+  padding-right: 10px;
+}
+
+.titlebar-button {
+  -webkit-app-region: no-drag;
+  width: 30px;
+  height: 30px;
+  border: none;
+  background: transparent;
+  color: #fff;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.titlebar-button:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.titlebar-button.close:hover {
+  background: #ff4d4d;
+}
+
+.app-container {
+  display: flex;
+  height: 100vh;
+  /* padding-top removed to merge titlebar with content */
+}
