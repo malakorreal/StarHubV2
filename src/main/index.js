@@ -10,7 +10,7 @@ import { setupStore } from './store'
 import { autoUpdater } from 'electron-updater'
 
 // Disable Hardware Acceleration to fix slow startup/lag on some systems
-app.disableHardwareAcceleration()
+// app.disableHardwareAcceleration()
 
 let mainWindow
 let tray = null

@@ -1,6 +1,6 @@
 export default {
   auth: {
-    guest: "แขก",
+    guest: "แขก (ยังไม่ได้ Login)",
     loginFailed: "เข้าสู่ระบบไม่สำเร็จ",
     loginError: "เกิดข้อผิดพลาดในการเข้าสู่ระบบ"
   },
@@ -14,7 +14,7 @@ export default {
   main: {
     selectInstance: "เลือก Instance ที่ต้องการเล่น",
     serverInfo: "ข้อมูลเซิร์ฟเวอร์",
-    readyToPlay: "พร้อมลุย! (v1.0.10)",
+    readyToPlay: "พร้อม",
     announcement: "ประกาศ",
     version: "เวอร์ชัน",
     play: "เล่นเกม",

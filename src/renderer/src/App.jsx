@@ -99,7 +99,11 @@ function App() {
         const insts = await window.api.getInstances(force)
         // Only update if we got a valid array
         if (Array.isArray(insts)) {
-            setInstances(insts)
+            // Optimization: Deep compare to prevent unnecessary re-renders
+            setInstances(prev => {
+                if (JSON.stringify(prev) === JSON.stringify(insts)) return prev
+                return insts
+            })
             return insts // Return for chaining
         }
     } catch (err) {
