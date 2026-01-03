@@ -39,9 +39,15 @@ const UpdateModal = ({ status, progress, error, onInstall, onClose }) => {
                   showButtons: true
               }
           case 'error':
+              let errorMessage = error ? `${t('update.errorMessage')}\n(${error})` : t('update.errorMessage')
+              // Add hint for 404/auth errors which usually mean private repo
+              if (error && (error.includes('404') || error.includes('authentication token'))) {
+                  errorMessage += '\n\n' + t('update.checkRepoVisibility')
+              }
+              
               return {
                   title: t('update.error'),
-                  message: error ? `${t('update.errorMessage')}\n(${error})` : t('update.errorMessage'),
+                  message: errorMessage,
                   iconColor: '#e74c3c',
                   icon: (
                     <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#e74c3c" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

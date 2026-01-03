@@ -93,7 +93,8 @@ export default {
     restart: "Restart Now",
     later: "Update Later",
     error: "Update Failed",
-    errorMessage: "Something went wrong while updating. Please try again later."
+    errorMessage: "Something went wrong while updating. Please try again later.",
+    checkRepoVisibility: "Please check if the GitHub Repository is set to Public."
   },
   common: {
     close: "Close"

@@ -89,7 +89,8 @@ export default {
     restart: "รีสตาร์ททันที",
     later: "อัปเดตภายหลัง",
     error: "การอัปเดตล้มเหลว",
-    errorMessage: "เกิดข้อผิดพลาดในการอัปเดต โปรดลองใหม่อีกครั้งในภายหลัง"
+    errorMessage: "เกิดข้อผิดพลาดในการอัปเดต โปรดลองใหม่อีกครั้งในภายหลัง",
+    checkRepoVisibility: "กรุณาตรวจสอบว่า GitHub Repository ถูกตั้งค่าเป็น Public หรือไม่"
   },
   common: {
     close: "ปิด"
