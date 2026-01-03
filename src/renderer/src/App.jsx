@@ -54,8 +54,8 @@ function App() {
   // Update State
   const [updateStatus, setUpdateStatus] = useState('idle') // idle, checking, available, downloading, downloaded, error
   const [updateProgress, setUpdateProgress] = useState(0)
-
-  // Console / Logs
+  const [updateError, setUpdateError] = useState(null)
+  
   const [showConsole, setShowConsole] = useState(false)
   const [logs, setLogs] = useState([])
 
@@ -233,6 +233,9 @@ function App() {
         window.api.onUpdaterEvent((data) => {
             console.log("Updater Event:", data)
             setUpdateStatus(data.type)
+            if (data.type === 'error' && data.error) {
+                setUpdateError(data.error)
+            }
             if (data.progress) {
                 setUpdateProgress(data.progress)
             }
@@ -517,6 +520,7 @@ function App() {
         <UpdateModal 
             status={updateStatus} 
             progress={updateProgress}
+            error={updateError}
             onInstall={() => window.api.installUpdate()}
             onClose={() => setUpdateStatus('idle')}
         />

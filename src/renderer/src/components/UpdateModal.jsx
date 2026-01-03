@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { useLanguage } from '../contexts/LanguageContext'
 
-const UpdateModal = ({ status, progress, onInstall, onClose }) => {
+const UpdateModal = ({ status, progress, error, onInstall, onClose }) => {
   const { t } = useLanguage()
   const [animate, setAnimate] = useState(false)
 
@@ -41,7 +41,7 @@ const UpdateModal = ({ status, progress, onInstall, onClose }) => {
           case 'error':
               return {
                   title: t('update.error'),
-                  message: t('update.errorMessage'),
+                  message: error ? `${t('update.errorMessage')}\n(${error})` : t('update.errorMessage'),
                   iconColor: '#e74c3c',
                   icon: (
                     <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#e74c3c" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
