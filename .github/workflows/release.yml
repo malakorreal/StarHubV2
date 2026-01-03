@@ -1,19 +1,19 @@
-name: Build and Release
+name: Build & Release
 
 on:
   push:
     tags:
-      - 'v*' # Triggers when you push a tag like v1.0.1
+      - 'v*'
 
 jobs:
   release:
     runs-on: windows-latest
-
+    
     permissions:
-      contents: write # Required to create releases
-
+      contents: write
+    
     steps:
-      - name: Check out Git repository
+      - name: Check out git repository
         uses: actions/checkout@v4
 
       - name: Install Node.js
@@ -25,7 +25,7 @@ jobs:
       - name: Install Dependencies
         run: npm install
 
-      - name: Build and Publish
+      - name: Build & Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |

@@ -39,14 +39,18 @@ export default {
     switchAccount: "สลับบัญชี",
     signOut: "ออกจากระบบ",
     signOutConfirm: "คุณแน่ใจหรือไม่ว่าต้องการออกจากระบบ?",
-    enterCodeDesc: "กรอกโค้ดเพื่อปลดล็อกเกมที่ซ่อนอยู่",
+    enterCodeDesc: "กรอกโค้ดเพื่อปลดล็อก Instance ที่ซ่อนอยู่",
     enterCodePlaceholder: "กรอกโค้ดที่นี่...",
     add: "เพิ่ม",
     activeCodes: "โค้ดที่ใช้งานอยู่",
     noCodes: "ไม่มีโค้ดที่ใช้งานอยู่",
     invalidCode: "โค้ดไม่ถูกต้อง",
     codeAlreadyAdded: "เพิ่มโค้ดนี้ไปแล้ว",
-    online: "ออนไลน์"
+    online: "ออนไลน์",
+    uuid: "UUID",
+    noUuid: "ไม่มี UUID",
+    javaArgs: "Arguments เสริม (Java)",
+    autoJoin: "เข้าเซิร์ฟเวอร์อัตโนมัติ"
   },
   dialogs: {
     closeTitle: "ออกจากโปรแกรม",

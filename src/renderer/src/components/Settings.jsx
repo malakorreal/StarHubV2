@@ -3,6 +3,8 @@ import React, { useEffect, useState } from 'react'
 function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = [], onAddCode, onRemoveCode, t, changeLanguage, currentLanguage }) {
   const [activeTab, setActiveTab] = useState('general')
   const [ram, setRam] = useState(4096)
+  const [javaArgs, setJavaArgs] = useState('')
+  const [autoJoin, setAutoJoin] = useState(false)
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
   const [redeemInput, setRedeemInput] = useState('')
   const [redeemError, setRedeemError] = useState('')
@@ -11,13 +13,15 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
     if (window.api && window.api.getSettings) {
         window.api.getSettings().then(s => {
             if (s && s.ram) setRam(s.ram)
+            if (s && s.javaArgs) setJavaArgs(s.javaArgs)
+            if (s && typeof s.autoJoin !== 'undefined') setAutoJoin(s.autoJoin)
         })
     }
   }, [])
 
   const save = () => {
       if (window.api && window.api.setSettings) {
-        window.api.setSettings({ ram })
+        window.api.setSettings({ ram, javaArgs, autoJoin })
       }
       onClose()
   }
@@ -107,7 +111,7 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
           </div>
 
           {/* Content */}
-          <div style={{ flex: 1, padding: '30px', display: 'flex', flexDirection: 'column', position: 'relative' }}>
+          <div style={{ flex: 1, padding: '30px', display: 'flex', flexDirection: 'column', position: 'relative', overflowY: 'auto', overflowX: 'hidden' }}>
               
               {/* General Tab */}
               {activeTab === 'general' && (
@@ -131,6 +135,54 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
                               <span>1 GB</span>
                               <span>16 GB</span>
                           </div>
+                      </div>
+
+                      {/* Java Arguments */}
+                      <div style={{ marginBottom: '25px' }}>
+                        <label style={{ display: 'block', marginBottom: '10px', color: '#ccc' }}>{t('settings.javaArgs')}</label>
+                        <input
+                            type="text"
+                            value={javaArgs}
+                            onChange={(e) => setJavaArgs(e.target.value)}
+                            placeholder="-XX:+UseG1GC -Xmx4G"
+                            style={{
+                                width: '100%',
+                                padding: '10px',
+                                background: '#333',
+                                border: '1px solid #444',
+                                borderRadius: '4px',
+                                color: '#fff',
+                                fontFamily: 'monospace'
+                            }}
+                        />
+                      </div>
+
+                      {/* Auto Join Toggle */}
+                      <div style={{ marginBottom: '25px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <label style={{ color: '#ccc' }}>{t('settings.autoJoin')}</label>
+                        <div 
+                            onClick={() => setAutoJoin(!autoJoin)}
+                            style={{
+                                width: '50px',
+                                height: '26px',
+                                background: autoJoin ? 'var(--accent)' : '#444',
+                                borderRadius: '13px',
+                                position: 'relative',
+                                cursor: 'pointer',
+                                transition: 'background 0.3s'
+                            }}
+                        >
+                            <div style={{
+                                width: '20px',
+                                height: '20px',
+                                background: '#fff',
+                                borderRadius: '50%',
+                                position: 'absolute',
+                                top: '3px',
+                                left: autoJoin ? '27px' : '3px',
+                                transition: 'left 0.3s'
+                            }} />
+                        </div>
                       </div>
 
                       {/* Language Selection */}
@@ -197,6 +249,9 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
                           <div>
                               <div style={{ fontWeight: 'bold', fontSize: '1.1em' }}>{user?.name || t('auth.guest')}</div>
                               <div style={{ fontSize: '0.9em', color: '#4caf50' }}>● {t('settings.online')}</div>
+                              <div style={{ fontSize: '0.8em', color: '#888', marginTop: '4px', userSelect: 'text', fontFamily: 'monospace' }}>
+                                  UUID: {user?.id || 'N/A'}
+                              </div>
                           </div>
                       </div>
 

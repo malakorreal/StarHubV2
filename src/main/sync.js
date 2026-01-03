@@ -53,11 +53,13 @@ export class SyncManager {
     const { 
         retries = MAX_RETRIES, 
         onProgress = () => {},
-        checkSize = true 
+        checkSize = true,
+        signal = null
     } = options
 
     let attempt = 0
     while (attempt <= retries) {
+        if (signal?.aborted) throw new Error('Download aborted')
         try {
             // Check if file exists and has correct size (if possible)
             try {
@@ -129,18 +131,22 @@ export class SyncManager {
   /**
    * Download a large file using chunks (Range requests)
    */
-  async downloadLargeFile(url, dest) {
+  async downloadLargeFile(url, dest, options = {}) {
+     const { signal = null } = options
+     
      // 1. Get file size
      let totalSize = 0
      try {
+         if (signal?.aborted) throw new Error('Download aborted')
          const head = await axios.head(url)
          totalSize = parseInt(head.headers['content-length'], 10)
      } catch (e) {
+         if (signal?.aborted || e.message === 'Download aborted') throw new Error('Download aborted')
          this.log("Could not determine file size for chunked download, falling back to stream.")
-         return this.downloadFile(url, dest)
+         return this.downloadFile(url, dest, options)
      }
 
-     if (!totalSize) return this.downloadFile(url, dest)
+     if (!totalSize) return this.downloadFile(url, dest, options)
 
      // 2. Setup chunks
      const chunks = Math.ceil(totalSize / CHUNK_SIZE)
@@ -149,18 +155,15 @@ export class SyncManager {
      const fd = await fs.promises.open(dest, 'w')
      let downloadedTotal = 0
      
-     // Create a mutex/lock for updating downloadedTotal to avoid race conditions in progress reporting?
-     // Actually, simpler to just add up locally or atomic add? JavaScript is single threaded event loop.
-     // So `downloadedTotal += ...` is safe from race conditions as long as no await in between read and write of the variable?
-     // No, `await` yields.
-     // But we can just sum up completed chunks?
-     
      const downloadChunk = async (i) => {
+         if (signal?.aborted) throw new Error('Download aborted')
+         
          const start = i * CHUNK_SIZE
          const end = Math.min(start + CHUNK_SIZE - 1, totalSize - 1)
          
          let retries = 0
          while (retries <= MAX_RETRIES) {
+             if (signal?.aborted) throw new Error('Download aborted')
              try {
                  const response = await axios({
                      method: 'get',
@@ -171,6 +174,8 @@ export class SyncManager {
                      responseType: 'arraybuffer'
                  })
                  
+                 if (signal?.aborted) throw new Error('Download aborted')
+
                  // Write at specific position (safe for concurrency)
                  await fd.write(response.data, 0, response.data.length, start)
                  
@@ -182,6 +187,7 @@ export class SyncManager {
                  this.sendProgress('Downloading Modpack...', downloadedTotal, totalSize)
                  return // Success
              } catch (e) {
+                 if (signal?.aborted || e.message === 'Download aborted') throw new Error('Download aborted')
                  retries++
                  if (retries > MAX_RETRIES) {
                      throw e
@@ -195,17 +201,30 @@ export class SyncManager {
      const queue = Array.from({ length: chunks }, (_, i) => i)
      const workers = []
      
+     // Shared error state to stop other workers
+     let abortError = null
+
      for (let w = 0; w < CONCURRENCY_LIMIT; w++) {
          workers.push((async () => {
              while (queue.length > 0) {
+                 if (abortError || signal?.aborted) return
                  const i = queue.shift()
-                 if (i !== undefined) await downloadChunk(i)
+                 if (i !== undefined) {
+                     try {
+                        await downloadChunk(i)
+                     } catch (err) {
+                        abortError = err
+                        return
+                     }
+                 }
              }
          })())
      }
      
      try {
         await Promise.all(workers)
+        if (abortError) throw abortError
+        if (signal?.aborted) throw new Error('Download aborted')
      } catch (e) {
         await fd.close()
         throw e
@@ -218,8 +237,9 @@ export class SyncManager {
   /**
    * Sync a list of mods with concurrency
    */
-  async syncMods(mods, modsFolder) {
+  async syncMods(mods, modsFolder, options = {}) {
       if (!mods || mods.length === 0) return
+      const { signal = null } = options
 
       try {
           await fs.promises.access(modsFolder)
@@ -234,13 +254,16 @@ export class SyncManager {
       
       // Simple queue for concurrency
       const queue = [...mods]
-      const activePromises = []
       
+      let abortError = null
+
       const next = async () => {
-          if (queue.length === 0) return
+          if (queue.length === 0 || abortError || signal?.aborted) return
           const modUrl = queue.shift()
           
           try {
+            if (signal?.aborted) throw new Error('Download aborted')
+
             // Infer filename
             const fileName = decodeURIComponent(modUrl.split('/').pop().split('?')[0])
             const dest = path.join(modsFolder, fileName)
@@ -252,6 +275,7 @@ export class SyncManager {
             } catch (e) {
                 // Not exist, download
                 await this.downloadFile(modUrl, dest, {
+                    signal,
                     onProgress: (loaded, full) => {
                         // Too noisy to send progress for every mod's bytes
                         // Just track completion count
@@ -259,13 +283,19 @@ export class SyncManager {
                 })
             }
           } catch (e) {
+              if (e.message === 'Download aborted') {
+                  abortError = e
+                  return
+              }
               console.error(`Failed to sync mod: ${modUrl}`, e)
               // We don't stop everything for one failed mod, but we log it
           } finally {
-              completed++
-              this.sendProgress('Checking/Downloading Mods', completed, total)
-              // Process next item
-              await next()
+              if (!abortError && !signal?.aborted) {
+                  completed++
+                  this.sendProgress('Checking/Downloading Mods', completed, total)
+                  // Process next item
+                  await next()
+              }
           }
       }
 
@@ -276,39 +306,67 @@ export class SyncManager {
       }
       
       await Promise.all(workers)
+      
+      if (signal?.aborted || abortError?.message === 'Download aborted') {
+          throw new Error('Download aborted')
+      }
+      
       this.log("Mods sync completed.")
   }
 
   /**
    * Native Unzip using PowerShell (Windows) to save RAM
    */
-  async nativeUnzip(zipPath, targetDir) {
+  async nativeUnzip(zipPath, targetDir, signal = null) {
       return new Promise((resolve, reject) => {
+          if (signal?.aborted) return reject(new Error('Unzip aborted'))
+          
+          let childProcess = null
+
           try {
               // PowerShell Expand-Archive is memory efficient as it runs in a separate process
               const command = `powershell -NoProfile -NonInteractive -Command "Expand-Archive -Path '${zipPath}' -DestinationPath '${targetDir}' -Force"`
               
-              exec(command, { maxBuffer: 1024 * 1024 }, (error, stdout, stderr) => {
+              childProcess = exec(command, { maxBuffer: 1024 * 1024 }, (error, stdout, stderr) => {
+                  if (signal?.aborted) return // Already handled
                   if (error) {
                       // Fallback to AdmZip if PowerShell fails
                       console.warn("PowerShell unzip failed, falling back to AdmZip:", error.message)
-                      this.fallbackUnzip(zipPath, targetDir, resolve, reject)
+                      this.fallbackUnzip(zipPath, targetDir, resolve, reject, signal)
                   } else {
                       resolve(true)
                   }
               })
+              
+              if (signal) {
+                  signal.addEventListener('abort', () => {
+                      if (childProcess) {
+                          try {
+                              childProcess.kill() 
+                          } catch (e) {
+                              console.error("Failed to kill unzip process:", e)
+                          }
+                      }
+                      reject(new Error('Unzip aborted'))
+                  }, { once: true })
+              }
+
           } catch (err) {
               // Fallback if exec itself fails to run
               console.warn("exec failed to start, falling back to AdmZip:", err.message)
-              this.fallbackUnzip(zipPath, targetDir, resolve, reject)
+              this.fallbackUnzip(zipPath, targetDir, resolve, reject, signal)
           }
       })
   }
 
-  fallbackUnzip(zipPath, targetDir, resolve, reject) {
+  fallbackUnzip(zipPath, targetDir, resolve, reject, signal) {
+      if (signal?.aborted) return reject(new Error('Unzip aborted'))
       try {
           const zip = new AdmZip(zipPath)
+          // AdmZip is synchronous and blocking, can't easily abort mid-extraction without worker threads
+          // But we can check before starting
           zip.extractAllTo(targetDir, true)
+          if (signal?.aborted) throw new Error('Unzip aborted') // Late check
           resolve(true)
       } catch (e) {
           reject(new Error(`Unzip failed: ${e.message}`))
@@ -318,7 +376,10 @@ export class SyncManager {
   /**
    * Extract Zip file
    */
-  async extractZip(zipPath, targetDir) {
+  async extractZip(zipPath, targetDir, options = {}) {
+      const { signal = null } = options
+      if (signal?.aborted) throw new Error('Extraction aborted')
+
       this.log(`Extracting ${path.basename(zipPath)}...`)
       this.sendProgress('Extracting Modpack...', 0, 100) // Indeterminate
       
@@ -328,8 +389,10 @@ export class SyncManager {
 
       try {
           // Use Native Unzip to save RAM
-          await this.nativeUnzip(zipPath, tempDir)
+          await this.nativeUnzip(zipPath, tempDir, signal)
           
+          if (signal?.aborted) throw new Error('Extraction aborted')
+
           this.log("Extraction complete. Analyzing structure...")
           
           try {
@@ -359,11 +422,12 @@ export class SyncManager {
               // 🔄 SMART SYNC (Copy + Cleanup)
               // ----------------------------------------------------------------
               
-
+              if (signal?.aborted) throw new Error('Extraction aborted')
 
                           
                           // Helper for recursive file listing (Async)
                           const getAllFiles = async (dir, fileList = []) => {
+                              if (signal?.aborted) throw new Error('Extraction aborted')
                               try {
                                   const files = await fs.promises.readdir(dir)
                                   for (const file of files) {
@@ -387,6 +451,8 @@ export class SyncManager {
                           
                           // 2. Copy/Update Files (Source -> Target)
                           for (const relPath of sourceRelativePaths) {
+                              if (signal?.aborted) throw new Error('Extraction aborted')
+
                               const srcFile = path.join(sourceDir, relPath)
                               const destFile = path.join(targetDir, relPath)
                               
@@ -419,6 +485,7 @@ export class SyncManager {
                           const whitelist = ['figura', 'fragmentskin'] 
                           
                           for (const folder of foldersToCheck) {
+                              if (signal?.aborted) throw new Error('Extraction aborted')
                               const targetFolder = path.join(targetDir, folder)
                               if (!fs.existsSync(targetFolder)) continue
 

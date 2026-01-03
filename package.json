@@ -1,6 +1,6 @@
 {
   "name": "starhub-v2",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Minecraft Launcher for Roleplay",
   "main": "out/main/index.js",
   "scripts": {
@@ -34,7 +34,7 @@
   },
   "build": {
     "appId": "com.starhub.launcher",
-    "productName": "StarHub Launcher",
+    "productName": "StarHub",
     "publish": [
       {
         "provider": "github",

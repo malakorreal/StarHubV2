@@ -3,6 +3,7 @@ import { setActivity } from './rpc'
 import { getStore } from './store'
 import { getInstances } from './instances'
 import { SyncManager } from './sync'
+import { JavaManager } from './javaManager'
 import { shell, app, dialog } from 'electron'
 import fs from 'fs'
 import path from 'path'
@@ -14,9 +15,12 @@ const launcher = new Client()
 export function setupLauncher(ipcMain, mainWindow) {
   const store = getStore()
   const syncManager = new SyncManager(mainWindow)
+  const javaManager = new JavaManager(mainWindow)
+
+  let currentLaunchController = null
 
   // Helper to prepare files (Download/Extract)
-  const prepareGameFiles = async (instance, forceRepair = false) => {
+  const prepareGameFiles = async (instance, forceRepair = false, signal = null) => {
     // Use AppData to avoid non-ASCII path issues
     const baseDir = app.getPath('userData')
     const rootPath = path.join(baseDir, 'instances', instance.id)
@@ -24,6 +28,8 @@ export function setupLauncher(ipcMain, mainWindow) {
     const zipPath = path.join(rootPath, 'modpack.zip')
 
     console.log(`[PREPARE] Checking instance at: ${rootPath} (Force: ${forceRepair})`)
+    
+    if (signal?.aborted) throw new Error('Launch aborted')
 
     if (forceRepair) {
         // Remove zip to force re-download
@@ -48,8 +54,8 @@ export function setupLauncher(ipcMain, mainWindow) {
         
         if (needsDownload) {
              console.log(`Downloading Modpack: ${instance.modpackUrl}`)
-             await syncManager.downloadLargeFile(instance.modpackUrl, zipPath)
-             await syncManager.extractZip(zipPath, rootPath)
+             await syncManager.downloadLargeFile(instance.modpackUrl, zipPath, { signal })
+             await syncManager.extractZip(zipPath, rootPath, { signal })
         } else {
              // Zip exists. Check if mods folder is empty?
              // Or if we just want to ensure everything is synced
@@ -59,7 +65,7 @@ export function setupLauncher(ipcMain, mainWindow) {
              const files = fs.readdirSync(modsFolder)
              if (files.length === 0) {
                  console.log("Mods folder empty. Extracting existing zip...")
-                 await syncManager.extractZip(zipPath, rootPath)
+                 await syncManager.extractZip(zipPath, rootPath, { signal })
              } else {
                  // Optional: We could run extraction again for "Smart Sync" even if files exist,
                  // because extractZip now has the Smart Sync logic.
@@ -72,10 +78,12 @@ export function setupLauncher(ipcMain, mainWindow) {
         }
     }
 
+    if (signal?.aborted) throw new Error('Launch aborted')
+
     // 2. Handle Individual Mods
     if (instance.mods && Array.isArray(instance.mods)) {
         console.log(`Checking ${instance.mods.length} mods...`)
-        await syncManager.syncMods(instance.mods, modsFolder)
+        await syncManager.syncMods(instance.mods, modsFolder, { signal })
     }
 
     // 3. Save Installed Version
@@ -88,22 +96,56 @@ export function setupLauncher(ipcMain, mainWindow) {
     return rootPath
   }
 
+  ipcMain.handle('cancel-launch', async () => {
+      if (currentLaunchController) {
+          console.log("Cancelling launch...")
+          currentLaunchController.abort()
+          currentLaunchController = null
+          return { success: true }
+      }
+      return { success: false, reason: 'no_active_launch' }
+  })
+
   ipcMain.handle('repair-instance', async (event, instance) => {
     try {
-        await prepareGameFiles(instance, true)
+        if (currentLaunchController) {
+            currentLaunchController.abort() // Cancel any previous
+        }
+        currentLaunchController = new AbortController()
+        const signal = currentLaunchController.signal
+
+        await prepareGameFiles(instance, true, signal)
+        
+        currentLaunchController = null
         return { success: true }
     } catch (e) {
+        currentLaunchController = null
         console.error("Repair Error:", e)
+        if (e.message === 'Launch aborted' || e.message === 'Download aborted' || e.message === 'Unzip aborted' || e.message === 'Extraction aborted') {
+             return { success: false, error: 'Cancelled' }
+        }
         return { success: false, error: e.message }
     }
   })
 
   ipcMain.handle('prepare-launch', async (event, instance) => {
     try {
-        await prepareGameFiles(instance, false)
+        if (currentLaunchController) {
+            currentLaunchController.abort()
+        }
+        currentLaunchController = new AbortController()
+        const signal = currentLaunchController.signal
+
+        await prepareGameFiles(instance, false, signal)
+        
+        currentLaunchController = null
         return { success: true }
     } catch (e) {
+        currentLaunchController = null
         console.error("Prepare Error:", e)
+        if (e.message === 'Launch aborted' || e.message === 'Download aborted') {
+             return { success: false, error: 'Cancelled' }
+        }
         return { success: false, error: e.message }
     }
   })
@@ -113,6 +155,38 @@ export function setupLauncher(ipcMain, mainWindow) {
     const launcher = new Client()
     
     try {
+        if (currentLaunchController) {
+            // Check if it's the SAME instance? 
+            // If user clicks play twice quickly?
+            // Usually UI prevents this.
+            // If we are already launching, maybe we should abort the previous one or block?
+            // Let's abort previous.
+            currentLaunchController.abort()
+        }
+        currentLaunchController = new AbortController()
+        const signal = currentLaunchController.signal
+
+        // PREPARE FIRST (Ensure files are ready)
+        // Note: The UI might call prepare-launch separately, but for safety launch-game should also ensure readiness
+        // especially if we merge logic.
+        // If we call prepareGameFiles here, it uses the signal.
+        await prepareGameFiles(instance, false, signal)
+
+        if (signal.aborted) throw new Error('Launch aborted')
+
+        // ---------------------------------------------------------
+        // ☕ JAVA CHECK & AUTO-INSTALL
+        // ---------------------------------------------------------
+        // Check if user has a custom Java path set
+        let javaPath = store.get('javaPath', '')
+        if (javaPath && fs.existsSync(javaPath)) {
+             console.log("Using custom Java path:", javaPath)
+        } else {
+             // Auto-detect/install based on MC version
+             console.log("Checking Java...")
+             javaPath = await javaManager.ensureJava(instance.version, signal)
+        }
+
         console.log("Launching instance:", instance.name)
         const ram = store.get('ram', 4096)
         
@@ -217,7 +291,24 @@ export function setupLauncher(ipcMain, mainWindow) {
             }
         }
 
+        // ---------------------------------------------------------
+        // ⚙️ Launch Options (Java Args & Auto-Join)
+        // ---------------------------------------------------------
+        const javaArgs = store.get('javaArgs', '')
+        const autoJoin = store.get('autoJoin', false)
+        
+        const customLaunchArgs = javaArgs ? javaArgs.split(' ').filter(a => a.trim().length > 0) : []
+        const customArgs = []
+
+        if (autoJoin && instance.serverIp) {
+            const [ip, port] = instance.serverIp.split(':')
+            customArgs.push('--server', ip)
+            if (port) customArgs.push('--port', port)
+            console.log(`[AUTO-JOIN] Added server args: ${ip}:${port || 25565}`)
+        }
+
         const opts = {
+            javaPath,
             clientPackage: null,
             authorization: auth,
             root: rootPath,
@@ -226,14 +317,22 @@ export function setupLauncher(ipcMain, mainWindow) {
                 max: ram + "M",
                 min: "1024M"
             },
+            customLaunchArgs, // JVM Arguments
+            customArgs,       // Game Arguments
             overrides: {
                 detached: false // Keep attached to see logs/close event
             }
         }
 
         // Setup Event Listeners BEFORE launching
-        launcher.on('debug', (e) => console.log(`[DEBUG] ${e}`))
-        launcher.on('data', (e) => console.log(`[DATA] ${e}`))
+        launcher.on('debug', (e) => {
+            // console.log(`[DEBUG] ${e}`) // Too verbose for main console usually, but good for game log
+            mainWindow.webContents.send('game-log', `[DEBUG] ${e}`)
+        })
+        launcher.on('data', (e) => {
+            console.log(`[DATA] ${e}`)
+            mainWindow.webContents.send('game-log', `${e}`)
+        })
         
         launcher.on('progress', (e) => {
              mainWindow.webContents.send('launch-progress', e)

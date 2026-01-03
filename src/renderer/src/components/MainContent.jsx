@@ -1,7 +1,8 @@
 import React, { memo, useState, useEffect, useMemo } from 'react'
 
-const MainContent = memo(({ instance, installedVersion, status, progress, onLaunch, onOpenSettings, onOpenFolder, onRepair, user, paused, t }) => {
+const MainContent = memo(({ instance, installedVersion, status, progress, onLaunch, onCancel, onOpenSettings, onOpenFolder, onRepair, onOpenConsole, user, paused, t }) => {
   const [bgLoaded, setBgLoaded] = useState(false)
+  const [serverStatus, setServerStatus] = useState(null)
 
   // Check update status
   const isUpdateAvailable = useMemo(() => {
@@ -13,6 +14,20 @@ const MainContent = memo(({ instance, installedVersion, status, progress, onLaun
       
       return installedVersion !== currentRemoteVersion
   }, [instance, installedVersion])
+
+  // Fetch Server Status
+  useEffect(() => {
+      let mounted = true
+      setServerStatus(null) // Reset on instance change
+
+      if (instance?.serverIp) {
+          window.api.getServerStatus(instance.serverIp).then(status => {
+              if (mounted) setServerStatus(status)
+          })
+      }
+
+      return () => { mounted = false }
+  }, [instance?.serverIp])
 
   // Generate random cubes configuration once
   const cubes = useMemo(() => {
@@ -163,6 +178,43 @@ const MainContent = memo(({ instance, installedVersion, status, progress, onLaun
             <h3 style={{ margin: 0, color: '#fff', fontSize: '1.2em', fontWeight: 'bold', marginBottom: '8px' }}>
                 {t('main.serverInfo')}
             </h3>
+
+            {serverStatus && serverStatus.online && (
+                <div style={{ 
+                    marginBottom: '10px', 
+                    padding: '8px 12px', 
+                    background: 'rgba(0, 200, 83, 0.2)', 
+                    border: '1px solid rgba(0, 200, 83, 0.4)', 
+                    borderRadius: '6px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'flex-end',
+                    gap: '8px'
+                }}>
+                    <span style={{ fontSize: '0.9em', color: '#b9f6ca' }}>
+                        {serverStatus.players.online} / {serverStatus.players.max} Players
+                    </span>
+                    <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#00e676', boxShadow: '0 0 5px #00e676' }}></div>
+                </div>
+            )}
+             
+            {serverStatus && !serverStatus.online && instance.serverIp && (
+                 <div style={{ 
+                    marginBottom: '10px', 
+                    padding: '8px 12px', 
+                    background: 'rgba(255, 50, 50, 0.2)', 
+                    border: '1px solid rgba(255, 50, 50, 0.4)', 
+                    borderRadius: '6px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'flex-end',
+                    gap: '8px'
+                }}>
+                    <span style={{ fontSize: '0.9em', color: '#ff8a80' }}>Offline</span>
+                    <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#ff1744' }}></div>
+                </div>
+            )}
+
             <p style={{ margin: 0, color: '#ccc', fontSize: '0.95em', lineHeight: '1.5' }}>
                 {instance.description || t('main.readyToPlay')}
             </p>
@@ -223,6 +275,28 @@ const MainContent = memo(({ instance, installedVersion, status, progress, onLaun
       }}>
         {/* Social Icons Row */}
         <div style={{ display: 'flex', gap: '15px' }}>
+            {/* Console Button - Always visible for debugging */}
+            <button
+                onClick={onOpenConsole}
+                title="Game Console"
+                style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    width: '50px', height: '50px', borderRadius: '50%',
+                    background: 'rgba(0,0,0,0.5)', color: '#fff',
+                    border: '1px solid rgba(255,255,255,0.2)',
+                    transition: 'transform 0.2s',
+                    boxShadow: '0 4px 15px rgba(0,0,0,0.3)',
+                    cursor: 'pointer'
+                }}
+                onMouseOver={e => e.currentTarget.style.transform = 'scale(1.1)'}
+                onMouseOut={e => e.currentTarget.style.transform = 'scale(1)'}
+            >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="4 17 10 11 4 5"></polyline>
+                    <line x1="12" y1="19" x2="20" y2="19"></line>
+                </svg>
+            </button>
+
             {/* Discord */}
             {instance.discord && instance.discord.trim().length > 0 && (
                 <a href={instance.discord} target="_blank" rel="noopener noreferrer" 
@@ -269,61 +343,91 @@ const MainContent = memo(({ instance, installedVersion, status, progress, onLaun
             )}
         </div>
 
-        {/* Play Button */}
-        <button 
-            onClick={isUpdateAvailable ? onRepair : onLaunch}
-            disabled={status !== 'idle'}
-            style={{
-                padding: '12px 40px',
-                minWidth: '220px',
-                minHeight: '64px',
-                fontSize: '1.2em',
-                fontWeight: '600',
-                background: status === 'idle' ? (isUpdateAvailable ? '#e67e22' : 'var(--accent)') : '#333', // Orange for Update
-                color: status === 'idle' ? (isUpdateAvailable ? '#fff' : '#000') : '#fff',
-                border: 'none',
-                borderRadius: '12px',
-                cursor: status === 'idle' ? 'pointer' : 'default',
-                transition: 'all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '12px',
-                letterSpacing: '0.5px',
-                boxShadow: '0 4px 15px rgba(0,0,0,0.3)'
-            }}
-            onMouseOver={(e) => { if (status === 'idle') { e.currentTarget.style.filter = 'brightness(1.1)'; e.currentTarget.style.transform = 'translateY(-2px)'; } }}
-            onMouseOut={(e) => { if (status === 'idle') { e.currentTarget.style.filter = 'brightness(1)'; e.currentTarget.style.transform = 'translateY(0)'; } }}
-        >
-            {status === 'idle' ? (
-                <>
-                    {isUpdateAvailable ? (
-                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                             <polyline points="7 10 12 15 17 10"></polyline>
-                             <line x1="12" y1="15" x2="12" y2="3"></line>
-                        </svg>
-                    ) : (
-                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M8 5V19L19 12L8 5Z" fill="black"/>
-                        </svg>
-                    )}
-                    {isUpdateAvailable ? t('main.update') : t('main.play')}
-                </>
-            ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <div className="spinner" style={{ width: 20, height: 20, border: '3px solid rgba(255, 215, 0, 0.2)', borderTop: '3px solid var(--accent)', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
-                        <span>{status === 'launching' ? t('main.launching') : status === 'repairing' ? t('main.repairing') : status === 'preparing' ? t('main.preparing') : t('main.running')}</span>
-                    </div>
-                    {(status === 'launching' || status === 'repairing' || status === 'preparing') && progress && (
-                        <div style={{ fontSize: '0.7em', marginTop: '4px', opacity: 0.8 }}>
-                            {progress.task} {progress.total > 0 ? `${Math.round((progress.current / progress.total) * 100)}%` : ''}
-                        </div>
-                    )}
-                </div>
+        {/* Play Button Row */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+            {status !== 'idle' && (
+                <button
+                    onClick={onCancel}
+                    title={t('main.cancel') || "Cancel"}
+                    style={{
+                        width: '64px',
+                        height: '64px',
+                        borderRadius: '12px',
+                        background: '#333',
+                        color: '#ff6b6b',
+                        border: 'none',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        transition: 'all 0.2s',
+                        animation: 'fadeIn 0.3s ease-out'
+                    }}
+                    onMouseOver={(e) => { e.currentTarget.style.background = '#444'; e.currentTarget.style.transform = 'scale(1.05)'; }}
+                    onMouseOut={(e) => { e.currentTarget.style.background = '#333'; e.currentTarget.style.transform = 'scale(1)'; }}
+                >
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
             )}
-        </button>
+
+            <button 
+                onClick={isUpdateAvailable ? onRepair : onLaunch}
+                disabled={status !== 'idle'}
+                style={{
+                    padding: '12px 40px',
+                    minWidth: '220px',
+                    minHeight: '64px',
+                    fontSize: '1.2em',
+                    fontWeight: '600',
+                    background: status === 'idle' ? (isUpdateAvailable ? '#e67e22' : 'var(--accent)') : '#333', // Orange for Update
+                    color: status === 'idle' ? (isUpdateAvailable ? '#fff' : '#000') : '#fff',
+                    border: 'none',
+                    borderRadius: '12px',
+                    cursor: status === 'idle' ? 'pointer' : 'default',
+                    transition: 'all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '12px',
+                    letterSpacing: '0.5px',
+                    boxShadow: '0 4px 15px rgba(0,0,0,0.3)'
+                }}
+                onMouseOver={(e) => { if (status === 'idle') { e.currentTarget.style.filter = 'brightness(1.1)'; e.currentTarget.style.transform = 'translateY(-2px)'; } }}
+                onMouseOut={(e) => { if (status === 'idle') { e.currentTarget.style.filter = 'brightness(1)'; e.currentTarget.style.transform = 'translateY(0)'; } }}
+            >
+                {status === 'idle' ? (
+                    <>
+                        {isUpdateAvailable ? (
+                            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                <polyline points="7 10 12 15 17 10"></polyline>
+                                <line x1="12" y1="15" x2="12" y2="3"></line>
+                            </svg>
+                        ) : (
+                            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M8 5V19L19 12L8 5Z" fill="black"/>
+                            </svg>
+                        )}
+                        {isUpdateAvailable ? t('main.update') : t('main.play')}
+                    </>
+                ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <div className="spinner" style={{ width: 20, height: 20, border: '3px solid rgba(255, 215, 0, 0.2)', borderTop: '3px solid var(--accent)', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
+                            <span>{status === 'launching' ? t('main.launching') : status === 'repairing' ? t('main.repairing') : status === 'preparing' ? t('main.preparing') : t('main.running')}</span>
+                        </div>
+                        {(status === 'launching' || status === 'repairing' || status === 'preparing') && progress && (
+                            <div style={{ fontSize: '0.7em', marginTop: '4px', opacity: 0.8 }}>
+                                {progress.task} {progress.total > 0 ? `${Math.round((progress.current / progress.total) * 100)}%` : ''}
+                            </div>
+                        )}
+                    </div>
+                )}
+            </button>
+        </div>
       </div>
 
       {/* Tools & Version (Bottom Left) */}

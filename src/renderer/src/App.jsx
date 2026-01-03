@@ -10,6 +10,7 @@ import LoginScreen from './components/LoginScreen'
 import NoInstancesView from './components/NoInstancesView'
 import LaunchConfirmationModal from './components/LaunchConfirmationModal'
 import UpdateModal from './components/UpdateModal'
+import ConsoleModal from './components/ConsoleModal'
 import { useLanguage } from './contexts/LanguageContext'
 
 // Preload Helper
@@ -53,6 +54,10 @@ function App() {
   // Update State
   const [updateStatus, setUpdateStatus] = useState('idle') // idle, checking, available, downloading, downloaded, error
   const [updateProgress, setUpdateProgress] = useState(0)
+
+  // Console / Logs
+  const [showConsole, setShowConsole] = useState(false)
+  const [logs, setLogs] = useState([])
 
   const [redeemedCodes, setRedeemedCodes] = useState(() => {
       const saved = localStorage.getItem('redeemedCodes')
@@ -200,6 +205,16 @@ function App() {
             window.api.getInstalledVersions().then(setInstalledVersions).catch(console.error)
         }
     })
+
+    if (window.api.onGameLog) {
+        window.api.onGameLog((log) => {
+            setLogs(prev => {
+                // Limit log size to prevent memory issues
+                if (prev.length > 2000) return [...prev.slice(500), log]
+                return [...prev, log]
+            })
+        })
+    }
     
     window.api.onGameClosed(() => {
         setLaunchStatus('idle')
@@ -337,6 +352,8 @@ function App() {
     if (!selectedInstance) return
 
     setLaunchStatus('launching')
+    setErrorMessage(null) // Clear previous errors
+    
     const auth = await window.api.refreshToken() // Get fresh token
     if (!auth.success) {
         setLaunchStatus('idle')
@@ -347,8 +364,16 @@ function App() {
     const result = await window.api.launchGame(selectedInstance, auth.access_token)
     if (!result.success) {
         setLaunchStatus('idle')
-        setErrorMessage("Launch Failed: " + result.error)
+        if (result.error !== 'Cancelled') {
+             setErrorMessage("Launch Failed: " + result.error)
+        }
     }
+  }
+
+  const handleCancelLaunch = async () => {
+      await window.api.cancelLaunch()
+      setLaunchStatus('idle')
+      setLaunchProgress(null)
   }
 
   const handleClose = () => {
@@ -445,9 +470,11 @@ function App() {
                     status={launchStatus}
                     progress={launchProgress}
                     onLaunch={handleLaunch}
+                    onCancel={handleCancelLaunch}
                     onOpenSettings={() => setShowSettings(true)}
                     onOpenFolder={handleOpenFolder}
                     onRepair={handleRepair}
+                    onOpenConsole={() => setShowConsole(true)}
                     user={user}
                     paused={showSettings}
                     t={t}
@@ -493,6 +520,14 @@ function App() {
             onInstall={() => window.api.installUpdate()}
             onClose={() => setUpdateStatus('idle')}
         />
+
+        {showConsole && (
+            <ConsoleModal 
+                logs={logs} 
+                onClose={() => setShowConsole(false)} 
+                onClear={() => setLogs([])}
+            />
+        )}
 
         {showAboutDialog && (
             <AboutDialog onClose={() => setShowAboutDialog(false)} />

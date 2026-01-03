@@ -4,9 +4,13 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.ico?asset'
 import { setupAuth } from './auth'
 import { setupLauncher } from './launcher'
+import { setupStatus } from './status'
 import { setupRPC, updateRPCLanguage } from './rpc'
 import { setupStore } from './store'
 import { autoUpdater } from 'electron-updater'
+
+// Disable Hardware Acceleration to fix slow startup/lag on some systems
+app.disableHardwareAcceleration()
 
 let mainWindow
 let tray = null
@@ -74,6 +78,7 @@ app.whenReady().then(() => {
   setupStore(ipcMain)
   setupAuth(ipcMain, mainWindow)
   setupLauncher(ipcMain, mainWindow)
+  setupStatus(ipcMain)
   setupRPC(mainWindow)
   
   // Language Handler
@@ -161,7 +166,10 @@ app.whenReady().then(() => {
   })
 
   app.on('activate', function () {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    if (BrowserWindow.getAllWindows().length === 0) {
+        createWindow()
+        loadMainWindow()
+    }
   })
 })
 

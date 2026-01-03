@@ -49,8 +49,12 @@ export default {
     activeCodes: "Active Codes",
     noCodes: "No codes active",
     invalidCode: "Invalid code.",
-    codeAlreadyAdded: "Code already added.",
-    online: "Online"
+    codeAlreadyAdded: "Code already added",
+    online: "Online",
+    uuid: "UUID",
+    noUuid: "No UUID",
+    javaArgs: "Java Arguments",
+    autoJoin: "Auto Join Server"
   },
   dialogs: {
     closeTitle: "Quit Launcher",
