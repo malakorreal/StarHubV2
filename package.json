@@ -39,7 +39,9 @@
       {
         "provider": "github",
         "owner": "malakorreal",
-        "repo": "StarHubV2"
+        "repo": "StarHubV2",
+        "private": false,
+        "token": null
       }
     ],
     "win": {
