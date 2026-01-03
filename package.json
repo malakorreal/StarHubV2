@@ -1,6 +1,6 @@
 {
   "name": "starhub-v2",
-  "version": "1.0.10",
+  "version": "1.0.11",
   "description": "Minecraft Launcher for Roleplay",
   "main": "out/main/index.js",
   "scripts": {
