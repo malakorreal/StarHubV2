@@ -98,12 +98,6 @@ app.whenReady().then(() => {
   // Auto Update (Check immediately on startup)
   // Ensure we don't try to auto-update in dev mode
   if (!is.dev) {
-    autoUpdater.setFeedURL({
-      provider: 'github',
-      owner: 'malakorreal',
-      repo: 'StarHubV2'
-    })
-    
     // Add a small delay to ensure window is ready to receive 'checking' event if fast
     setTimeout(() => {
       autoUpdater.checkForUpdates()
