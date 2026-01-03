@@ -47,7 +47,7 @@ function AboutDialog({ onClose }) {
         <div style={{ color: 'var(--accent)', fontWeight: '600', marginBottom: '20px' }}>Created by Malakor</div>
         
         <p style={{ color: '#aaa', lineHeight: '1.6', marginBottom: '30px' }}>
-          StarHub เป็นโปรเจคที่มุ่งมั่นในการสร้างประสบการณ์การเล่นเกม Minecraft ที่ดีขึ้น
+          StarHub เป็นโปรเจคที่มุ่งมั่นในการสร้างประสบการณ์การเล่นเกม Minecraft ที่ดีขึ้น V.1.0.2
           <br/>
           <span style={{ fontSize: '0.9em', opacity: 0.7 }}>Version 2.0.0</span>
         </p>
