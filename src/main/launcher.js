@@ -496,35 +496,42 @@ export function setupLauncher(ipcMain, mainWindow) {
 
         // Game Arguments (e.g. --server, --username)
         const gameArgs = []
+        let quickPlayConfig = null
 
         if (autoJoin && instance.serverIp) {
-            // Check MC Version for QuickPlay support (1.20+)
-            const isModern = (v) => {
-                if (!v) return false
-                const parts = v.split('.')
-                if (parts.length < 2) return false
-                const minor = parseInt(parts[1])
-                return minor >= 20
-            }
-
-            // TEMPORARY DISABLED: Auto-Join causing issues with arguments
-            console.log("[AUTO-JOIN] Feature temporarily disabled by user request.")
-            /*
-            if (isModern(instance.version)) {
-                // Use QuickPlay for 1.20+
-                opts.quickPlay = {
-                    type: 'multiplayer',
-                    identifier: instance.serverIp
+            const serverIp = instance.serverIp.trim()
+            if (serverIp) {
+                // Robust Version Checking
+                const isModern = (v) => {
+                    if (!v) return false
+                    // Handle "1.20.1", "1.20", "1.21-rc1"
+                    // Match major.minor
+                    const match = v.match(/^1\.(\d+)/)
+                    if (match && match[1]) {
+                        const minor = parseInt(match[1])
+                        return minor >= 20
+                    }
+                    return false
                 }
-                console.log(`[AUTO-JOIN] Using QuickPlay for ${instance.version}: ${instance.serverIp}`)
-            } else {
-                // Use CLI Args for older versions
-                const [ip, port] = instance.serverIp.split(':')
-                gameArgs.push('--server', ip)
-                if (port) gameArgs.push('--port', port)
-                console.log(`[AUTO-JOIN] Added server args for ${instance.version}: ${ip}:${port || 25565}`)
+
+                console.log("[AUTO-JOIN] Configuring auto-join...")
+                if (isModern(instance.version)) {
+                    // Use QuickPlay for 1.20+
+                    quickPlayConfig = {
+                        type: 'multiplayer',
+                        identifier: serverIp
+                    }
+                    console.log(`[AUTO-JOIN] Using QuickPlay for ${instance.version}: ${serverIp}`)
+                } else {
+                    // Use Legacy Arguments for older versions
+                    // MCLC 'legacy' type adds --server and --port
+                    quickPlayConfig = {
+                        type: 'legacy',
+                        identifier: serverIp
+                    }
+                    console.log(`[AUTO-JOIN] Using Legacy Args for ${instance.version}: ${serverIp}`)
+                }
             }
-            */
         }
 
         const opts = {
@@ -548,6 +555,11 @@ export function setupLauncher(ipcMain, mainWindow) {
             overrides: {
                 detached: false // Keep attached to see logs/close event
             }
+        }
+
+        // Only add quickPlay if configured (prevents MCLC crash on null destructuring)
+        if (quickPlayConfig) {
+            opts.quickPlay = quickPlayConfig
         }
 
         // Setup Event Listeners BEFORE launching

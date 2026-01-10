@@ -189,10 +189,9 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
                         />
                       </div>
 
-                      {/* Auto Join Toggle - TEMPORARY DISABLED */}
-                      {/* 
+                      {/* Auto Join Toggle */}
                       <div style={{ marginBottom: '25px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <label style={{ color: '#ccc' }}>{t('settings.autoJoin')}</label>
+                        <label style={{ color: '#ccc' }}>{t('settings.autoJoin') || 'Auto Join Server'}</label>
                         <div 
                             onClick={() => setAutoJoin(!autoJoin)}
                             style={{
@@ -217,7 +216,6 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
                             }} />
                         </div>
                       </div>
-                      */}
 
                       {/* Repair Game Files */}
                       {selectedInstance && (
