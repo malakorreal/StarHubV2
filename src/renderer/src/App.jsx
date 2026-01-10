@@ -11,6 +11,7 @@ import NoInstancesView from './components/NoInstancesView'
 import LaunchConfirmationModal from './components/LaunchConfirmationModal'
 import UpdateModal from './components/UpdateModal'
 import ConsoleModal from './components/ConsoleModal'
+import RepairConfirmationModal from './components/RepairConfirmationModal'
 import { useLanguage } from './contexts/LanguageContext'
 
 // Preload Helper
@@ -46,6 +47,8 @@ function App() {
   const [showLaunchConfirmation, setShowLaunchConfirmation] = useState(false)
   const [errorMessage, setErrorMessage] = useState(null)
   const [notification, setNotification] = useState(null)
+  const [showRepairConfirmation, setShowRepairConfirmation] = useState(false)
+  const [repairTargetInstance, setRepairTargetInstance] = useState(null)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [isLoading, setIsLoading] = useState(true) // Start with loading true
   const [isLoggingIn, setIsLoggingIn] = useState(false)
@@ -401,22 +404,30 @@ function App() {
   }
 
   const handleRepair = async () => {
-    const isUpdate = selectedInstance && installedVersions[selectedInstance.id] !== (selectedInstance.modpackVersion || selectedInstance.version)
-    const actionName = isUpdate ? "Update" : "Repair"
+    if (!selectedInstance) return
+    setRepairTargetInstance(selectedInstance)
+    setShowRepairConfirmation(true)
+  }
+
+  const confirmRepair = async () => {
+    const instance = repairTargetInstance
+    if (!instance) return
     
-    if (!selectedInstance || !confirm(`Are you sure you want to ${actionName.toLowerCase()} ${selectedInstance.name}? This will re-download core files.`)) return
+    setShowRepairConfirmation(false)
+    setRepairTargetInstance(null)
+
+    const isUpdate = installedVersions[instance.id] !== (instance.modpackVersion || instance.version)
+    const actionName = isUpdate ? "Update" : "Repair"
     
     setLaunchStatus('repairing')
     try {
-        await window.api.repairInstance(selectedInstance)
+        await window.api.repairInstance(instance)
         
         // Refresh installed versions to update UI state
         if (window.api && window.api.getInstalledVersions) {
             const installed = await window.api.getInstalledVersions()
             setInstalledVersions(installed || {})
         }
-
-        // alert(`${actionName} complete!`) // Optional: Remove alert for smoother flow or keep it
     } catch (err) {
         setErrorMessage(`${actionName} failed: ` + err.message)
     } finally {
@@ -530,6 +541,18 @@ function App() {
             />
         )}
         
+        {showRepairConfirmation && repairTargetInstance && (
+            <RepairConfirmationModal 
+                onConfirm={confirmRepair}
+                onCancel={() => {
+                    setShowRepairConfirmation(false)
+                    setRepairTargetInstance(null)
+                }}
+                instanceName={repairTargetInstance.name}
+                actionName={installedVersions[repairTargetInstance.id] !== (repairTargetInstance.modpackVersion || repairTargetInstance.version) ? "Update" : "Repair"}
+            />
+        )}
+
         {/* Updater Modal */}
         <UpdateModal 
             status={updateStatus} 
