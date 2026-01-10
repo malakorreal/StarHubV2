@@ -202,6 +202,7 @@ export function setupLauncher(ipcMain, mainWindow) {
         if (!fs.existsSync(rootPath)) fs.mkdirSync(rootPath, { recursive: true })
         
         // Basic Loader Handling
+        let forgeInstallerPath = null
         const versionOpts = {
             number: instance.version,
             type: "release"
@@ -280,6 +281,46 @@ export function setupLauncher(ipcMain, mainWindow) {
                 }
             }
 
+            // ------------------------------------------------------------------
+            // 🔨 AUTO-INSTALL FORGE IF MISSING
+            // ------------------------------------------------------------------
+            if (!detectedVersionId && !instance.customVersionId && instance.loader === 'forge') {
+                try {
+                    console.log(`[AUTO-INSTALL] Forge folder not found. Preparing to install Forge for ${instance.version}...`)
+                    
+                    let forgeVersion = instance.forgeVersion
+                    if (!forgeVersion) {
+                        // Fetch recommended
+                        const promoUrl = `https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json`
+                        const { data: promo } = await axios.get(promoUrl)
+                        forgeVersion = promo.promos[`${instance.version}-recommended`] || promo.promos[`${instance.version}-latest`]
+                    }
+                    
+                    if (forgeVersion) {
+                        const forgeFullVersion = `${instance.version}-${forgeVersion}`
+                        const installerUrl = `https://maven.minecraftforge.net/net/minecraftforge/forge/${forgeFullVersion}/forge-${forgeFullVersion}-installer.jar`
+                        
+                        const cacheDir = path.join(baseDir, 'cache')
+                        const installerPath = path.join(cacheDir, `forge-${forgeFullVersion}-installer.jar`)
+                        
+                        if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir, { recursive: true })
+                        
+                        // Check if installer exists
+                        if (!fs.existsSync(installerPath)) {
+                            console.log(`Downloading Forge Installer: ${installerUrl}`)
+                            await syncManager.downloadLargeFile(installerUrl, installerPath, { signal })
+                        }
+                        
+                        console.log(`[AUTO-INSTALL] Forge Installer ready at: ${installerPath}`)
+                        forgeInstallerPath = installerPath
+                    } else {
+                        console.warn(`[AUTO-INSTALL] Could not determine Forge version for ${instance.version}`)
+                    }
+                } catch (err) {
+                    console.error("[AUTO-INSTALL] Failed to prepare Forge:", err.message)
+                }
+            }
+
             if (instance.customVersionId) {
                 versionOpts.custom = instance.customVersionId
             } else if (detectedVersionId) {
@@ -308,6 +349,7 @@ export function setupLauncher(ipcMain, mainWindow) {
         }
 
         const opts = {
+            forge: forgeInstallerPath,
             javaPath,
             clientPackage: null,
             authorization: auth,
