@@ -157,8 +157,8 @@ const MainContent = memo(({ instance, installedVersion, status, progress, onLaun
           pointerEvents: 'none' // Let clicks pass through if needed, optimize hit testing
       }}></div>
 
-      {/* Floating Cubes Animation (Always Visible if enabled) */}
-      {!paused && enableAnimation && (
+      {/* Floating Cubes Animation (Always Visible) */}
+      {!paused && (
           <div style={{ position: 'absolute', inset: 0, zIndex: 2, pointerEvents: 'none', overflow: 'hidden' }}>
               {cubes.map((style, i) => (
                   <div 
@@ -565,39 +565,41 @@ const MainContent = memo(({ instance, installedVersion, status, progress, onLaun
             </button>
 
             {/* Animation Toggle Button */}
-            <button 
-                onClick={toggleAnimation}
-                title={enableAnimation ? (t('main.disableAnimation') || "Disable Animation") : (t('main.enableAnimation') || "Enable Animation")}
-                style={{
-                    width: '56px',
-                    height: '56px',
-                    borderRadius: '12px',
-                    border: '1px solid rgba(255,255,255,0.1)',
-                    background: enableAnimation ? 'rgba(255, 215, 0, 0.1)' : 'rgba(255,255,255,0.05)',
-                    color: enableAnimation ? 'var(--accent)' : '#fff',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    transition: 'all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
-                    backdropFilter: 'blur(4px)',
-                    WebkitBackdropFilter: 'blur(4px)',
-                    willChange: 'transform, background'
-                }}
-                onMouseOver={(e) => { e.currentTarget.style.background = enableAnimation ? 'rgba(255, 215, 0, 0.2)' : 'rgba(255,255,255,0.15)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
-                onMouseOut={(e) => { e.currentTarget.style.background = enableAnimation ? 'rgba(255, 215, 0, 0.1)' : 'rgba(255,255,255,0.05)'; e.currentTarget.style.transform = 'translateY(0)'; }}
-            >
-                {enableAnimation ? (
+            {videoSrc && (
+                <button 
+                    onClick={toggleAnimation}
+                    title={enableAnimation ? (t('main.disableAnimation') || "Disable Animation") : (t('main.enableAnimation') || "Enable Animation")}
+                    style={{
+                        width: '56px',
+                        height: '56px',
+                        borderRadius: '12px',
+                        border: '1px solid rgba(255,255,255,0.1)',
+                        background: enableAnimation ? 'rgba(255, 215, 0, 0.1)' : 'rgba(255,255,255,0.05)',
+                        color: enableAnimation ? 'var(--accent)' : '#fff',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        transition: 'all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
+                        backdropFilter: 'blur(4px)',
+                        WebkitBackdropFilter: 'blur(4px)',
+                        willChange: 'transform, background'
+                    }}
+                    onMouseOver={(e) => { e.currentTarget.style.background = enableAnimation ? 'rgba(255, 215, 0, 0.2)' : 'rgba(255,255,255,0.15)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
+                    onMouseOut={(e) => { e.currentTarget.style.background = enableAnimation ? 'rgba(255, 215, 0, 0.1)' : 'rgba(255,255,255,0.05)'; e.currentTarget.style.transform = 'translateY(0)'; }}
+                >
+                    {enableAnimation ? (
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <rect x="6" y="4" width="4" height="16"></rect>
+                            <rect x="14" y="4" width="4" height="16"></rect>
+                        </svg>
+                    ) : (
                         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <rect x="6" y="4" width="4" height="16"></rect>
-                        <rect x="14" y="4" width="4" height="16"></rect>
-                    </svg>
-                ) : (
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <polygon points="5 3 19 12 5 21 5 3"></polygon>
-                    </svg>
-                )}
-            </button>
+                                <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                        </svg>
+                    )}
+                </button>
+            )}
 
             <button 
                 onClick={onRepair}
