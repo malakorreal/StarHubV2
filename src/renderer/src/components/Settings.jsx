@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 
-function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = [], onAddCode, onRemoveCode, t, changeLanguage, currentLanguage }) {
+function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = [], onAddCode, onRemoveCode, t, changeLanguage, currentLanguage, showToast }) {
   const [activeTab, setActiveTab] = useState('general')
   const [ram, setRam] = useState(4096)
   const [javaArgs, setJavaArgs] = useState('')
@@ -23,6 +23,7 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
       if (window.api && window.api.setSettings) {
         window.api.setSettings({ ram, javaArgs, autoJoin })
       }
+      if (showToast) showToast(t('settings.saved'), 'success')
       onClose()
   }
 

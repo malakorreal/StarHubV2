@@ -12,6 +12,7 @@ import LaunchConfirmationModal from './components/LaunchConfirmationModal'
 import UpdateModal from './components/UpdateModal'
 import ConsoleModal from './components/ConsoleModal'
 import RepairConfirmationModal from './components/RepairConfirmationModal'
+import ToastNotification from './components/ToastNotification'
 import { useLanguage } from './contexts/LanguageContext'
 
 // Preload Helper
@@ -61,6 +62,31 @@ function App() {
   
   const [showConsole, setShowConsole] = useState(false)
   const [logs, setLogs] = useState([])
+  const [toast, setToast] = useState(null)
+  const notifiedUpdatesRef = React.useRef(new Set())
+
+  const showToast = (message, type = 'info') => {
+      setToast({ message, type, id: Date.now() })
+  }
+
+  // Check for updates notification
+  useEffect(() => {
+      if (instances.length > 0 && Object.keys(installedVersions).length > 0) {
+          instances.forEach(inst => {
+              const installed = installedVersions[inst.id]
+              const remote = inst.modpackVersion || inst.version
+              
+              if (installed && remote && installed !== remote) {
+                  const notificationKey = `${inst.id}-${remote}`
+                  // Check if already notified for this specific version
+                  if (!notifiedUpdatesRef.current.has(notificationKey)) {
+                      showToast(`${t('main.updateAvailable') || 'Update Available'}: ${inst.name}`, 'info')
+                      notifiedUpdatesRef.current.add(notificationKey)
+                  }
+              }
+          })
+      }
+  }, [instances, installedVersions])
 
   const [redeemedCodes, setRedeemedCodes] = useState(() => {
       const saved = localStorage.getItem('redeemedCodes')
@@ -529,6 +555,16 @@ function App() {
                 t={t}
                 changeLanguage={changeLanguage}
                 currentLanguage={language}
+                showToast={showToast}
+            />
+        )}
+
+        {toast && (
+            <ToastNotification
+                key={toast.id}
+                message={toast.message}
+                type={toast.type}
+                onClose={() => setToast(null)}
             />
         )}
 

@@ -516,7 +516,7 @@ export class SyncManager {
                           // User request: "Check Config and Mods" -> Remove extras in these folders
                           const foldersToCheck = ['mods', 'config']
                           // User request: "Figura, fragmentskin ไม่ต้องตรวจสอบและไม่ต้องลบ"
-                          const whitelist = ['figura', 'fragmentskin'] 
+                          const whitelist = ['figura', 'fragmentskin', 'emotes'] 
                           
                           for (const folder of foldersToCheck) {
                               if (signal?.aborted) throw new Error('Extraction aborted')

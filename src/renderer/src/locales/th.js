@@ -26,7 +26,8 @@ export default {
     repair: "ซ่อมแซมไฟล์เกม",
     preparing: "กำลังเตรียมการ",
     loading: "กำลังโหลด...",
-    update: "อัปเดต"
+    update: "อัปเดต",
+    updateAvailable: "มีการอัปเดตใหม่"
   },
   settings: {
     title: "การตั้งค่า",
@@ -51,7 +52,8 @@ export default {
     uuid: "UUID",
     noUuid: "ไม่มี UUID",
     javaArgs: "Arguments เสริม (Java)",
-    autoJoin: "เข้าเซิร์ฟเวอร์อัตโนมัติ"
+    autoJoin: "เข้าเซิร์ฟเวอร์อัตโนมัติ",
+    saved: "บันทึกการตั้งค่าเรียบร้อยแล้ว"
   },
   dialogs: {
     closeTitle: "ออกจากโปรแกรม",

@@ -30,7 +30,8 @@ export default {
     repair: "Repair / Re-download Files",
     preparing: "Preparing",
     loading: "Loading...",
-    update: "Update"
+    update: "Update",
+    updateAvailable: "Update Available"
   },
   settings: {
     title: "Settings",
@@ -55,7 +56,8 @@ export default {
     uuid: "UUID",
     noUuid: "No UUID",
     javaArgs: "Java Arguments",
-    autoJoin: "Auto Join Server"
+    autoJoin: "Auto Join Server",
+    saved: "Settings Saved"
   },
   dialogs: {
     closeTitle: "Quit Launcher",
