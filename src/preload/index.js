@@ -11,6 +11,7 @@ const api = {
   cancelLaunch: () => ipcRenderer.invoke('cancel-launch'),
   prepareLaunch: (instance) => ipcRenderer.invoke('prepare-launch', instance),
   updateLanguage: (lang) => ipcRenderer.invoke('update-language', lang),
+  fetchImageBase64: (url) => ipcRenderer.invoke('fetch-image-base64', url),
   repairInstance: (instance) => ipcRenderer.invoke('repair-instance', instance),
   openInstanceFolder: (instance) => ipcRenderer.invoke('open-instance-folder', instance),
   getSettings: () => ipcRenderer.invoke('get-settings'),

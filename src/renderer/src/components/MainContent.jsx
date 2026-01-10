@@ -97,15 +97,39 @@ const MainContent = memo(({ instance, installedVersion, status, progress, onLaun
         img.onload = () => {
             setBgLoaded(true)
             if (isBgGif) {
+                // Try to generate static frame using Canvas
                 try {
                     const canvas = document.createElement('canvas')
                     canvas.width = img.width
                     canvas.height = img.height
                     const ctx = canvas.getContext('2d')
                     ctx.drawImage(img, 0, 0)
-                    setStaticGif(canvas.toDataURL())
+                    const dataUrl = canvas.toDataURL()
+                    setStaticGif(dataUrl)
                 } catch (e) {
-                    console.error("Failed to generate static GIF frame", e)
+                    // Fallback: If Canvas fails (likely CORS), fetch via Main Process
+                    console.warn("Canvas failed (CORS?), trying main process fetch...", e)
+                    window.api.fetchImageBase64(instance.backgroundImage).then(base64 => {
+                        if (base64) {
+                            // Load base64 into a new image to draw on canvas again (to get 1st frame)
+                            // Or just use the base64? No, base64 of GIF is still animated.
+                            // We must draw it to canvas to get static frame.
+                            const proxyImg = new Image()
+                            proxyImg.onload = () => {
+                                try {
+                                    const canvas = document.createElement('canvas')
+                                    canvas.width = proxyImg.width
+                                    canvas.height = proxyImg.height
+                                    const ctx = canvas.getContext('2d')
+                                    ctx.drawImage(proxyImg, 0, 0)
+                                    setStaticGif(canvas.toDataURL())
+                                } catch (err) {
+                                    console.error("Failed to generate static frame even with proxy", err)
+                                }
+                            }
+                            proxyImg.src = base64
+                        }
+                    })
                 }
             }
         }

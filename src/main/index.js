@@ -87,6 +87,22 @@ app.whenReady().then(() => {
       return { success: true }
   })
   
+  // Bypass CORS for Image Fetching
+  ipcMain.handle('fetch-image-base64', async (event, url) => {
+      try {
+          const response = await fetch(url)
+          if (!response.ok) throw new Error(`Failed to fetch image: ${response.statusText}`)
+          const arrayBuffer = await response.arrayBuffer()
+          const buffer = Buffer.from(arrayBuffer)
+          const base64 = buffer.toString('base64')
+          const mimeType = response.headers.get('content-type') || 'image/png'
+          return `data:${mimeType};base64,${base64}`
+      } catch (error) {
+          console.error('Error fetching image:', error)
+          return null
+      }
+  })
+  
   // Instance Handler needs mainWindow to support cache-first strategy
   // Ensure we don't have duplicates (though launcher.js handler is removed now)
   ipcMain.removeHandler('get-instances') 
