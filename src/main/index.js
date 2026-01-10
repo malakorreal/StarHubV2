@@ -20,6 +20,7 @@ function createWindow() {
     width: 1280,
     height: 720,
     show: false,
+    title: 'StarHub',
     frame: false, // Custom frame for HoYoplay style
     autoHideMenuBar: true,
     ...(process.platform === 'linux' ? { icon } : {}),
@@ -90,7 +91,29 @@ app.whenReady().then(() => {
   // Bypass CORS for Image Fetching
   ipcMain.handle('fetch-image-base64', async (event, url) => {
       try {
-          const response = await fetch(url)
+          // Check if it's a local file
+          if (!url.startsWith('http')) {
+              // It's likely a file path. Remove 'file://' if present
+              const filePath = url.replace('file:///', '').replace('file://', '')
+              try {
+                  const buffer = await fs.readFile(filePath)
+                  const base64 = buffer.toString('base64')
+                  // Guess mime type based on extension
+                  const ext = filePath.split('.').pop().toLowerCase()
+                  const mimeType = ext === 'gif' ? 'image/gif' : (ext === 'png' ? 'image/png' : 'image/jpeg')
+                  return `data:${mimeType};base64,${base64}`
+              } catch (err) {
+                   console.error('Error reading local file:', err)
+                   return null
+              }
+          }
+
+          // It's a remote URL
+          const response = await fetch(url, {
+              headers: {
+                  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 StarHub/1.0'
+              }
+          })
           if (!response.ok) throw new Error(`Failed to fetch image: ${response.statusText}`)
           const arrayBuffer = await response.arrayBuffer()
           const buffer = Buffer.from(arrayBuffer)

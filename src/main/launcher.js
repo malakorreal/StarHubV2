@@ -425,15 +425,64 @@ export function setupLauncher(ipcMain, mainWindow) {
         // ---------------------------------------------------------
         const javaArgs = store.get('javaArgs', '')
         const autoJoin = store.get('autoJoin', false)
+        const resolution = store.get('resolution', { width: 854, height: 480 })
+        const fullscreen = store.get('fullscreen', false)
         
-        const customLaunchArgs = javaArgs ? javaArgs.split(' ').filter(a => a.trim().length > 0) : []
-        const customArgs = []
+        // JVM Arguments (e.g. -Xmx, -D...)
+        const rawJavaArgs = javaArgs ? javaArgs.split(' ').filter(a => a.trim().length > 0) : []
+        const jvmArgs = []
+
+        // Sanitize JVM Args: Remove Game Args that users mistakenly put in Java Args
+        for (let i = 0; i < rawJavaArgs.length; i++) {
+            const arg = rawJavaArgs[i]
+            if (arg === '--server' || arg === '--port' || arg === '--username' || arg === '--uuid' || arg === '--accessToken') {
+                // Skip this arg and the next one (the value)
+                i++
+                console.warn(`[LAUNCHER] Removed invalid JVM arg: ${arg}`)
+                continue
+            }
+            // Also remove QuickPlay args if present manually
+            if (arg.startsWith('--quickPlay')) {
+                 if (arg.includes('Path')) {
+                     // --quickPlayPath "path"
+                     i++
+                 }
+                 continue
+            }
+            jvmArgs.push(arg)
+        }
+
+        // Game Arguments (e.g. --server, --username)
+        const gameArgs = []
 
         if (autoJoin && instance.serverIp) {
-            const [ip, port] = instance.serverIp.split(':')
-            customArgs.push('--server', ip)
-            if (port) customArgs.push('--port', port)
-            console.log(`[AUTO-JOIN] Added server args: ${ip}:${port || 25565}`)
+            // Check MC Version for QuickPlay support (1.20+)
+            const isModern = (v) => {
+                if (!v) return false
+                const parts = v.split('.')
+                if (parts.length < 2) return false
+                const minor = parseInt(parts[1])
+                return minor >= 20
+            }
+
+            // TEMPORARY DISABLED: Auto-Join causing issues with arguments
+            console.log("[AUTO-JOIN] Feature temporarily disabled by user request.")
+            /*
+            if (isModern(instance.version)) {
+                // Use QuickPlay for 1.20+
+                opts.quickPlay = {
+                    type: 'multiplayer',
+                    identifier: instance.serverIp
+                }
+                console.log(`[AUTO-JOIN] Using QuickPlay for ${instance.version}: ${instance.serverIp}`)
+            } else {
+                // Use CLI Args for older versions
+                const [ip, port] = instance.serverIp.split(':')
+                gameArgs.push('--server', ip)
+                if (port) gameArgs.push('--port', port)
+                console.log(`[AUTO-JOIN] Added server args for ${instance.version}: ${ip}:${port || 25565}`)
+            }
+            */
         }
 
         const opts = {
@@ -447,8 +496,13 @@ export function setupLauncher(ipcMain, mainWindow) {
                 max: ram + "M",
                 min: "1024M"
             },
-            customLaunchArgs, // JVM Arguments
-            customArgs,       // Game Arguments
+            window: {
+                width: resolution.width,
+                height: resolution.height,
+                fullscreen: fullscreen
+            },
+            customArgs: jvmArgs,           // MCLC: customArgs = JVM Arguments
+            customLaunchArgs: gameArgs,    // MCLC: customLaunchArgs = Game Arguments
             overrides: {
                 detached: false // Keep attached to see logs/close event
             }

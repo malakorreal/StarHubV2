@@ -55,7 +55,18 @@ export default {
     noUuid: "ไม่มี UUID",
     javaArgs: "Arguments เสริม (Java)",
     autoJoin: "เข้าเซิร์ฟเวอร์อัตโนมัติ",
-    saved: "บันทึกการตั้งค่าเรียบร้อยแล้ว"
+    saved: "บันทึกการตั้งค่าเรียบร้อยแล้ว",
+    graphics: "กราฟิก",
+    bgAnimation: "ภาพเคลื่อนไหวพื้นหลัง",
+    bgAnimationDesc: "เปิด/ปิด วิดีโอหรือ GIF พื้นหลัง",
+    cubesAnimation: "ลูกบาศก์ลอย",
+    cubesAnimationDesc: "เปิด/ปิด เอฟเฟกต์ลูกบาศก์ลอย",
+    resolution: "ความละเอียดหน้าจอ",
+    fullscreen: "เต็มหน้าจอ",
+    width: "กว้าง",
+    height: "สูง",
+    launcherGraphics: "กราฟิกตัวเปิดเกม",
+    gameGraphics: "ตั้งค่ากราฟิกเกม"
   },
   dialogs: {
     closeTitle: "ออกจากโปรแกรม",

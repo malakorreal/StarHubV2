@@ -59,7 +59,18 @@ export default {
     noUuid: "No UUID",
     javaArgs: "Java Arguments",
     autoJoin: "Auto Join Server",
-    saved: "Settings Saved"
+    saved: "Settings Saved",
+    graphics: "Graphics",
+    bgAnimation: "Background Animation",
+    bgAnimationDesc: "Enable video/GIF background",
+    cubesAnimation: "Floating Cubes",
+    cubesAnimationDesc: "Enable floating cubes animation",
+    resolution: "Screen Resolution",
+    fullscreen: "Fullscreen",
+    width: "Width",
+    height: "Height",
+    launcherGraphics: "Launcher Interface",
+    gameGraphics: "Game Graphics"
   },
   dialogs: {
     closeTitle: "Quit Launcher",

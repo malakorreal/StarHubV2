@@ -1,18 +1,39 @@
-import React from 'react'
+import React, { useMemo } from 'react'
 
-function LoginScreen({ onLogin, isLoggingIn }) {
+function LoginScreen({ onLogin, isLoggingIn, enableCubes }) {
+  // Generate random cubes configuration once
+  const cubes = useMemo(() => {
+    return Array.from({ length: 12 }).map((_, i) => ({
+        left: `${(i * 100 / 12) + (Math.random() * 10 - 5)}%`, // Spread evenly with some randomness
+        animationDelay: `-${Math.random() * 20}s`, // Random start time
+        animationDuration: `${20 + Math.random() * 15}s`, // Slower speed (20-35s)
+        size: `${30 + Math.random() * 40}px`, // Larger size (30-70px)
+        opacity: Math.random() * 0.2 + 0.05 // Lower opacity for better performance
+    }))
+  }, [])
+
   return (
-    <div style={{ width: '100%', height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', position: 'relative' }}>
+    <div style={{ width: '100%', height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', position: 'relative', overflow: 'hidden', background: '#111' }}>
        {/* Background Animation */}
-       <div className="bg-animation">
-          <div className="cube"></div>
-          <div className="cube"></div>
-          <div className="cube"></div>
-          <div className="cube"></div>
-          <div className="cube"></div>
-          <div className="cube"></div>
-          <div className="cube"></div>
-       </div>
+       {enableCubes && (
+          <div style={{ position: 'absolute', inset: 0, zIndex: 0, pointerEvents: 'none', overflow: 'hidden' }}>
+             {cubes.map((style, i) => (
+                 <div 
+                     key={i} 
+                     className="cube" 
+                     style={{ 
+                         left: style.left,
+                         width: style.size,
+                         height: style.size,
+                         animationDelay: style.animationDelay,
+                         animationDuration: style.animationDuration,
+                         opacity: style.opacity,
+                         willChange: 'transform, opacity' // Optimize rendering
+                     }}
+                 ></div>
+             ))}
+          </div>
+       )}
 
        <div style={{ 
            textAlign: 'center', 

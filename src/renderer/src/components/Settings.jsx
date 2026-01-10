@@ -8,6 +8,9 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
   const [redeemInput, setRedeemInput] = useState('')
   const [redeemError, setRedeemError] = useState('')
+  const [resolutionWidth, setResolutionWidth] = useState(854)
+  const [resolutionHeight, setResolutionHeight] = useState(480)
+  const [fullscreen, setFullscreen] = useState(false)
 
   useEffect(() => {
     if (window.api && window.api.getSettings) {
@@ -15,13 +18,24 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
             if (s && s.ram) setRam(s.ram)
             if (s && s.javaArgs) setJavaArgs(s.javaArgs)
             if (s && typeof s.autoJoin !== 'undefined') setAutoJoin(s.autoJoin)
+            if (s && s.resolution) {
+                setResolutionWidth(s.resolution.width || 854)
+                setResolutionHeight(s.resolution.height || 480)
+            }
+            if (s && typeof s.fullscreen !== 'undefined') setFullscreen(s.fullscreen)
         })
     }
   }, [])
 
   const save = () => {
       if (window.api && window.api.setSettings) {
-        window.api.setSettings({ ram, javaArgs, autoJoin })
+        window.api.setSettings({ 
+            ram, 
+            javaArgs, 
+            autoJoin, 
+            resolution: { width: resolutionWidth, height: resolutionHeight },
+            fullscreen
+        })
       }
       if (showToast) showToast(t('settings.saved'), 'success')
       onClose()
@@ -74,6 +88,23 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
                 }}
               >
                 {t('settings.general')}
+              </button>
+
+              <button 
+                onClick={() => setActiveTab('graphics')}
+                style={{ 
+                    textAlign: 'left', 
+                    padding: '10px 15px', 
+                    background: activeTab === 'graphics' ? 'var(--accent)' : 'transparent', 
+                    color: activeTab === 'graphics' ? '#000' : '#aaa', 
+                    border: 'none', 
+                    borderRadius: '6px', 
+                    cursor: 'pointer',
+                    fontWeight: activeTab === 'graphics' ? 'bold' : 'normal',
+                    transition: 'all 0.2s'
+                }}
+              >
+                {t('settings.gameGraphics') || 'Game Graphics'}
               </button>
 
               <button 
@@ -158,7 +189,8 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
                         />
                       </div>
 
-                      {/* Auto Join Toggle */}
+                      {/* Auto Join Toggle - TEMPORARY DISABLED */}
+                      {/* 
                       <div style={{ marginBottom: '25px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                         <label style={{ color: '#ccc' }}>{t('settings.autoJoin')}</label>
                         <div 
@@ -185,6 +217,7 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
                             }} />
                         </div>
                       </div>
+                      */}
 
                       {/* Language Selection */}
                       <div style={{ marginBottom: '20px' }}>
@@ -226,6 +259,85 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
                             >
                                 English
                             </button>
+                        </div>
+                      </div>
+                  </div>
+              )}
+
+              {/* Graphics Tab (Now Game Graphics) */}
+              {activeTab === 'graphics' && (
+                  <div style={{ animation: 'fadeIn 0.3s' }}>
+                      <h3 style={{ marginTop: 0, marginBottom: '20px', borderBottom: '1px solid #444', paddingBottom: '10px' }}>{t('settings.gameGraphics') || 'Game Graphics'}</h3>
+                      
+                      {/* Resolution */}
+                      <div style={{ marginBottom: '25px' }}>
+                          <label style={{ display: 'block', marginBottom: '10px', color: '#ccc' }}>{t('settings.resolution') || 'Screen Resolution'}</label>
+                          <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                              <div style={{ flex: 1 }}>
+                                  <div style={{ fontSize: '0.8em', color: '#888', marginBottom: '5px' }}>{t('settings.width') || 'Width'}</div>
+                                  <input 
+                                    type="number" 
+                                    value={resolutionWidth} 
+                                    onChange={(e) => setResolutionWidth(Number(e.target.value))}
+                                    style={{
+                                        width: '100%',
+                                        padding: '10px',
+                                        background: '#333',
+                                        border: '1px solid #444',
+                                        borderRadius: '4px',
+                                        color: '#fff',
+                                        textAlign: 'center'
+                                    }}
+                                  />
+                              </div>
+                              <span style={{ color: '#888', marginTop: '20px' }}>x</span>
+                              <div style={{ flex: 1 }}>
+                                  <div style={{ fontSize: '0.8em', color: '#888', marginBottom: '5px' }}>{t('settings.height') || 'Height'}</div>
+                                  <input 
+                                    type="number" 
+                                    value={resolutionHeight} 
+                                    onChange={(e) => setResolutionHeight(Number(e.target.value))}
+                                    style={{
+                                        width: '100%',
+                                        padding: '10px',
+                                        background: '#333',
+                                        border: '1px solid #444',
+                                        borderRadius: '4px',
+                                        color: '#fff',
+                                        textAlign: 'center'
+                                    }}
+                                  />
+                              </div>
+                          </div>
+                      </div>
+
+                      {/* Fullscreen Toggle */}
+                      <div style={{ marginBottom: '25px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <div>
+                            <label style={{ display: 'block', color: '#ccc', fontWeight: 'bold' }}>{t('settings.fullscreen') || 'Fullscreen'}</label>
+                        </div>
+                        <div 
+                            onClick={() => setFullscreen(!fullscreen)}
+                            style={{
+                                width: '50px',
+                                height: '26px',
+                                background: fullscreen ? 'var(--accent)' : '#444',
+                                borderRadius: '13px',
+                                position: 'relative',
+                                cursor: 'pointer',
+                                transition: 'background 0.3s'
+                            }}
+                        >
+                            <div style={{
+                                width: '20px',
+                                height: '20px',
+                                background: '#fff',
+                                borderRadius: '50%',
+                                position: 'absolute',
+                                top: '3px',
+                                left: fullscreen ? '27px' : '3px',
+                                transition: 'left 0.3s'
+                            }} />
                         </div>
                       </div>
                   </div>
@@ -387,6 +499,8 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
                       </div>
                   </div>
               )}
+
+
 
               {/* Footer Actions */}
               <div style={{ marginTop: 'auto', display: 'flex', justifyContent: 'flex-end', gap: '10px', borderTop: '1px solid #333', paddingTop: '20px' }}>

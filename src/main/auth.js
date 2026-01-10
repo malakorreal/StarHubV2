@@ -1,6 +1,7 @@
 import { Auth } from 'msmc'
 import { getStore } from './store'
 import { setActivity } from './rpc'
+import icon from '../../resources/icon.ico?asset'
 
 export function setupAuth(ipcMain, mainWindow) {
   const store = getStore()
@@ -8,7 +9,18 @@ export function setupAuth(ipcMain, mainWindow) {
   ipcMain.handle('login', async () => {
     try {
         const authManager = new Auth("select_account")
-        const xboxManager = await authManager.launch("electron")
+        const xboxManager = await authManager.launch("electron", {
+            icon: icon,
+            title: "StarHub Login",
+            width: 600,
+            height: 700,
+            autoHideMenuBar: true,
+            resizable: true,
+            webPreferences: {
+                nodeIntegration: false,
+                contextIsolation: true
+            }
+        })
         const token = await xboxManager.getMinecraft()
         
         // Save the MCLC object directly because it's JSON serializable

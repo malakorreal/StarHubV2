@@ -8,7 +8,10 @@ export function setupStore(ipcMain) {
       ram: store.get('ram', 4096),
       javaPath: store.get('javaPath', ''),
       instances: store.get('instances', []),
-      installedVersions: store.get('installed_versions', {})
+      installedVersions: store.get('installed_versions', {}),
+      autoJoin: store.get('autoJoin', false),
+      resolution: store.get('resolution', { width: 854, height: 480 }),
+      fullscreen: store.get('fullscreen', false)
     }
   })
 

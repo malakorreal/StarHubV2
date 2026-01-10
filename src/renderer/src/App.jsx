@@ -65,6 +65,16 @@ function App() {
   const [toast, setToast] = useState(null)
   const notifiedUpdatesRef = React.useRef(new Set())
 
+  // Graphics Settings State
+  const [enableAnimation, setEnableAnimation] = useState(true)
+  const [enableCubes, setEnableCubes] = useState(true)
+
+  const toggleAnimation = () => {
+      const newState = !enableAnimation
+      setEnableAnimation(newState)
+      // setEnableCubes(newState) // User requested to keep Cubes always on (or independent)
+  }
+
   const showToast = (message, type = 'info') => {
       setToast({ message, type, id: Date.now() })
   }
@@ -503,7 +513,11 @@ function App() {
       </div>
 
       {!user ? (
-            <LoginScreen onLogin={handleLogin} isLoggingIn={isLoggingIn} />
+            <LoginScreen 
+                onLogin={handleLogin} 
+                isLoggingIn={isLoggingIn} 
+                enableCubes={enableCubes}
+            />
         ) : (
             <>
             <Sidebar 
@@ -532,6 +546,9 @@ function App() {
                     user={user}
                     paused={showSettings}
                     t={t}
+                    enableAnimation={enableAnimation}
+                    toggleAnimation={toggleAnimation}
+                    enableCubes={enableCubes}
                 />
             ) : (
                 <NoInstancesView 

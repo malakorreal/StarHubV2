@@ -1,22 +1,11 @@
 import React, { memo, useState, useEffect, useMemo } from 'react'
 
-const MainContent = memo(({ instance, installedVersion, status, progress, onLaunch, onCancel, onOpenSettings, onOpenFolder, onRepair, onOpenConsole, user, paused, t }) => {
+const MainContent = memo(({ instance, installedVersion, status, progress, onLaunch, onCancel, onOpenSettings, onOpenFolder, onRepair, onOpenConsole, user, paused, t, enableAnimation, toggleAnimation, enableCubes }) => {
   const [bgLoaded, setBgLoaded] = useState(false)
   const [staticGif, setStaticGif] = useState(null)
   const [serverStatus, setServerStatus] = useState(null)
   const videoRef = React.useRef(null)
   
-  // Animation State
-  const [enableAnimation, setEnableAnimation] = useState(() => {
-      return localStorage.getItem('enableBackgroundAnimation') !== 'false'
-  })
-
-  const toggleAnimation = () => {
-      const newState = !enableAnimation
-      setEnableAnimation(newState)
-      localStorage.setItem('enableBackgroundAnimation', newState)
-  }
-
   // Determine Video Source
   const { videoSrc, isVideoOnly, isBgGif } = useMemo(() => {
       if (!instance) return { videoSrc: null, isVideoOnly: false, isBgGif: false }
@@ -67,14 +56,28 @@ const MainContent = memo(({ instance, installedVersion, status, progress, onLaun
   useEffect(() => {
       let mounted = true
       setServerStatus(null) // Reset on instance change
+      let intervalId = null
 
-      if (instance?.serverIp) {
-          window.api.getServerStatus(instance.serverIp).then(status => {
-              if (mounted) setServerStatus(status)
-          })
+      const fetchStatus = () => {
+          if (instance?.serverIp) {
+              window.api.getServerStatus(instance.serverIp).then(status => {
+                  if (mounted) setServerStatus(status)
+              })
+          }
       }
 
-      return () => { mounted = false }
+      // Initial Fetch
+      fetchStatus()
+
+      // Poll every 10 seconds for real-time updates
+      if (instance?.serverIp) {
+          intervalId = setInterval(fetchStatus, 10000)
+      }
+
+      return () => { 
+          mounted = false 
+          if (intervalId) clearInterval(intervalId)
+      }
   }, [instance?.serverIp])
 
   // Generate random cubes configuration once
@@ -98,39 +101,52 @@ const MainContent = memo(({ instance, installedVersion, status, progress, onLaun
             setBgLoaded(true)
             if (isBgGif) {
                 // Try to generate static frame using Canvas
-                try {
-                    const canvas = document.createElement('canvas')
-                    canvas.width = img.width
-                    canvas.height = img.height
-                    const ctx = canvas.getContext('2d')
-                    ctx.drawImage(img, 0, 0)
-                    const dataUrl = canvas.toDataURL()
-                    setStaticGif(dataUrl)
-                } catch (e) {
-                    // Fallback: If Canvas fails (likely CORS), fetch via Main Process
-                    console.warn("Canvas failed (CORS?), trying main process fetch...", e)
-                    window.api.fetchImageBase64(instance.backgroundImage).then(base64 => {
-                        if (base64) {
-                            // Load base64 into a new image to draw on canvas again (to get 1st frame)
-                            // Or just use the base64? No, base64 of GIF is still animated.
-                            // We must draw it to canvas to get static frame.
-                            const proxyImg = new Image()
-                            proxyImg.onload = () => {
-                                try {
-                                    const canvas = document.createElement('canvas')
-                                    canvas.width = proxyImg.width
-                                    canvas.height = proxyImg.height
-                                    const ctx = canvas.getContext('2d')
-                                    ctx.drawImage(proxyImg, 0, 0)
-                                    setStaticGif(canvas.toDataURL())
-                                } catch (err) {
-                                    console.error("Failed to generate static frame even with proxy", err)
-                                }
+                const generateStaticFrame = async () => {
+                    try {
+                        const img = new Image()
+                        img.crossOrigin = "anonymous" // Try anonymous first
+                        img.src = instance.backgroundImage
+                        await new Promise((resolve, reject) => {
+                            img.onload = resolve
+                            img.onerror = reject
+                        })
+
+                        const canvas = document.createElement('canvas')
+                        canvas.width = img.width
+                        canvas.height = img.height
+                        const ctx = canvas.getContext('2d')
+                        ctx.drawImage(img, 0, 0)
+                        const dataUrl = canvas.toDataURL()
+                        setStaticGif(dataUrl)
+                        console.log("Static GIF generated via standard Canvas")
+                    } catch (e) {
+                        console.warn("Standard Canvas failed (CORS?), trying main process fetch...", e)
+                        try {
+                            const base64 = await window.api.fetchImageBase64(instance.backgroundImage)
+                            if (base64) {
+                                const proxyImg = new Image()
+                                await new Promise((resolve, reject) => {
+                                    proxyImg.onload = resolve
+                                    proxyImg.onerror = reject
+                                    proxyImg.src = base64
+                                })
+                                
+                                const canvas = document.createElement('canvas')
+                                canvas.width = proxyImg.width
+                                canvas.height = proxyImg.height
+                                const ctx = canvas.getContext('2d')
+                                ctx.drawImage(proxyImg, 0, 0)
+                                setStaticGif(canvas.toDataURL())
+                                console.log("Static GIF generated via Main Process proxy")
+                            } else {
+                                console.error("Main process returned null for image fetch")
                             }
-                            proxyImg.src = base64
+                        } catch (err) {
+                            console.error("Failed to generate static frame even with proxy", err)
                         }
-                    })
+                    }
                 }
+                generateStaticFrame()
             }
         }
     } else if (isVideoOnly && videoSrc) {
@@ -142,9 +158,13 @@ const MainContent = memo(({ instance, installedVersion, status, progress, onLaun
 
   if (!instance) return (
     <div style={{ flex: 1, position: 'relative', overflow: 'hidden', background: '#111' }}>
-      <div className="cube" style={{ left: '10%' }}></div>
-      <div className="cube" style={{ left: '30%', animationDelay: '-5s' }}></div>
-      <div className="cube" style={{ left: '70%', animationDelay: '-10s' }}></div>
+      {enableCubes && (
+        <>
+            <div className="cube" style={{ left: '10%' }}></div>
+            <div className="cube" style={{ left: '30%', animationDelay: '-5s' }}></div>
+            <div className="cube" style={{ left: '70%', animationDelay: '-10s' }}></div>
+        </>
+      )}
       <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', color: '#666', fontSize: '1.5em' }}>
         {t('main.selectInstance')}
       </div>
@@ -203,7 +223,7 @@ const MainContent = memo(({ instance, installedVersion, status, progress, onLaun
       }}></div>
 
       {/* Floating Cubes Animation (Always Visible) */}
-      {!paused && (
+      {!paused && enableCubes && (
           <div style={{ position: 'absolute', inset: 0, zIndex: 2, pointerEvents: 'none', overflow: 'hidden' }}>
               {cubes.map((style, i) => (
                   <div 
@@ -310,7 +330,10 @@ const MainContent = memo(({ instance, installedVersion, status, progress, onLaun
                     gap: '8px',
                     width: 'fit-content'
                 }}>
-                    <span style={{ fontSize: '0.9em', color: '#69f0ae' }}>Online ({serverStatus.players.online}/{serverStatus.players.max})</span>
+                    <span style={{ fontSize: '0.9em', color: '#69f0ae' }}>
+                        Online ({serverStatus.players.online}/{serverStatus.players.max})
+                        {serverStatus.ping ? ` • ${serverStatus.ping}ms` : ''}
+                    </span>
                     <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#00e676', boxShadow: '0 0 5px #00e676' }}></div>
                 </div>
             )}
