@@ -315,6 +315,40 @@ export class SyncManager {
   }
 
   /**
+   * Cleanup folder by removing files not in the whitelist
+   */
+  async cleanupFolder(folder, validFilenames = []) {
+      try {
+          if (!fs.existsSync(folder)) return
+
+          this.log(`[CLEANUP] Checking folder: ${folder}`)
+          const files = await fs.promises.readdir(folder)
+          
+          // Hardcoded whitelist for specific mods/folders that should never be deleted
+          const systemWhitelist = ['figura', 'fragmentskin', 'cache', 'shaderpacks', 'screenshots']
+
+          for (const file of files) {
+              // Check if file is in validFilenames
+              if (validFilenames.includes(file)) {
+                  continue
+              }
+
+              // Check system whitelist
+              if (systemWhitelist.some(w => file.toLowerCase().includes(w.toLowerCase()))) {
+                   continue
+              }
+
+              // Delete
+              const filePath = path.join(folder, file)
+              this.log(`[CLEANUP] Removing old/extra file: ${file}`)
+              await fs.promises.rm(filePath, { recursive: true, force: true })
+          }
+      } catch (e) {
+          console.error(`[CLEANUP] Error cleaning folder ${folder}:`, e)
+      }
+  }
+
+  /**
    * Native Unzip using PowerShell (Windows) to save RAM
    */
   async nativeUnzip(zipPath, targetDir, signal = null) {

@@ -120,6 +120,49 @@ export function setupLauncher(ipcMain, mainWindow) {
         }
     }
 
+    // 2.6 Cleanup Old Mods (ONLY if NOT using modpackUrl)
+    // If using modpackUrl, extractZip handles cleanup during repair.
+    // If using ONLY mods/preloadMods, we need to manually clean up orphans.
+    if (!instance.modpackUrl) {
+        try {
+            const validFilenames = []
+            
+            // Helper to get filename from URL
+            const getFileName = (url) => {
+                try {
+                    return decodeURIComponent(url.split('/').pop().split('?')[0])
+                } catch (e) { return null }
+            }
+
+            // 1. From mods array
+            if (instance.mods && Array.isArray(instance.mods)) {
+                instance.mods.forEach(modUrl => {
+                     const name = getFileName(modUrl)
+                     if (name) validFilenames.push(name)
+                })
+            }
+            
+            // 2. From preloadMods
+            if (instance.preloadMods && Array.isArray(instance.preloadMods)) {
+                instance.preloadMods.forEach(mod => {
+                    let name = null
+                    if (typeof mod === 'string') {
+                        name = getFileName(mod)
+                    } else if (typeof mod === 'object' && mod.url) {
+                        name = mod.name || getFileName(mod.url)
+                    }
+                    if (name) validFilenames.push(name)
+                })
+            }
+            
+            if (validFilenames.length > 0) {
+                await syncManager.cleanupFolder(modsFolder, validFilenames)
+            }
+        } catch (e) {
+            console.error("[CLEANUP] Error during mod cleanup:", e)
+        }
+    }
+
     // 3. Save Installed Version
     // Prioritize modpackVersion if available, otherwise use Minecraft version
     const versionToSave = instance.modpackVersion || instance.version
