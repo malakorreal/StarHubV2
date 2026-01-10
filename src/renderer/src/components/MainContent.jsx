@@ -182,20 +182,19 @@ const MainContent = memo(({ instance, installedVersion, status, progress, onLaun
             </h3>
 
             {serverStatus && serverStatus.online && (
-                <div style={{ 
+                 <div style={{ 
                     marginBottom: '10px', 
                     padding: '8px 12px', 
-                    background: 'rgba(0, 200, 83, 0.2)', 
-                    border: '1px solid rgba(0, 200, 83, 0.4)', 
-                    borderRadius: '6px',
-                    display: 'flex',
+                    background: 'rgba(50, 255, 100, 0.1)', 
+                    border: '1px solid rgba(50, 255, 100, 0.3)', 
+                    borderRadius: '6px', 
+                    display: 'inline-flex',
                     alignItems: 'center',
-                    justifyContent: 'flex-end',
-                    gap: '8px'
+                    justifyContent: 'center',
+                    gap: '8px',
+                    width: 'fit-content'
                 }}>
-                    <span style={{ fontSize: '0.9em', color: '#b9f6ca' }}>
-                        {serverStatus.players.online} / {serverStatus.players.max} Players
-                    </span>
+                    <span style={{ fontSize: '0.9em', color: '#69f0ae' }}>Online ({serverStatus.players.online}/{serverStatus.players.max})</span>
                     <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#00e676', boxShadow: '0 0 5px #00e676' }}></div>
                 </div>
             )}
@@ -207,10 +206,11 @@ const MainContent = memo(({ instance, installedVersion, status, progress, onLaun
                     background: 'rgba(255, 50, 50, 0.2)', 
                     border: '1px solid rgba(255, 50, 50, 0.4)', 
                     borderRadius: '6px',
-                    display: 'flex',
+                    display: 'inline-flex',
                     alignItems: 'center',
-                    justifyContent: 'flex-end',
-                    gap: '8px'
+                    justifyContent: 'center',
+                    gap: '8px',
+                    width: 'fit-content'
                 }}>
                     <span style={{ fontSize: '0.9em', color: '#ff8a80' }}>Offline</span>
                     <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#ff1744' }}></div>
