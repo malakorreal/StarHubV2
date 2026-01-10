@@ -3,6 +3,46 @@ import React, { memo, useState, useEffect, useMemo } from 'react'
 const MainContent = memo(({ instance, installedVersion, status, progress, onLaunch, onCancel, onOpenSettings, onOpenFolder, onRepair, onOpenConsole, user, paused, t }) => {
   const [bgLoaded, setBgLoaded] = useState(false)
   const [serverStatus, setServerStatus] = useState(null)
+  const videoRef = React.useRef(null)
+  
+  // Animation State
+  const [enableAnimation, setEnableAnimation] = useState(() => {
+      return localStorage.getItem('enableBackgroundAnimation') !== 'false'
+  })
+
+  const toggleAnimation = () => {
+      const newState = !enableAnimation
+      setEnableAnimation(newState)
+      localStorage.setItem('enableBackgroundAnimation', newState)
+  }
+
+  // Determine Video Source
+  const { videoSrc, isVideoOnly } = useMemo(() => {
+      if (!instance) return { videoSrc: null, isVideoOnly: false }
+      
+      const isBgVideo = instance.backgroundImage && /\.(mp4|webm|ogg|mov)$/i.test(instance.backgroundImage)
+      
+      if (instance.backgroundVideo) {
+          return { videoSrc: instance.backgroundVideo, isVideoOnly: false }
+      }
+      
+      if (isBgVideo) {
+          return { videoSrc: instance.backgroundImage, isVideoOnly: true }
+      }
+      
+      return { videoSrc: null, isVideoOnly: false }
+  }, [instance])
+
+  // Handle Play/Pause for Video
+  useEffect(() => {
+      if (videoRef.current) {
+          if (enableAnimation) {
+              videoRef.current.play().catch(() => {})
+          } else {
+              videoRef.current.pause()
+          }
+      }
+  }, [enableAnimation])
 
   // Check update status
   const isUpdateAvailable = useMemo(() => {
@@ -44,12 +84,16 @@ const MainContent = memo(({ instance, installedVersion, status, progress, onLaun
 
   useEffect(() => {
     setBgLoaded(false)
-    if (instance?.backgroundImage) {
+    if (instance?.backgroundImage && !isVideoOnly) {
         const img = new Image()
         img.src = instance.backgroundImage
         img.onload = () => setBgLoaded(true)
+    } else if (isVideoOnly && videoSrc) {
+        // If only video, we might want to set bgLoaded when video is ready, 
+        // but video tag has its own onLoadedData. 
+        // We'll handle it in the render.
     }
-  }, [instance?.backgroundImage])
+  }, [instance?.backgroundImage, isVideoOnly, videoSrc])
 
   if (!instance) return (
     <div style={{ flex: 1, position: 'relative', overflow: 'hidden', background: '#111' }}>
@@ -65,18 +109,45 @@ const MainContent = memo(({ instance, installedVersion, status, progress, onLaun
   return (
     <div style={{ flex: 1, position: 'relative', overflow: 'hidden', background: '#111' }}>
       {/* Background Image with Transition */}
-      <div style={{
-          position: 'absolute',
-          inset: 0,
-          backgroundImage: (bgLoaded && instance.backgroundImage) ? `url(${instance.backgroundImage})` : 'none',
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-          opacity: bgLoaded ? 1 : 0,
-          transition: 'opacity 0.5s ease-in-out',
-          zIndex: 0,
-          transform: 'translateZ(0)', // Force GPU layer
-          willChange: 'opacity'
-      }}></div>
+      {!isVideoOnly && (
+        <div style={{
+            position: 'absolute',
+            inset: 0,
+            backgroundImage: (bgLoaded && instance.backgroundImage) ? `url(${instance.backgroundImage})` : 'none',
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            opacity: bgLoaded ? 1 : 0,
+            transition: 'opacity 0.5s ease-in-out',
+            zIndex: 0,
+            transform: 'translateZ(0)', // Force GPU layer
+            willChange: 'opacity'
+        }}></div>
+      )}
+
+      {/* Video Background */}
+      {videoSrc && (
+          <video
+              ref={videoRef}
+              src={videoSrc}
+              autoPlay={enableAnimation}
+              loop
+              muted
+              playsInline
+              style={{
+                  position: 'absolute',
+                  inset: 0,
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'cover',
+                  zIndex: 0,
+                  opacity: (isVideoOnly || bgLoaded) ? (enableAnimation || isVideoOnly ? 1 : 0) : 0, // Show if enabled OR if it's the only source
+                  transition: 'opacity 1s ease-in-out',
+                  filter: 'brightness(0.8)', // Slightly darken video to make text readable
+                  display: (enableAnimation || isVideoOnly) ? 'block' : 'none'
+              }}
+              onLoadedData={() => { if(isVideoOnly) setBgLoaded(true) }}
+          />
+      )}
 
       {/* Overlay */}
       <div style={{ 
@@ -468,7 +539,7 @@ const MainContent = memo(({ instance, installedVersion, status, progress, onLaun
         <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
             <button 
                 onClick={onOpenFolder}
-                title="Open Instance Folder"
+                title={t('main.openFolder') || "Open Instance Folder"}
                 style={{
                     width: '56px',
                     height: '56px',
@@ -492,6 +563,43 @@ const MainContent = memo(({ instance, installedVersion, status, progress, onLaun
                     <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
                 </svg>
             </button>
+
+            {/* Animation Toggle Button */}
+            {videoSrc && (
+                <button 
+                    onClick={toggleAnimation}
+                    title={enableAnimation ? (t('main.disableAnimation') || "Disable Animation") : (t('main.enableAnimation') || "Enable Animation")}
+                    style={{
+                        width: '56px',
+                        height: '56px',
+                        borderRadius: '12px',
+                        border: '1px solid rgba(255,255,255,0.1)',
+                        background: enableAnimation ? 'rgba(255, 215, 0, 0.1)' : 'rgba(255,255,255,0.05)',
+                        color: enableAnimation ? 'var(--accent)' : '#fff',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        transition: 'all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
+                        backdropFilter: 'blur(4px)',
+                        WebkitBackdropFilter: 'blur(4px)',
+                        willChange: 'transform, background'
+                    }}
+                    onMouseOver={(e) => { e.currentTarget.style.background = enableAnimation ? 'rgba(255, 215, 0, 0.2)' : 'rgba(255,255,255,0.15)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
+                    onMouseOut={(e) => { e.currentTarget.style.background = enableAnimation ? 'rgba(255, 215, 0, 0.1)' : 'rgba(255,255,255,0.05)'; e.currentTarget.style.transform = 'translateY(0)'; }}
+                >
+                    {enableAnimation ? (
+                         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <rect x="6" y="4" width="4" height="16"></rect>
+                            <rect x="14" y="4" width="4" height="16"></rect>
+                        </svg>
+                    ) : (
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                             <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                        </svg>
+                    )}
+                </button>
+            )}
 
             <button 
                 onClick={onRepair}

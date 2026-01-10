@@ -27,7 +27,9 @@ export default {
     preparing: "กำลังเตรียมการ",
     loading: "กำลังโหลด...",
     update: "อัปเดต",
-    updateAvailable: "มีการอัปเดตใหม่"
+    updateAvailable: "มีการอัปเดตใหม่",
+    enableAnimation: "เปิดภาพเคลื่อนไหว",
+    disableAnimation: "ปิดภาพเคลื่อนไหว"
   },
   settings: {
     title: "การตั้งค่า",

@@ -31,7 +31,9 @@ export default {
     preparing: "Preparing",
     loading: "Loading...",
     update: "Update",
-    updateAvailable: "Update Available"
+    updateAvailable: "Update Available",
+    enableAnimation: "Enable Animation",
+    disableAnimation: "Disable Animation"
   },
   settings: {
     title: "Settings",
