@@ -86,6 +86,40 @@ export function setupLauncher(ipcMain, mainWindow) {
         await syncManager.syncMods(instance.mods, modsFolder, { signal })
     }
 
+    // 2.5 Handle Preload Mods (JSON Configurable)
+    if (instance.preloadMods && Array.isArray(instance.preloadMods)) {
+        console.log(`[PRELOAD] Checking ${instance.preloadMods.length} preload mods...`)
+        
+        for (const mod of instance.preloadMods) {
+            if (signal?.aborted) throw new Error('Launch aborted')
+            
+            let modUrl = ''
+            let modName = ''
+            
+            if (typeof mod === 'string') {
+                modUrl = mod
+                modName = path.basename(decodeURIComponent(modUrl))
+            } else if (typeof mod === 'object' && mod.url) {
+                modUrl = mod.url
+                modName = mod.name || path.basename(decodeURIComponent(modUrl))
+            }
+            
+            if (modUrl) {
+                const destPath = path.join(modsFolder, modName)
+                
+                // Use downloadFile with size checking
+                await syncManager.downloadFile(modUrl, destPath, { 
+                    signal, 
+                    checkSize: true,
+                    onProgress: (current, total) => {
+                        // Only update main progress occasionally or just log
+                         syncManager.sendProgress(`Downloading ${modName}`, current, total)
+                    }
+                })
+            }
+        }
+    }
+
     // 3. Save Installed Version
     // Prioritize modpackVersion if available, otherwise use Minecraft version
     const versionToSave = instance.modpackVersion || instance.version

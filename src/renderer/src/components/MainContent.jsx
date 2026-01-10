@@ -15,6 +15,8 @@ const MainContent = memo(({ instance, installedVersion, status, progress, onLaun
       return installedVersion !== currentRemoteVersion
   }, [instance, installedVersion])
 
+  const isMaintenance = instance?.maintenance === true
+
   // Fetch Server Status
   useEffect(() => {
       let mounted = true
@@ -373,47 +375,52 @@ const MainContent = memo(({ instance, installedVersion, status, progress, onLaun
                 </button>
             )}
 
-            <button 
-                onClick={isUpdateAvailable ? onRepair : onLaunch}
-                disabled={status !== 'idle'}
-                style={{
-                    padding: '12px 40px',
-                    minWidth: '220px',
-                    minHeight: '64px',
-                    fontSize: '1.2em',
-                    fontWeight: '600',
-                    background: status === 'idle' ? (isUpdateAvailable ? '#e67e22' : 'var(--accent)') : '#333', // Orange for Update
-                    color: status === 'idle' ? (isUpdateAvailable ? '#fff' : '#000') : '#fff',
-                    border: 'none',
-                    borderRadius: '12px',
-                    cursor: status === 'idle' ? 'pointer' : 'default',
-                    transition: 'all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '12px',
-                    letterSpacing: '0.5px',
-                    boxShadow: '0 4px 15px rgba(0,0,0,0.3)'
-                }}
-                onMouseOver={(e) => { if (status === 'idle') { e.currentTarget.style.filter = 'brightness(1.1)'; e.currentTarget.style.transform = 'translateY(-2px)'; } }}
-                onMouseOut={(e) => { if (status === 'idle') { e.currentTarget.style.filter = 'brightness(1)'; e.currentTarget.style.transform = 'translateY(0)'; } }}
-            >
-                {status === 'idle' ? (
-                    <>
-                        {isUpdateAvailable ? (
-                            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                                <polyline points="7 10 12 15 17 10"></polyline>
-                                <line x1="12" y1="15" x2="12" y2="3"></line>
-                            </svg>
-                        ) : (
-                            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                <path d="M8 5V19L19 12L8 5Z" fill="black"/>
-                            </svg>
-                        )}
-                        {isUpdateAvailable ? t('main.update') : t('main.play')}
-                    </>
-                ) : (
+            <button
+                    onClick={isMaintenance ? null : (isUpdateAvailable ? onRepair : onLaunch)}
+                    disabled={status !== 'idle' || isMaintenance}
+                    style={{
+                        padding: '12px 40px',
+                        minWidth: '220px',
+                        minHeight: '64px',
+                        fontSize: '1.2em',
+                        fontWeight: '600',
+                        background: status === 'idle' ? (isMaintenance ? '#2d2d2d' : isUpdateAvailable ? '#e67e22' : 'var(--accent)') : '#333', // Orange for Update, Dark for Maintenance
+                        color: status === 'idle' ? (isMaintenance ? '#666' : isUpdateAvailable ? '#fff' : '#000') : '#fff',
+                        border: isMaintenance ? '1px solid #444' : 'none',
+                        borderRadius: '12px',
+                        cursor: (status === 'idle' && !isMaintenance) ? 'pointer' : 'not-allowed',
+                        transition: 'all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '12px',
+                        letterSpacing: '0.5px',
+                        boxShadow: isMaintenance ? 'none' : '0 4px 15px rgba(0,0,0,0.3)'
+                    }}
+                    onMouseOver={(e) => { if (status === 'idle' && !isMaintenance) { e.currentTarget.style.filter = 'brightness(1.1)'; e.currentTarget.style.transform = 'translateY(-2px)'; } }}
+                    onMouseOut={(e) => { if (status === 'idle' && !isMaintenance) { e.currentTarget.style.filter = 'brightness(1)'; e.currentTarget.style.transform = 'translateY(0)'; } }}
+                >
+                    {status === 'idle' ? (
+                        <>
+                            {isMaintenance ? (
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                                    <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                                </svg>
+                            ) : isUpdateAvailable ? (
+                                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                    <polyline points="7 10 12 15 17 10"></polyline>
+                                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                                </svg>
+                            ) : (
+                                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M8 5V19L19 12L8 5Z" fill="black"/>
+                                </svg>
+                            )}
+                            {isMaintenance ? (t('main.maintenance') || "Maintenance") : isUpdateAvailable ? t('main.update') : t('main.play')}
+                        </>
+                    ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                             <div className="spinner" style={{ width: 20, height: 20, border: '3px solid rgba(255, 215, 0, 0.2)', borderTop: '3px solid var(--accent)', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
