@@ -14,8 +14,8 @@ export default {
   main: {
     selectInstance: "เลือก Instance ที่ต้องการเล่น",
     serverInfo: "ข้อมูลเซิร์ฟเวอร์",
-    readyToPlay: "พร้อมลุย! (v1.0.22)",
-    maintenance: "ปิดปรับปรุง",
+    readyToPlay: "พร้อม",
+    maintenance: "เซิร์ฟเวอร์ปิดปรับปรุง",
     announcement: "ประกาศ",
     version: "เวอร์ชัน",
     play: "เล่นเกม",

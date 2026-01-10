@@ -19,6 +19,7 @@ export default {
     selectInstance: "Select an instance to play",
     serverInfo: "Server Info",
     readyToPlay: "Ready to play.",
+    maintenance: "Maintenance",
     announcement: "Announcement",
     version: "Version",
     play: "PLAY",

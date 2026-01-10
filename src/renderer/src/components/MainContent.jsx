@@ -418,7 +418,7 @@ const MainContent = memo(({ instance, installedVersion, status, progress, onLaun
                                     <path d="M8 5V19L19 12L8 5Z" fill="black"/>
                                 </svg>
                             )}
-                            {isMaintenance ? (t('main.maintenance') || "Maintenance") : isUpdateAvailable ? t('main.update') : t('main.play')}
+                            {isMaintenance ? (instance.maintenance_message || t('main.maintenance') || "Maintenance") : isUpdateAvailable ? t('main.update') : t('main.play')}
                         </>
                     ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
