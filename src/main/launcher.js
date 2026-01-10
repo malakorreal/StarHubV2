@@ -49,6 +49,17 @@ export function setupLauncher(ipcMain, mainWindow) {
 
     // 1. Handle Modpack Zip
     if (instance.modpackUrl) {
+        // 🚨 Validate File Extension (Must be .zip)
+        try {
+            const urlPath = new URL(instance.modpackUrl).pathname.toLowerCase()
+            if (urlPath.endsWith('.rar')) {
+                throw new Error('Modpack URL must be a .zip file (RAR is not supported)')
+            }
+        } catch (e) {
+            if (e.message.includes('RAR')) throw e
+            // If URL parsing fails, ignore and let download try
+        }
+
         // Check if we need to download
         let needsDownload = forceRepair || !fs.existsSync(zipPath)
         
