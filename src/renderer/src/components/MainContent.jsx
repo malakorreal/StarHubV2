@@ -2,6 +2,7 @@ import React, { memo, useState, useEffect, useMemo } from 'react'
 
 const MainContent = memo(({ instance, installedVersion, status, progress, onLaunch, onCancel, onOpenSettings, onOpenFolder, onRepair, onOpenConsole, user, paused, t }) => {
   const [bgLoaded, setBgLoaded] = useState(false)
+  const [staticGif, setStaticGif] = useState(null)
   const [serverStatus, setServerStatus] = useState(null)
   const videoRef = React.useRef(null)
   
@@ -17,20 +18,25 @@ const MainContent = memo(({ instance, installedVersion, status, progress, onLaun
   }
 
   // Determine Video Source
-  const { videoSrc, isVideoOnly } = useMemo(() => {
-      if (!instance) return { videoSrc: null, isVideoOnly: false }
+  const { videoSrc, isVideoOnly, isBgGif } = useMemo(() => {
+      if (!instance) return { videoSrc: null, isVideoOnly: false, isBgGif: false }
       
       const isBgVideo = instance.backgroundImage && /\.(mp4|webm|ogg|mov)$/i.test(instance.backgroundImage)
+      const isBgGif = instance.backgroundImage && /\.gif$/i.test(instance.backgroundImage)
       
       if (instance.backgroundVideo) {
-          return { videoSrc: instance.backgroundVideo, isVideoOnly: false }
+          return { videoSrc: instance.backgroundVideo, isVideoOnly: false, isBgGif: false }
       }
       
       if (isBgVideo) {
-          return { videoSrc: instance.backgroundImage, isVideoOnly: true }
+          return { videoSrc: instance.backgroundImage, isVideoOnly: true, isBgGif: false }
+      }
+
+      if (isBgGif) {
+        return { videoSrc: null, isVideoOnly: false, isBgGif: true }
       }
       
-      return { videoSrc: null, isVideoOnly: false }
+      return { videoSrc: null, isVideoOnly: false, isBgGif: false }
   }, [instance])
 
   // Handle Play/Pause for Video
@@ -84,16 +90,31 @@ const MainContent = memo(({ instance, installedVersion, status, progress, onLaun
 
   useEffect(() => {
     setBgLoaded(false)
+    setStaticGif(null)
     if (instance?.backgroundImage && !isVideoOnly) {
         const img = new Image()
         img.src = instance.backgroundImage
-        img.onload = () => setBgLoaded(true)
+        img.onload = () => {
+            setBgLoaded(true)
+            if (isBgGif) {
+                try {
+                    const canvas = document.createElement('canvas')
+                    canvas.width = img.width
+                    canvas.height = img.height
+                    const ctx = canvas.getContext('2d')
+                    ctx.drawImage(img, 0, 0)
+                    setStaticGif(canvas.toDataURL())
+                } catch (e) {
+                    console.error("Failed to generate static GIF frame", e)
+                }
+            }
+        }
     } else if (isVideoOnly && videoSrc) {
         // If only video, we might want to set bgLoaded when video is ready, 
         // but video tag has its own onLoadedData. 
         // We'll handle it in the render.
     }
-  }, [instance?.backgroundImage, isVideoOnly, videoSrc])
+  }, [instance?.backgroundImage, isVideoOnly, videoSrc, isBgGif])
 
   if (!instance) return (
     <div style={{ flex: 1, position: 'relative', overflow: 'hidden', background: '#111' }}>
@@ -113,7 +134,7 @@ const MainContent = memo(({ instance, installedVersion, status, progress, onLaun
         <div style={{
             position: 'absolute',
             inset: 0,
-            backgroundImage: (bgLoaded && instance.backgroundImage) ? `url(${instance.backgroundImage})` : 'none',
+            backgroundImage: (bgLoaded && instance.backgroundImage) ? `url(${(isBgGif && !enableAnimation && staticGif) ? staticGif : instance.backgroundImage})` : 'none',
             backgroundSize: 'cover',
             backgroundPosition: 'center',
             opacity: bgLoaded ? 1 : 0,
@@ -565,7 +586,7 @@ const MainContent = memo(({ instance, installedVersion, status, progress, onLaun
             </button>
 
             {/* Animation Toggle Button */}
-            {videoSrc && (
+            {(videoSrc || isBgGif) && (
                 <button 
                     onClick={toggleAnimation}
                     title={enableAnimation ? (t('main.disableAnimation') || "Disable Animation") : (t('main.enableAnimation') || "Enable Animation")}
