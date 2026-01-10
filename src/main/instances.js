@@ -4,7 +4,7 @@ import { getStore } from './store'
 // ----------------------------------------------------------------------
 // 🔧 CONFIGURATION: Link to your online JSON file
 // ----------------------------------------------------------------------
-const INSTANCES_URL = 'https://gist.githubusercontent.com/malakorreal/d4a8ed5bb3eb3583d96258db1969f4ac/raw' 
+const INSTANCES_URL = 'https://api.npoint.io/e941143771dfcea29992' 
 
 export async function getInstances(mainWindow = null, force = false) {
   const store = getStore()
