@@ -401,14 +401,24 @@ function App() {
   }
 
   const handleRepair = async () => {
-    if (!selectedInstance || !confirm(`Are you sure you want to repair ${selectedInstance.name}? This will re-download mods.`)) return
+    const isUpdate = selectedInstance && installedVersions[selectedInstance.id] !== (selectedInstance.modpackVersion || selectedInstance.version)
+    const actionName = isUpdate ? "Update" : "Repair"
+    
+    if (!selectedInstance || !confirm(`Are you sure you want to ${actionName.toLowerCase()} ${selectedInstance.name}? This will re-download core files.`)) return
     
     setLaunchStatus('repairing')
     try {
         await window.api.repairInstance(selectedInstance)
-        alert("Repair complete!")
+        
+        // Refresh installed versions to update UI state
+        if (window.api && window.api.getInstalledVersions) {
+            const installed = await window.api.getInstalledVersions()
+            setInstalledVersions(installed || {})
+        }
+
+        // alert(`${actionName} complete!`) // Optional: Remove alert for smoother flow or keep it
     } catch (err) {
-        setErrorMessage("Repair failed: " + err.message)
+        setErrorMessage(`${actionName} failed: ` + err.message)
     } finally {
         setLaunchStatus('idle')
     }
