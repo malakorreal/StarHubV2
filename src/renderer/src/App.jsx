@@ -563,6 +563,7 @@ function App() {
         {showSettings && (
             <Settings 
                 user={user}
+                selectedInstance={selectedInstance}
                 onClose={() => setShowSettings(false)} 
                 onLogout={handleLogout}
                 onSwitchAccount={handleSwitchAccount}

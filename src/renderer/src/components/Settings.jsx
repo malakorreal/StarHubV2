@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 
-function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = [], onAddCode, onRemoveCode, t, changeLanguage, currentLanguage, showToast }) {
+function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = [], onAddCode, onRemoveCode, t, changeLanguage, currentLanguage, showToast, selectedInstance }) {
   const [activeTab, setActiveTab] = useState('general')
   const [ram, setRam] = useState(4096)
   const [javaArgs, setJavaArgs] = useState('')
@@ -218,6 +218,52 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
                         </div>
                       </div>
                       */}
+
+                      {/* Repair Game Files */}
+                      {selectedInstance && (
+                          <div style={{ marginBottom: '25px' }}>
+                              <label style={{ display: 'block', marginBottom: '10px', color: '#ccc' }}>{t('settings.troubleshoot') || 'Troubleshoot'}</label>
+                              <button
+                                  onClick={async () => {
+                                      // Simple confirm
+                                      const msg = currentLanguage === 'th' ? 'คุณแน่ใจหรือไม่ที่จะซ่อมแซมไฟล์เกม? (จะทำการโหลด Library ใหม่ทั้งหมด)' : 'Are you sure you want to repair game files?'
+                                      if (confirm(msg)) {
+                                          try {
+                                              if (window.api && window.api.invoke) {
+                                                  showToast(currentLanguage === 'th' ? 'กำลังซ่อมแซม...' : 'Repairing...', 'info')
+                                                  const result = await window.api.invoke('repair-game', selectedInstance.id)
+                                                  if (result.success) {
+                                                      showToast(currentLanguage === 'th' ? 'ซ่อมแซมเสร็จสิ้น! กรุณากดเข้าเกมใหม่' : 'Repair successful! Please launch the game.', 'success')
+                                                  } else {
+                                                      showToast((currentLanguage === 'th' ? 'ซ่อมแซมล้มเหลว: ' : 'Repair failed: ') + result.error, 'error')
+                                                  }
+                                              }
+                                          } catch (e) {
+                                              showToast('Error: ' + e.message, 'error')
+                                          }
+                                      }
+                                  }}
+                                  style={{
+                                      width: '100%',
+                                      padding: '10px',
+                                      background: '#d9534f',
+                                      color: 'white',
+                                      border: 'none',
+                                      borderRadius: '4px',
+                                      cursor: 'pointer',
+                                      fontWeight: 'bold',
+                                      transition: 'background 0.2s'
+                                  }}
+                                  onMouseOver={(e) => e.target.style.background = '#c9302c'}
+                                  onMouseOut={(e) => e.target.style.background = '#d9534f'}
+                              >
+                                  {t('settings.repairGame') || (currentLanguage === 'th' ? 'ซ่อมแซมไฟล์เกม (แก้เกมเด้ง)' : 'Repair Game Files')}
+                              </button>
+                              <div style={{ fontSize: '0.8em', color: '#888', marginTop: '5px' }}>
+                                  {t('settings.repairDesc') || (currentLanguage === 'th' ? 'ใช้เมื่อเข้าเกมไม่ได้ หรือไฟล์ไม่ครบ' : 'Use this if game crashes on startup.')}
+                              </div>
+                          </div>
+                      )}
 
                       {/* Language Selection */}
                       <div style={{ marginBottom: '20px' }}>

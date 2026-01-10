@@ -97,6 +97,48 @@ export function setupLauncher(ipcMain, mainWindow) {
         await syncManager.syncMods(instance.mods, modsFolder, { signal })
     }
 
+    // 2.1 Auto-Fix: Scan for corrupt libraries (Common Issue)
+    const librariesPath = path.join(rootPath, 'libraries')
+    if (fs.existsSync(librariesPath)) {
+        try {
+            console.log("[AUTO-FIX] Scanning for corrupt libraries...")
+            const scanAndClean = (dir) => {
+                const files = fs.readdirSync(dir)
+                for (const file of files) {
+                    const fullPath = path.join(dir, file)
+                    const stat = fs.statSync(fullPath)
+                    if (stat.isDirectory()) {
+                        scanAndClean(fullPath)
+                    } else if (file.endsWith('.jar')) {
+                        // Check 1: Zero Byte
+                        if (stat.size === 0) {
+                            console.log(`[AUTO-FIX] Deleting 0-byte file: ${file}`)
+                            fs.unlinkSync(fullPath)
+                            continue
+                        }
+                        // Check 2: Invalid Zip Header (Basic Check)
+                        try {
+                            const fd = fs.openSync(fullPath, 'r')
+                            const buffer = Buffer.alloc(4)
+                            fs.readSync(fd, buffer, 0, 4, 0)
+                            fs.closeSync(fd)
+                            // PK.. (0x50 0x4B 0x03 0x04)
+                            if (buffer[0] !== 0x50 || buffer[1] !== 0x4B) {
+                                console.log(`[AUTO-FIX] Deleting invalid header file: ${file}`)
+                                fs.unlinkSync(fullPath)
+                            }
+                        } catch (e) {
+                            console.log(`[AUTO-FIX] Error checking file ${file}: ${e.message}`)
+                        }
+                    }
+                }
+            }
+            scanAndClean(librariesPath)
+        } catch (e) {
+            console.error("[AUTO-FIX] Library scan failed:", e)
+        }
+    }
+
     // 2.5 Handle Preload Mods (JSON Configurable)
     if (instance.preloadMods && Array.isArray(instance.preloadMods)) {
         console.log(`[PRELOAD] Checking ${instance.preloadMods.length} preload mods...`)
@@ -557,5 +599,30 @@ export function setupLauncher(ipcMain, mainWindow) {
       }
       shell.openPath(folder)
       return { success: true }
+  })
+
+  ipcMain.handle('repair-game', async (event, instanceId) => {
+      try {
+          if (!instanceId) return { success: false, error: 'No Instance ID' }
+          
+          const baseDir = app.getPath('userData')
+          const instancePath = path.join(baseDir, 'instances', instanceId)
+          const librariesPath = path.join(instancePath, 'libraries')
+          const assetsPath = path.join(instancePath, 'assets')
+          
+          console.log(`[REPAIR] Deleting libraries for instance: ${instanceId}`)
+          
+          if (fs.existsSync(librariesPath)) {
+              fs.rmSync(librariesPath, { recursive: true, force: true })
+          }
+          if (fs.existsSync(assetsPath)) {
+              fs.rmSync(assetsPath, { recursive: true, force: true })
+          }
+
+          return { success: true }
+      } catch (error) {
+          console.error("[REPAIR] Failed:", error)
+          return { success: false, error: error.message }
+      }
   })
 }

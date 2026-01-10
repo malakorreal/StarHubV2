@@ -1,8 +1,8 @@
 {
   "name": "starhub-v2",
-  "version": "1.0.52",
+  "version": "1.0.54",
   "author": "Malakor",
-  "description": "Minecraft Launcher for Roleplay",
+  "description": "",
   "main": "out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
@@ -36,8 +36,9 @@
   },
   "build": {
     "directories": {
-      "output": "dist_v1.0.52"
+      "output": "dist_v1.0.54"
     },
+    "compression": "maximum",
     "appId": "com.starhub.launcher",
     "productName": "StarHub",
     "artifactName": "${productName}-Setup-${version}.${ext}",
@@ -66,7 +67,14 @@
       "!minecraft_data/**/*",
       "!icon/**/*",
       "!.github/**/*",
-      "!**/*.map"
+      "!**/*.map",
+      "!**/node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}",
+      "!**/node_modules/*/{test,__tests__,tests,powered-test,example,examples}",
+      "!**/node_modules/*.d.ts",
+      "!**/node_modules/.bin",
+      "!src/**/*",
+      "!electron.vite.config.{js,ts,mjs,cjs}",
+      "!{.eslintrc.cjs,.prettierrc.yaml,jsconfig.json}"
     ]
   }
 }

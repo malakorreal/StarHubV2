@@ -88,7 +88,6 @@ const UpdateModal = ({ status, progress, error, onInstall, onClose }) => {
         width: '450px',
         maxWidth: '90%',
         border: `1px solid ${content.iconColor}4d`, // 30% opacity
-        boxShadow: `0 0 30px ${content.iconColor}33`, // 20% opacity
         transform: animate ? 'scale(1) translateY(0)' : 'scale(0.9) translateY(20px)',
         transition: 'all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)',
         display: 'flex',
@@ -106,8 +105,7 @@ const UpdateModal = ({ status, progress, error, onInstall, onClose }) => {
           justifyContent: 'center',
           alignItems: 'center',
           marginBottom: '24px',
-          border: `2px solid ${content.iconColor}`,
-          boxShadow: `0 0 20px ${content.iconColor}4d`
+          border: `2px solid ${content.iconColor}`
         }}>
            {content.icon}
         </div>
@@ -179,8 +177,7 @@ const UpdateModal = ({ status, progress, error, onInstall, onClose }) => {
                 color: 'white',
                 cursor: 'pointer',
                 fontWeight: 'bold',
-                fontSize: '16px',
-                boxShadow: `0 4px 15px ${content.iconColor}66`
+                fontSize: '16px'
                 }}
             >
                 {t('update.restart')}
