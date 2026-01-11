@@ -16,6 +16,7 @@ const api = {
   openInstanceFolder: (instance) => ipcRenderer.invoke('open-instance-folder', instance),
   getSettings: () => ipcRenderer.invoke('get-settings'),
   setSettings: (settings) => ipcRenderer.invoke('set-settings', settings),
+  resetSettings: () => ipcRenderer.invoke('reset-settings'),
   getServerStatus: (ip) => ipcRenderer.invoke('get-server-status', ip),
   getInstalledVersions: () => ipcRenderer.invoke('get-installed-versions'),
   windowClose: (behavior) => ipcRenderer.invoke('window-close', behavior),

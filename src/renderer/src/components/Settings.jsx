@@ -288,7 +288,34 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
                                 English
                             </button>
                         </div>
-                      </div>
+                    </div>
+
+                    {/* Reset Settings */}
+                    <div style={{ marginTop: '20px', paddingTop: '20px', borderTop: '1px solid #444' }}>
+                        <label style={{ display: 'block', marginBottom: '10px', color: '#ff4d4d', fontWeight: 'bold' }}>{t('settings.troubleshoot') || 'Troubleshoot'}</label>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <div style={{ fontSize: '0.9em', color: '#ccc', maxWidth: '70%' }}>
+                                {t('settings.resetDesc') || 'Reset all settings to default'}
+                            </div>
+                            <button
+                                onClick={handleReset}
+                                style={{
+                                    padding: '8px 15px',
+                                    background: 'transparent',
+                                    border: '1px solid #ff4d4d',
+                                    color: '#ff4d4d',
+                                    borderRadius: '4px',
+                                    cursor: 'pointer',
+                                    fontSize: '0.9em',
+                                    transition: 'all 0.2s'
+                                }}
+                                onMouseOver={(e) => { e.target.style.background = '#ff4d4d'; e.target.style.color = '#fff' }}
+                                onMouseOut={(e) => { e.target.style.background = 'transparent'; e.target.style.color = '#ff4d4d' }}
+                            >
+                                {t('settings.reset') || 'Reset'}
+                            </button>
+                        </div>
+                    </div>
                   </div>
               )}
 

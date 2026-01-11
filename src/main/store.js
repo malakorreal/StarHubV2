@@ -24,6 +24,23 @@ export function setupStore(ipcMain) {
     return true
   })
 
+  ipcMain.handle('reset-settings', () => {
+    store.delete('ram')
+    store.delete('javaArgs')
+    store.delete('autoJoin')
+    store.delete('resolution')
+    store.delete('fullscreen')
+    
+    // Return default values
+    return {
+      ram: 4096,
+      javaArgs: '',
+      autoJoin: false,
+      resolution: { width: 854, height: 480 },
+      fullscreen: false
+    }
+  })
+
   ipcMain.handle('get-auth', () => {
     return store.get('auth', null)
   })
