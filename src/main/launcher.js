@@ -435,8 +435,24 @@ export function setupLauncher(ipcMain, mainWindow) {
                         
                         if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir, { recursive: true })
                         
-                        // Check if installer exists
-                        if (!fs.existsSync(installerPath)) {
+                        // Check if installer exists and is valid
+                        let needsInstallerDownload = !fs.existsSync(installerPath)
+                        
+                        if (!needsInstallerDownload) {
+                            try {
+                                const stat = fs.statSync(installerPath)
+                                // Check for 0-byte or very small file (invalid jar)
+                                if (stat.size < 1000) { 
+                                    console.log(`[AUTO-FIX] Deleting invalid/corrupt installer (${stat.size} bytes): ${installerPath}`)
+                                    fs.unlinkSync(installerPath)
+                                    needsInstallerDownload = true
+                                }
+                            } catch (e) {
+                                needsInstallerDownload = true
+                            }
+                        }
+
+                        if (needsInstallerDownload) {
                             console.log(`Downloading Forge Installer: ${installerUrl}`)
                             await syncManager.downloadLargeFile(installerUrl, installerPath, { signal })
                         }
