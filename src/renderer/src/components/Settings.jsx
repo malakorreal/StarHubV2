@@ -62,6 +62,25 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
       setShowLogoutConfirm(true)
   }
 
+  const handleReset = async () => {
+    // Check if confirm is available, otherwise use window.confirm
+    const confirmFn = window.confirm
+    if (confirmFn(t('settings.resetConfirm') || "Are you sure you want to reset all settings?")) {
+        if (window.api && window.api.resetSettings) {
+            const defaults = await window.api.resetSettings()
+            if (defaults) {
+                setRam(defaults.ram)
+                setJavaArgs(defaults.javaArgs)
+                setAutoJoin(defaults.autoJoin)
+                setResolutionWidth(defaults.resolution.width)
+                setResolutionHeight(defaults.resolution.height)
+                setFullscreen(defaults.fullscreen)
+                if (showToast) showToast(t('settings.saved'), 'success')
+            }
+        }
+    }
+  }
+
   const confirmLogout = () => {
       onLogout()
       onClose()
