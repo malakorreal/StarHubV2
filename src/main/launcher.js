@@ -412,20 +412,39 @@ export function setupLauncher(ipcMain, mainWindow) {
             }
 
             // ------------------------------------------------------------------
-            // 🔨 AUTO-INSTALL FORGE IF MISSING
+            // 🔨 FORGE HANDLING (Auto-Install & Installer Setup)
             // ------------------------------------------------------------------
-            if (!detectedVersionId && !instance.customVersionId && instance.loader === 'forge') {
+            if (instance.loader === 'forge') {
                 try {
-                    console.log(`[AUTO-INSTALL] Forge folder not found. Preparing to install Forge for ${instance.version}...`)
+                    console.log(`[FORGE] Checking Forge configuration for ${instance.version}...`)
                     
                     let forgeVersion = instance.forgeVersion
+                    
+                    // 1. Try to deduce Forge version if not explicit
                     if (!forgeVersion) {
-                        // Fetch recommended
+                         if (detectedVersionId) {
+                             // Try to parse from detected folder name
+                             // Common formats: "1.20.1-forge-47.2.0", "forge-1.16.5-36.2.34"
+                             const parts = detectedVersionId.split('-')
+                             const lastPart = parts[parts.length - 1]
+                             // Basic heuristic: check if it looks like a version (has dots, starts with digit)
+                             if (lastPart.includes('.') && /^\d/.test(lastPart) && lastPart !== instance.version) {
+                                 forgeVersion = lastPart
+                                 console.log(`[FORGE] Deduced version from folder: ${forgeVersion}`)
+                             }
+                        }
+                    }
+
+                    // 2. If still missing, fetch recommended (Only if we don't have a detected version, 
+                    //    OR if we strictly need to ensure we have an installer)
+                    if (!forgeVersion && !detectedVersionId && !instance.customVersionId) {
+                        console.log("[FORGE] No version detected. Fetching recommended...")
                         const promoUrl = `https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json`
                         const { data: promo } = await axios.get(promoUrl)
                         forgeVersion = promo.promos[`${instance.version}-recommended`] || promo.promos[`${instance.version}-latest`]
                     }
-                    
+
+                    // 3. If we have a forgeVersion, prepare the installer
                     if (forgeVersion) {
                         const forgeFullVersion = `${instance.version}-${forgeVersion}`
                         const installerUrl = `https://maven.minecraftforge.net/net/minecraftforge/forge/${forgeFullVersion}/forge-${forgeFullVersion}-installer.jar`
@@ -435,42 +454,38 @@ export function setupLauncher(ipcMain, mainWindow) {
                         
                         if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir, { recursive: true })
                         
-                        // Check if installer exists and is valid
+                        // Check/Download logic
                         let needsInstallerDownload = !fs.existsSync(installerPath)
-                        
+                         
                         if (!needsInstallerDownload) {
-                            try {
-                                const stat = fs.statSync(installerPath)
-                                // Check for 0-byte or very small file (invalid jar)
-                                if (stat.size < 1000) { 
-                                    console.log(`[AUTO-FIX] Deleting invalid/corrupt installer (${stat.size} bytes): ${installerPath}`)
-                                    fs.unlinkSync(installerPath)
-                                    needsInstallerDownload = true
-                                }
-                            } catch (e) {
-                                needsInstallerDownload = true
-                            }
+                             try {
+                                 const stat = fs.statSync(installerPath)
+                                 if (stat.size < 1000) { 
+                                     console.log(`[AUTO-FIX] Deleting invalid/corrupt installer: ${installerPath}`)
+                                     fs.unlinkSync(installerPath)
+                                     needsInstallerDownload = true
+                                 }
+                             } catch (e) { needsInstallerDownload = true }
                         }
 
                         if (needsInstallerDownload) {
-                            console.log(`Downloading Forge Installer: ${installerUrl}`)
-                            await syncManager.downloadLargeFile(installerUrl, installerPath, { signal })
+                             console.log(`Downloading Forge Installer: ${installerUrl}`)
+                             await syncManager.downloadLargeFile(installerUrl, installerPath, { signal })
                         }
                         
-                        console.log(`[AUTO-INSTALL] Forge Installer ready at: ${installerPath}`)
+                        console.log(`[FORGE] Installer ready at: ${installerPath}`)
                         forgeInstallerPath = installerPath
                     } else {
-                        console.warn(`[AUTO-INSTALL] Could not determine Forge version for ${instance.version}`)
+                        console.warn("[FORGE] Could not determine Forge version. Launch might fail if installer is required.")
                     }
                 } catch (err) {
-                    console.error("[AUTO-INSTALL] Failed to prepare Forge:", err.message)
+                    console.error("[FORGE] Error preparing Forge:", err.message)
                 }
             }
 
             if (instance.customVersionId) {
                 versionOpts.custom = instance.customVersionId
             } else if (detectedVersionId) {
-                 // Use detected version
                  versionOpts.custom = detectedVersionId
             } else {
                 // Fallback: assume instance.version IS the ID (risky if it's just "1.20.1")
