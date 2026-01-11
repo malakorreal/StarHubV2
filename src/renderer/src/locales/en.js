@@ -70,7 +70,10 @@ export default {
     width: "Width",
     height: "Height",
     launcherGraphics: "Launcher Interface",
-    gameGraphics: "Game Graphics"
+    gameGraphics: "Game Graphics",
+    troubleshoot: "Troubleshoot",
+    repairGame: "Repair Game Files",
+    repairDesc: "Use this if game crashes or files are missing."
   },
   dialogs: {
     closeTitle: "Quit Launcher",
@@ -82,7 +85,10 @@ export default {
     repairSuccess: "Repair Complete!",
     repairSuccessMessage: "The game files have been repaired and verified. Ready to play?",
     repairConfirm: "Are you sure you want to repair {name}? This will re-download mods.",
-    repairComplete: "Repair complete!"
+    repairComplete: "Repair complete!",
+    repairVerification: "Repair Verification",
+    repairConfirmMessage: "Are you sure you want to repair <span style='color: var(--accent); font-weight: bold;'>{instanceName}</span>? <br/><br/>This will re-download core files and verify integrity.",
+    repairNow: "Repair Now"
   },
   notifications: {
     folderNotFound: "Folder Not Found",

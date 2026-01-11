@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import RepairConfirmationModal from './RepairConfirmationModal'
 
 function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = [], onAddCode, onRemoveCode, t, changeLanguage, currentLanguage, showToast, selectedInstance }) {
   const [activeTab, setActiveTab] = useState('general')
@@ -6,6 +7,7 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
   const [javaArgs, setJavaArgs] = useState('')
   const [autoJoin, setAutoJoin] = useState(false)
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
+  const [showRepairModal, setShowRepairModal] = useState(false)
   const [redeemInput, setRedeemInput] = useState('')
   const [redeemError, setRedeemError] = useState('')
   const [resolutionWidth, setResolutionWidth] = useState(854)
@@ -222,25 +224,7 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
                           <div style={{ marginBottom: '25px' }}>
                               <label style={{ display: 'block', marginBottom: '10px', color: '#ccc' }}>{t('settings.troubleshoot') || 'Troubleshoot'}</label>
                               <button
-                                  onClick={async () => {
-                                      // Simple confirm
-                                      const msg = currentLanguage === 'th' ? 'คุณแน่ใจหรือไม่ที่จะซ่อมแซมไฟล์เกม? (จะทำการโหลด Library ใหม่ทั้งหมด)' : 'Are you sure you want to repair game files?'
-                                      if (confirm(msg)) {
-                                          try {
-                                              if (window.api && window.api.invoke) {
-                                                  showToast(currentLanguage === 'th' ? 'กำลังซ่อมแซม...' : 'Repairing...', 'info')
-                                                  const result = await window.api.invoke('repair-game', selectedInstance.id)
-                                                  if (result.success) {
-                                                      showToast(currentLanguage === 'th' ? 'ซ่อมแซมเสร็จสิ้น! กรุณากดเข้าเกมใหม่' : 'Repair successful! Please launch the game.', 'success')
-                                                  } else {
-                                                      showToast((currentLanguage === 'th' ? 'ซ่อมแซมล้มเหลว: ' : 'Repair failed: ') + result.error, 'error')
-                                                  }
-                                              }
-                                          } catch (e) {
-                                              showToast('Error: ' + e.message, 'error')
-                                          }
-                                      }
-                                  }}
+                                  onClick={() => setShowRepairModal(true)}
                                   style={{
                                       width: '100%',
                                       padding: '10px',
@@ -575,6 +559,32 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
                           </button>
                       </div>
                   </div>
+              )}
+
+              {/* Repair Confirmation Modal */}
+              {showRepairModal && (
+                  <RepairConfirmationModal
+                      instanceName={selectedInstance?.name || 'Game'}
+                      actionName="Repair"
+                      t={t}
+                      onCancel={() => setShowRepairModal(false)}
+                      onConfirm={async () => {
+                          setShowRepairModal(false)
+                          try {
+                              if (window.api && window.api.invoke) {
+                                  showToast(currentLanguage === 'th' ? 'กำลังซ่อมแซม...' : 'Repairing...', 'info')
+                                  const result = await window.api.invoke('repair-game', selectedInstance.id)
+                                  if (result.success) {
+                                      showToast(currentLanguage === 'th' ? 'ซ่อมแซมเสร็จสิ้น! กรุณากดเข้าเกมใหม่' : 'Repair successful! Please launch the game.', 'success')
+                                  } else {
+                                      showToast((currentLanguage === 'th' ? 'ซ่อมแซมล้มเหลว: ' : 'Repair failed: ') + result.error, 'error')
+                                  }
+                              }
+                          } catch (e) {
+                              showToast('Error: ' + e.message, 'error')
+                          }
+                      }}
+                  />
               )}
 
           </div>

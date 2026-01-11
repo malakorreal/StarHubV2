@@ -604,6 +604,7 @@ function App() {
                 }}
                 instanceName={repairTargetInstance.name}
                 actionName={installedVersions[repairTargetInstance.id] !== (repairTargetInstance.modpackVersion || repairTargetInstance.version) ? "Update" : "Repair"}
+                t={t}
             />
         )}
 

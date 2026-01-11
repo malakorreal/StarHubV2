@@ -66,7 +66,10 @@ export default {
     width: "กว้าง",
     height: "สูง",
     launcherGraphics: "กราฟิกตัวเปิดเกม",
-    gameGraphics: "ตั้งค่ากราฟิกเกม"
+    gameGraphics: "ตั้งค่ากราฟิกเกม",
+    troubleshoot: "การแก้ไขปัญหา",
+    repairGame: "ซ่อมแซมไฟล์เกม (แก้เกมเด้ง)",
+    repairDesc: "ใช้เมื่อเข้าเกมไม่ได้ หรือไฟล์ไม่ครบ"
   },
   dialogs: {
     closeTitle: "ออกจากโปรแกรม",
@@ -78,7 +81,10 @@ export default {
     repairSuccess: "ซ่อมแซมเสร็จสิ้น!",
     repairSuccessMessage: "ไฟล์เกมได้รับการซ่อมแซมและตรวจสอบแล้ว พร้อมเล่นหรือไม่?",
     repairConfirm: "คุณแน่ใจหรือไม่ว่าต้องการซ่อมแซม {name}? ระบบจะทำการดาวน์โหลด Mods ใหม่",
-    repairComplete: "ซ่อมแซมเสร็จสิ้น!"
+    repairComplete: "ซ่อมแซมเสร็จสิ้น!",
+    repairVerification: "ยืนยันการซ่อมแซม",
+    repairConfirmMessage: "คุณแน่ใจหรือไม่ที่จะซ่อมแซม <span style='color: var(--accent); font-weight: bold;'>{instanceName}</span>? <br/><br/>ระบบจะทำการดาวน์โหลดไฟล์หลักใหม่และตรวจสอบความสมบูรณ์",
+    repairNow: "ซ่อมแซมทันที"
   },
   notifications: {
     folderNotFound: "ไม่พบโฟลเดอร์",
