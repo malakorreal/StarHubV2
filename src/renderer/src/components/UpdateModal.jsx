@@ -151,22 +151,6 @@ const UpdateModal = ({ status, progress, error, onInstall, onClose }) => {
         {content.showButtons && (
             <div style={{ display: 'flex', gap: '16px', width: '100%' }}>
             <button
-                onClick={onClose}
-                style={{
-                flex: 1,
-                padding: '12px',
-                borderRadius: '8px',
-                backgroundColor: 'transparent',
-                border: '1px solid #414868',
-                color: '#a9b1d6',
-                cursor: 'pointer',
-                fontSize: '16px',
-                transition: 'all 0.2s'
-                }}
-            >
-                {t('update.later')}
-            </button>
-            <button
                 onClick={onInstall}
                 style={{
                 flex: 1,
