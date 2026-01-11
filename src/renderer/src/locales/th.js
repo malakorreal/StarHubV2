@@ -68,8 +68,8 @@ export default {
     launcherGraphics: "กราฟิกตัวเปิดเกม",
     gameGraphics: "ตั้งค่ากราฟิกเกม",
     troubleshoot: "การแก้ไขปัญหา",
-    repairGame: "ซ่อมแซมไฟล์เกม (แก้เกมเด้ง)",
-    repairDesc: "ใช้เมื่อเข้าเกมไม่ได้ หรือไฟล์ไม่ครบ"
+    repairGame: "ซ่อมแซมไฟล์เกมและไลบรารี",
+    repairDesc: "ใช้เมื่อเข้าเกมไม่ได้ หรือไฟล์ไม่ครบ (โหลด Library ใหม่ทั้งหมด)"
   },
   dialogs: {
     closeTitle: "ออกจากโปรแกรม",
@@ -83,7 +83,7 @@ export default {
     repairConfirm: "คุณแน่ใจหรือไม่ว่าต้องการซ่อมแซม {name}? ระบบจะทำการดาวน์โหลด Mods ใหม่",
     repairComplete: "ซ่อมแซมเสร็จสิ้น!",
     repairVerification: "ยืนยันการซ่อมแซม",
-    repairConfirmMessage: "คุณแน่ใจหรือไม่ที่จะซ่อมแซม <span style='color: var(--accent); font-weight: bold;'>{instanceName}</span>? <br/><br/>ระบบจะทำการดาวน์โหลดไฟล์หลักใหม่และตรวจสอบความสมบูรณ์",
+    repairConfirmMessage: "คุณแน่ใจหรือไม่ที่จะซ่อมแซม <span style='color: var(--accent); font-weight: bold;'>{instanceName}</span>? <br/><br/>ระบบจะทำการดาวน์โหลดไฟล์หลักและ <span style='color: #ff4d4d'>Library ทั้งหมดใหม่</span> (ใช้เวลาสักครู่)",
     repairNow: "ซ่อมแซมทันที"
   },
   notifications: {

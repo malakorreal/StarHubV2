@@ -87,7 +87,7 @@ export default {
     repairConfirm: "Are you sure you want to repair {name}? This will re-download mods.",
     repairComplete: "Repair complete!",
     repairVerification: "Repair Verification",
-    repairConfirmMessage: "Are you sure you want to repair <span style='color: var(--accent); font-weight: bold;'>{instanceName}</span>? <br/><br/>This will re-download core files and verify integrity.",
+    repairConfirmMessage: "Are you sure you want to repair <span style='color: var(--accent); font-weight: bold;'>{instanceName}</span>? <br/><br/>This will re-download core files and <span style='color: #ff4d4d'>all libraries</span>.",
     repairNow: "Repair Now"
   },
   notifications: {
