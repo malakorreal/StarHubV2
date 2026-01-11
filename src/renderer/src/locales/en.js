@@ -75,7 +75,7 @@ export default {
     repairGame: "Repair Game Files",
     repairDesc: "Use this if game crashes or files are missing.",
     reset: "Reset Settings",
-    resetDesc: "Reset all settings to default (Game data is safe)",
+    resetDesc: "Reset all settings to default",
     resetConfirm: "Are you sure you want to reset all settings?"
   },
   dialogs: {
