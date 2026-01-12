@@ -74,7 +74,13 @@
       "!**/node_modules/.bin",
       "!src/**/*",
       "!electron.vite.config.{js,ts,mjs,cjs}",
-      "!{.eslintrc.cjs,.prettierrc.yaml,jsconfig.json}"
+      "!{.eslintrc.cjs,.prettierrc.yaml,jsconfig.json}",
+      "!dist_**/**/*",
+      "!**/*.ts",
+      "!**/*.md",
+      "!**/node_modules/**/docs/**/*",
+      "!**/node_modules/**/.github/**/*",
+      "!**/node_modules/**/.vscode/**/*"
     ]
   }
 }
