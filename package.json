@@ -1,6 +1,6 @@
 {
   "name": "starhub-v2",
-  "version": "1.0.57",
+  "version": "1.0.58",
   "author": "Malakor",
   "description": "",
   "main": "out/main/index.js",
@@ -36,7 +36,7 @@
   },
   "build": {
     "directories": {
-      "output": "dist_v1.0.57"
+      "output": "dist_v1.0.58"
     },
     "compression": "maximum",
     "appId": "com.starhub.launcher",
