@@ -36,7 +36,7 @@
   },
   "build": {
     "directories": {
-      "output": "dist_v1.0.56"
+      "output": "dist_v1.0.57"
     },
     "compression": "maximum",
     "appId": "com.starhub.launcher",
