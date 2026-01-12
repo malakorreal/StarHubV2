@@ -1,10 +1,11 @@
 import React, { memo, useState, useEffect, useMemo } from 'react'
 
-const MainContent = memo(({ instance, installedVersion, status, progress, onLaunch, onCancel, onOpenSettings, onOpenFolder, onRepair, onOpenConsole, user, paused, t, enableAnimation, toggleAnimation, enableCubes }) => {
+const MainContent = memo(({ instance, installedVersion, status, progress, onLaunch, onCancel, onOpenSettings, onOpenFolder, onRepair, onOpenConsole, user, paused, t, enableAnimation, toggleAnimation, enableCubes, showToast }) => {
   const [bgLoaded, setBgLoaded] = useState(false)
   const [staticGif, setStaticGif] = useState(null)
   const [serverStatus, setServerStatus] = useState(null)
   const videoRef = React.useRef(null)
+  const [progressSteps, setProgressSteps] = useState([])
   
   // Determine Video Source
   const { videoSrc, isVideoOnly, isBgGif } = useMemo(() => {
@@ -66,6 +67,13 @@ const MainContent = memo(({ instance, installedVersion, status, progress, onLaun
           }
       }
 
+      if (status === 'running') {
+          return () => {
+              mounted = false
+              if (intervalId) clearInterval(intervalId)
+          }
+      }
+
       // Initial Fetch
       fetchStatus()
 
@@ -78,7 +86,18 @@ const MainContent = memo(({ instance, installedVersion, status, progress, onLaun
           mounted = false 
           if (intervalId) clearInterval(intervalId)
       }
-  }, [instance?.serverIp])
+  }, [instance?.serverIp, status])
+
+  useEffect(() => {
+      if (progress && progress.task) {
+          setProgressSteps(prev => {
+              const last = prev[prev.length - 1]
+              if (last === progress.task) return prev
+              const next = [...prev, progress.task]
+              return next.slice(-4)
+          })
+      }
+  }, [progress?.task])
 
   // Generate random cubes configuration once
   const cubes = useMemo(() => {
@@ -515,7 +534,7 @@ const MainContent = memo(({ instance, installedVersion, status, progress, onLaun
             )}
 
             <button
-                    onClick={isMaintenance ? null : (isUpdateAvailable ? onRepair : onLaunch)}
+                onClick={isMaintenance ? null : (isUpdateAvailable ? () => onRepair('Update') : onLaunch)}
                     disabled={status !== 'idle' || isMaintenance}
                     style={{
                         padding: '12px 40px',
@@ -566,8 +585,38 @@ const MainContent = memo(({ instance, installedVersion, status, progress, onLaun
                             <span>{status === 'launching' ? t('main.launching') : status === 'repairing' ? t('main.repairing') : status === 'preparing' ? t('main.preparing') : t('main.running')}</span>
                         </div>
                         {(status === 'launching' || status === 'repairing' || status === 'preparing') && progress && (
-                            <div style={{ fontSize: '0.7em', marginTop: '4px', opacity: 0.8 }}>
-                                {progress.task} {progress.total > 0 ? `${Math.round((progress.current / progress.total) * 100)}%` : ''}
+                            <div style={{ width: '100%', marginTop: '8px' }}>
+                                <div style={{ 
+                                    width: '100%', 
+                                    height: '6px', 
+                                    background: 'rgba(255,255,255,0.15)', 
+                                    borderRadius: '4px',
+                                    overflow: 'hidden'
+                                }}>
+                                    <div style={{
+                                        width: `${progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0}%`,
+                                        height: '100%',
+                                        background: 'var(--accent)',
+                                        transition: 'width 0.2s ease'
+                                    }} />
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px', fontSize: '0.8em', color: '#ddd' }}>
+                                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '160px' }}>
+                                        {progress.task}{progress.message ? `: ${progress.message}` : ''}
+                                    </span>
+                                    <span>{progress.total > 0 ? `${Math.round((progress.current / progress.total) * 100)}%` : ''}</span>
+                                </div>
+                                {progressSteps.length > 0 && (
+                                    <div style={{ marginTop: '4px', fontSize: '0.7em', opacity: 0.8, maxWidth: '220px' }}>
+                                        {progressSteps
+                                            .filter(step => step !== progress.task) // Filter out current task
+                                            .map((step, idx) => (
+                                            <div key={`${step}-${idx}`} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                • {step}
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
                         )}
                     </div>
@@ -632,6 +681,35 @@ const MainContent = memo(({ instance, installedVersion, status, progress, onLaun
                 </svg>
             </button>
 
+            <button 
+                onClick={() => onRepair('Repair')}
+                title={t('settings.repairGame') || "Repair Instance"}
+                disabled={status !== 'idle'}
+                style={{
+                    width: '56px',
+                    height: '56px',
+                    borderRadius: '12px',
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    background: 'rgba(255,255,255,0.05)',
+                    color: '#fff',
+                    cursor: status === 'idle' ? 'pointer' : 'not-allowed',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transition: 'all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
+                    backdropFilter: 'blur(4px)',
+                    WebkitBackdropFilter: 'blur(4px)',
+                    willChange: 'transform, background',
+                    opacity: status === 'idle' ? 1 : 0.5
+                }}
+                onMouseOver={(e) => { if(status === 'idle') { e.currentTarget.style.background = 'rgba(255,255,255,0.15)'; e.currentTarget.style.transform = 'translateY(-2px)'; } }}
+                onMouseOut={(e) => { if(status === 'idle') { e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; e.currentTarget.style.transform = 'translateY(0)'; } }}
+            >
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path>
+                </svg>
+            </button>
+
             {/* Animation Toggle Button */}
             {(videoSrc || isBgGif) && (
                 <button 
@@ -668,33 +746,6 @@ const MainContent = memo(({ instance, installedVersion, status, progress, onLaun
                     )}
                 </button>
             )}
-
-            <button 
-                onClick={onRepair}
-                title={t('main.repair') || "Repair / Re-download Files"}
-                style={{
-                    width: '56px',
-                    height: '56px',
-                    borderRadius: '12px',
-                    border: '1px solid rgba(255,255,255,0.1)',
-                    background: 'rgba(255,255,255,0.05)',
-                    color: '#fff',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    transition: 'all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
-                    backdropFilter: 'blur(4px)',
-                    WebkitBackdropFilter: 'blur(4px)',
-                    willChange: 'transform, background'
-                }}
-                onMouseOver={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.15)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
-                onMouseOut={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; e.currentTarget.style.transform = 'translateY(0)'; }}
-            >
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path>
-                </svg>
-            </button>
         </div>
       </div>
       {/* Copyright (Bottom Right Absolute) */}

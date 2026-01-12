@@ -1,12 +1,13 @@
-import { app, shell, BrowserWindow, ipcMain, dialog, Tray, Menu } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, Tray, Menu } from 'electron'
 import { join } from 'path'
+import { promises as fs } from 'fs'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.ico?asset'
 import { setupAuth } from './auth'
 import { setupLauncher } from './launcher'
 import { setupStatus } from './status'
-import { setupRPC, updateRPCLanguage } from './rpc'
-import { setupStore } from './store'
+import { setupRPC, updateRPCLanguage, setActivity } from './rpc'
+import { setupStore, getStore } from './store'
 import { autoUpdater } from 'electron-updater'
 
 // Disable Hardware Acceleration to fix slow startup/lag on some systems
@@ -82,6 +83,12 @@ app.whenReady().then(() => {
   setupStatus(ipcMain)
   setupRPC(mainWindow)
   
+  // RPC Status Handler
+  ipcMain.handle('update-rpc', (event, { status, instanceName }) => {
+      setActivity(status, instanceName)
+      return { success: true }
+  })
+
   // Language Handler
   ipcMain.handle('update-language', (event, lang) => {
       updateRPCLanguage(lang)
@@ -145,7 +152,10 @@ app.whenReady().then(() => {
 
     // Add a small delay to ensure window is ready to receive 'checking' event if fast
     setTimeout(() => {
-      autoUpdater.checkForUpdates()
+      const store = getStore()
+      if (store.get('autoCheckUpdates', true)) {
+          autoUpdater.checkForUpdates()
+      }
     }, 2000)
   }
 
@@ -180,6 +190,79 @@ app.whenReady().then(() => {
   // Install Update Handler
   ipcMain.handle('install-update', () => {
     autoUpdater.quitAndInstall()
+  })
+
+  // Check for Updates Handler
+  ipcMain.handle('check-for-updates', () => {
+      if (!is.dev) {
+          autoUpdater.checkForUpdates()
+          return { success: true }
+      }
+      return { success: false, error: 'Dev mode' }
+  })
+
+  // Backup Instance Data Handler
+  ipcMain.handle('backup-instance-data', async (event, instance) => {
+    if (!instance || (!instance.path && !instance.id)) return { success: false, error: 'Invalid instance' }
+    
+    try {
+      const AdmZip = require('adm-zip')
+      const path = require('path')
+      const fs = require('fs')
+      
+      // Target folders to backup
+      const targetFolders = ['emotes', 'fragment', 'skin', 'figura', 'screenshots', 'shaderpacks', 'options.txt']
+      
+      let instancePath = instance.path
+      if (!instancePath) {
+          const baseDir = app.getPath('userData')
+          instancePath = path.join(baseDir, 'instances', instance.id)
+      }
+      
+      const backupsDir = path.join(instancePath, 'backups')
+      
+      // Ensure backups directory exists
+      if (!fs.existsSync(backupsDir)) {
+        fs.mkdirSync(backupsDir, { recursive: true })
+      }
+      
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+      const zipName = `backup-${timestamp}.zip`
+      const zipPath = path.join(backupsDir, zipName)
+      
+      const zip = new AdmZip()
+      let hasData = false
+      
+      // Add folders/files if they exist
+      for (const item of targetFolders) {
+        const itemPath = path.join(instancePath, item)
+        if (fs.existsSync(itemPath)) {
+            const stats = fs.statSync(itemPath)
+            if (stats.isDirectory()) {
+                zip.addLocalFolder(itemPath, item)
+                hasData = true
+            } else if (stats.isFile()) {
+                zip.addLocalFile(itemPath)
+                hasData = true
+            }
+        }
+      }
+      
+      if (!hasData) {
+          return { success: false, error: 'No data found to backup (Emotes, Fragment, Skin, Figura, etc.)' }
+      }
+      
+      zip.writeZip(zipPath)
+      
+      // Open the backups folder so user knows where it is
+      shell.openPath(backupsDir)
+      
+      return { success: true, path: zipPath }
+      
+    } catch (err) {
+      console.error('Backup failed:', err)
+      return { success: false, error: err.message }
+    }
   })
 
   // Tray

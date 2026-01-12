@@ -17,7 +17,6 @@ function ErrorDialog({ message, onClose }) {
            background: '#1e1e24', 
            width: '400px', 
            borderRadius: '16px', 
-           border: '1px solid rgba(255, 99, 71, 0.3)',
            boxShadow: '0 20px 50px rgba(0,0,0,0.5)',
            overflow: 'hidden',
            animation: 'scaleIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)'

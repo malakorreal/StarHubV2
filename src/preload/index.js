@@ -22,19 +22,55 @@ const api = {
   windowClose: (behavior) => ipcRenderer.invoke('window-close', behavior),
   windowMinimize: () => ipcRenderer.send('window-minimize'),
   windowMaximize: () => ipcRenderer.send('window-maximize'),
-  onLaunchProgress: (callback) => ipcRenderer.on('launch-progress', (event, value) => callback(value)),
-  onLaunchSuccess: (callback) => ipcRenderer.on('launch-success', (event, value) => callback(value)),
-  onGameLog: (callback) => ipcRenderer.on('game-log', (event, value) => callback(value)),
-  onGameClosed: (callback) => ipcRenderer.on('game-closed', (event, value) => callback(value)),
-  onWindowVisibility: (callback) => ipcRenderer.on('window-visibility', (event, value) => callback(value)),
+  onLaunchProgress: (callback) => {
+    ipcRenderer.removeAllListeners('launch-progress')
+    const listener = (event, value) => callback(value)
+    ipcRenderer.on('launch-progress', listener)
+    return () => ipcRenderer.removeListener('launch-progress', listener)
+  },
+  onLaunchSuccess: (callback) => {
+    ipcRenderer.removeAllListeners('launch-success')
+    const listener = (event, value) => callback(value)
+    ipcRenderer.on('launch-success', listener)
+    return () => ipcRenderer.removeListener('launch-success', listener)
+  },
+  onGameLog: (callback) => {
+    ipcRenderer.removeAllListeners('game-log')
+    const listener = (event, value) => callback(value)
+    ipcRenderer.on('game-log', listener)
+    return () => ipcRenderer.removeListener('game-log', listener)
+  },
+  onGameClosed: (callback) => {
+    ipcRenderer.removeAllListeners('game-closed')
+    const listener = (event, value) => callback(value)
+    ipcRenderer.on('game-closed', listener)
+    return () => ipcRenderer.removeListener('game-closed', listener)
+  },
+  onWindowVisibility: (callback) => {
+    ipcRenderer.removeAllListeners('window-visibility')
+    const listener = (event, value) => callback(value)
+    ipcRenderer.on('window-visibility', listener)
+    return () => ipcRenderer.removeListener('window-visibility', listener)
+  },
   onInstancesUpdated: (callback) => {
-    // Remove listener to prevent duplicates if called multiple times (though useEffect usually handles cleanup)
     ipcRenderer.removeAllListeners('instances-updated')
-    ipcRenderer.on('instances-updated', (event, value) => callback(value))
+    const listener = (event, value) => callback(value)
+    ipcRenderer.on('instances-updated', listener)
+    return () => ipcRenderer.removeListener('instances-updated', listener)
   },
   // Updater
+  checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
   installUpdate: () => ipcRenderer.invoke('install-update'),
-  onUpdaterEvent: (callback) => ipcRenderer.on('updater-event', (event, value) => callback(value)),
+  onUpdaterEvent: (callback) => {
+    ipcRenderer.removeAllListeners('updater-event')
+    const listener = (event, value) => callback(value)
+    ipcRenderer.on('updater-event', listener)
+    return () => ipcRenderer.removeListener('updater-event', listener)
+  },
+  // Backup
+  backupInstanceData: (instance) => ipcRenderer.invoke('backup-instance-data', instance),
+  // RPC
+  updateRPC: (status, instanceName) => ipcRenderer.invoke('update-rpc', { status, instanceName }),
 }
 
 if (process.contextIsolated) {

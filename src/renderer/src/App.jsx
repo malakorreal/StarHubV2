@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react'
+import React, { useEffect, useState, useMemo, useCallback } from 'react'
 import Sidebar from './components/Sidebar'
 import MainContent from './components/MainContent'
 import Settings from './components/Settings'
@@ -35,6 +35,7 @@ const preloadImages = (urls) => {
 }
 
 function App() {
+  const isDev = import.meta?.env?.DEV
   const { t, changeLanguage, language } = useLanguage()
   const [user, setUser] = useState(null)
   const [instances, setInstances] = useState([])
@@ -55,6 +56,14 @@ function App() {
   const [isLoggingIn, setIsLoggingIn] = useState(false)
   const [isVisible, setIsVisible] = useState(true)
   
+  // Initialize theme from localStorage
+  useEffect(() => {
+      const savedTheme = localStorage.getItem('theme')
+      if (savedTheme) {
+          document.documentElement.style.setProperty('--accent', savedTheme)
+      }
+  }, [])
+
   // Update State
   const [updateStatus, setUpdateStatus] = useState('idle') // idle, checking, available, downloading, downloaded, error
   const [updateProgress, setUpdateProgress] = useState(0)
@@ -63,7 +72,11 @@ function App() {
   const [showConsole, setShowConsole] = useState(false)
   const [logs, setLogs] = useState([])
   const [toast, setToast] = useState(null)
+  const [repairActionName, setRepairActionName] = useState('Repair')
   const notifiedUpdatesRef = React.useRef(new Set())
+  const fetchInstancesInFlightRef = React.useRef(false)
+  const instancesRefreshIntervalRef = React.useRef(null)
+  const launchStatusRef = React.useRef('idle')
 
   // Graphics Settings State
   const [enableAnimation, setEnableAnimation] = useState(true)
@@ -75,9 +88,13 @@ function App() {
       // setEnableCubes(newState) // User requested to keep Cubes always on (or independent)
   }
 
-  const showToast = (message, type = 'info') => {
+  const showToast = useCallback((message, type = 'info') => {
       setToast({ message, type, id: Date.now() })
-  }
+  }, [])
+
+  useEffect(() => {
+      launchStatusRef.current = launchStatus
+  }, [launchStatus])
 
   // Check for updates notification
   useEffect(() => {
@@ -133,7 +150,9 @@ function App() {
   }
 
   const fetchInstances = async (force = false, silent = false) => {
+    if (silent && fetchInstancesInFlightRef.current) return []
     if (!silent) setIsRefreshing(true)
+    if (silent) fetchInstancesInFlightRef.current = true
     try {
         const insts = await window.api.getInstances(force)
         // Only update if we got a valid array
@@ -149,6 +168,7 @@ function App() {
         console.error("Failed to fetch instances", err)
     } finally {
         if (!silent) setIsRefreshing(false)
+        if (silent) fetchInstancesInFlightRef.current = false
     }
     return []
   }
@@ -220,61 +240,70 @@ function App() {
     }
     init()
 
-    // Auto-Reload Instances every 3 seconds (Silent)
-    const interval = setInterval(() => {
-        // Use force=false to leverage Stale-While-Revalidate strategy
-        // This returns cached data immediately but triggers background fetch
-        fetchInstances(false, true)
-    }, 3000)
-
     // Listen for background updates (caching)
-    window.api.onInstancesUpdated((newInstances) => {
-        console.log("Instances updated from background sync", newInstances)
-        setInstances(newInstances)
-    })
+    const unsubs = []
+    if (window.api.onInstancesUpdated) {
+        const unsub = window.api.onInstancesUpdated((newInstances) => {
+            if (launchStatusRef.current === 'running') return
+            if (isDev) console.log("Instances updated from background sync", newInstances)
+            setInstances(newInstances)
+        })
+        if (typeof unsub === 'function') unsubs.push(unsub)
+    }
 
-    window.api.onLaunchProgress((data) => {
-        console.log(data)
-        if (data.type === 'progress') {
-            setLaunchProgress(data)
-        }
-    })
+    if (window.api.onLaunchProgress) {
+        const unsub = window.api.onLaunchProgress((data) => {
+            if (isDev) console.log(data)
+            if (data.type === 'progress') {
+                setLaunchProgress(data)
+            }
+        })
+        if (typeof unsub === 'function') unsubs.push(unsub)
+    }
     
-    window.api.onLaunchSuccess(() => {
-        setLaunchStatus('running')
-        setLaunchProgress(null)
-        // Update installed versions after successful launch (or repair)
-        if (window.api.getInstalledVersions) {
-            window.api.getInstalledVersions().then(setInstalledVersions).catch(console.error)
-        }
-    })
+    if (window.api.onLaunchSuccess) {
+        const unsub = window.api.onLaunchSuccess(() => {
+            setLaunchStatus('running')
+            setLaunchProgress(null)
+            if (window.api.getInstalledVersions) {
+                window.api.getInstalledVersions().then(setInstalledVersions).catch(console.error)
+            }
+        })
+        if (typeof unsub === 'function') unsubs.push(unsub)
+    }
 
     if (window.api.onGameLog) {
-        window.api.onGameLog((log) => {
+        const unsub = window.api.onGameLog((log) => {
             setLogs(prev => {
                 // Limit log size to prevent memory issues
                 if (prev.length > 2000) return [...prev.slice(500), log]
                 return [...prev, log]
             })
         })
+        if (typeof unsub === 'function') unsubs.push(unsub)
     }
     
-    window.api.onGameClosed(() => {
-        setLaunchStatus('idle')
-        setLaunchProgress(null)
-    })
+    if (window.api.onGameClosed) {
+        const unsub = window.api.onGameClosed(() => {
+            setLaunchStatus('idle')
+            setLaunchProgress(null)
+            fetchInstances(false, true)
+        })
+        if (typeof unsub === 'function') unsubs.push(unsub)
+    }
 
     if (window.api.onWindowVisibility) {
-        window.api.onWindowVisibility((visible) => {
-            console.log("Window visibility changed:", visible)
+        const unsub = window.api.onWindowVisibility((visible) => {
+            if (isDev) console.log("Window visibility changed:", visible)
             setIsVisible(visible)
         })
+        if (typeof unsub === 'function') unsubs.push(unsub)
     }
 
     // Updater Events
     if (window.api.onUpdaterEvent) {
-        window.api.onUpdaterEvent((data) => {
-            console.log("Updater Event:", data)
+        const unsub = window.api.onUpdaterEvent((data) => {
+            if (isDev) console.log("Updater Event:", data)
             setUpdateStatus(data.type)
             if (data.type === 'error' && data.error) {
                 setUpdateError(data.error)
@@ -283,22 +312,65 @@ function App() {
                 setUpdateProgress(data.progress)
             }
         })
+        if (typeof unsub === 'function') unsubs.push(unsub)
     }
 
     return () => {
-        clearInterval(interval)
-        // Clean up listeners if needed (though usually handled by electron preload)
+        if (instancesRefreshIntervalRef.current) {
+            clearInterval(instancesRefreshIntervalRef.current)
+            instancesRefreshIntervalRef.current = null
+        }
+        unsubs.forEach(fn => {
+            try { fn() } catch (e) {}
+        })
     }
   }, [])
+
+  useEffect(() => {
+      const shouldRun = launchStatus !== 'running'
+
+      if (!shouldRun) {
+          if (instancesRefreshIntervalRef.current) {
+              clearInterval(instancesRefreshIntervalRef.current)
+              instancesRefreshIntervalRef.current = null
+          }
+          return
+      }
+
+      if (!instancesRefreshIntervalRef.current) {
+          instancesRefreshIntervalRef.current = setInterval(() => {
+              if (launchStatusRef.current === 'running') return
+              fetchInstances(false, true)
+          }, 3000)
+      }
+
+      return () => {}
+  }, [launchStatus])
+
+  // RPC Status Management
+  useEffect(() => {
+    if (!window.api || !window.api.updateRPC) return
+
+    if (launchStatus === 'running') {
+        // Handled by Main Process (launcher.js)
+        return
+    }
+
+    if (user) {
+        window.api.updateRPC('selecting')
+    } else {
+        window.api.updateRPC('login')
+    }
+  }, [user, launchStatus])
 
   // Filter instances based on Whitelist and Access Codes
   const filteredInstances = useMemo(() => {
       if (!user) {
-          console.log("Filter: No user logged in, returning empty list.")
+          if (isDev) console.log("Filter: No user logged in, returning empty list.")
           return [] 
       }
       
-      console.log(`Filter: User=${user.name}, Total Instances=${instances.length}`)
+      if (isDev) console.log(`Filter: User=${user.name}, Total Instances=${instances.length}`)
 
       return instances.filter(inst => {
           // Check Access Code
@@ -324,7 +396,7 @@ function App() {
                   }
                   
                   // If not whitelisted and no code, hide it
-                  console.log(`Instance ${inst.id} hidden (required code missing)`)
+                  if (isDev) console.log(`Instance ${inst.id} hidden (required code missing)`)
                   return false 
               }
           }
@@ -341,13 +413,13 @@ function App() {
                   allowed = [inst.whitelist]
               }
               
-              console.log(`Checking ${inst.id}: whitelist=${JSON.stringify(allowed)} vs user=${userName}`)
+              if (isDev) console.log(`Checking ${inst.id}: whitelist=${JSON.stringify(allowed)} vs user=${userName}`)
 
               const isAllowed = allowed.some(w => 
                   typeof w === 'string' && w.trim().toLowerCase() === userName
               )
               
-              if (!isAllowed) console.log(`Instance ${inst.id} hidden (not in whitelist)`)
+              if (!isAllowed && isDev) console.log(`Instance ${inst.id} hidden (not in whitelist)`)
               return isAllowed
           }
           
@@ -422,8 +494,18 @@ function App() {
       setLaunchProgress(null)
   }
 
-  const handleClose = () => {
-     setShowCloseDialog(true)
+  const handleClose = async () => {
+     try {
+        const settings = await window.api.getSettings()
+        const behavior = settings?.closeBehavior || 'ask'
+        if (behavior === 'ask') {
+            setShowCloseDialog(true)
+            return
+        }
+        await window.api.windowClose(behavior)
+     } catch (e) {
+        setShowCloseDialog(true)
+     }
   }
 
   const handleOpenFolder = async () => {
@@ -439,9 +521,16 @@ function App() {
       }
   }
 
-  const handleRepair = async () => {
+  const handleRepair = async (actionName) => {
     if (!selectedInstance) return
     setRepairTargetInstance(selectedInstance)
+    
+    if (typeof actionName === 'string') {
+        setRepairActionName(actionName)
+    } else {
+        setRepairActionName("Repair")
+    }
+    
     setShowRepairConfirmation(true)
   }
 
@@ -452,8 +541,7 @@ function App() {
     setShowRepairConfirmation(false)
     setRepairTargetInstance(null)
 
-    const isUpdate = installedVersions[instance.id] !== (instance.modpackVersion || instance.version)
-    const actionName = isUpdate ? "Update" : "Repair"
+    const actionName = repairActionName
     
     setLaunchStatus('repairing')
     try {
@@ -487,7 +575,7 @@ function App() {
 
   if (isLoading) {
       return (
-        <div className="app-container" style={{ display: 'flex', height: '100vh', width: '100vw', overflow: 'hidden', justifyContent: 'center', alignItems: 'center', background: '#121212' }}>
+        <div className={`app-container ${!isVisible ? 'animations-paused' : ''}`} style={{ display: 'flex', height: '100vh', width: '100vw', overflow: 'hidden', justifyContent: 'center', alignItems: 'center', background: '#121212' }}>
             <div style={{ zIndex: 10, textAlign: 'center' }}>
                 <div style={{ 
                     width: '60px', 
@@ -499,7 +587,7 @@ function App() {
                     animation: 'spin 1s linear infinite' 
                 }}></div>
                 <h2 style={{ fontWeight: 300, letterSpacing: 2 }}>{t('main.loading').toUpperCase()}</h2>
-            </div>{` ${!isVisible ? 'animations-paused' : ''}`}
+            </div>
         </div>
       )
   }
@@ -549,6 +637,7 @@ function App() {
                     enableAnimation={enableAnimation}
                     toggleAnimation={toggleAnimation}
                     enableCubes={enableCubes}
+                    showToast={showToast}
                 />
             ) : (
                 <NoInstancesView 
@@ -603,7 +692,7 @@ function App() {
                     setRepairTargetInstance(null)
                 }}
                 instanceName={repairTargetInstance.name}
-                actionName={installedVersions[repairTargetInstance.id] !== (repairTargetInstance.modpackVersion || repairTargetInstance.version) ? "Update" : "Repair"}
+                actionName={repairActionName}
                 t={t}
             />
         )}

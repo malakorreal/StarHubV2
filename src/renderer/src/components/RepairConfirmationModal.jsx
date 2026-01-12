@@ -4,6 +4,7 @@ function RepairConfirmationModal({ onConfirm, onCancel, instanceName, actionName
   const safeT = t || ((k) => k);
   
   const isRepair = actionName === 'Repair';
+  const isUpdate = actionName === 'Update';
   
   let title = `${actionName} Verification`;
   let confirmText = `${actionName} Now`;
@@ -18,6 +19,17 @@ function RepairConfirmationModal({ onConfirm, onCancel, instanceName, actionName
       
       const tMsg = safeT('dialogs.repairConfirmMessage');
       if (tMsg && tMsg !== 'dialogs.repairConfirmMessage') {
+          messageHtml = tMsg.replace('{instanceName}', instanceName);
+      }
+  } else if (isUpdate) {
+      const tTitle = safeT('dialogs.updateVerification');
+      if (tTitle && tTitle !== 'dialogs.updateVerification') title = tTitle;
+      
+      const tConfirm = safeT('dialogs.updateNow');
+      if (tConfirm && tConfirm !== 'dialogs.updateNow') confirmText = tConfirm;
+      
+      const tMsg = safeT('dialogs.updateConfirmMessage');
+      if (tMsg && tMsg !== 'dialogs.updateConfirmMessage') {
           messageHtml = tMsg.replace('{instanceName}', instanceName);
       }
   }

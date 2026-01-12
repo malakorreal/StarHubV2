@@ -4,6 +4,7 @@ import RepairConfirmationModal from './RepairConfirmationModal'
 function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = [], onAddCode, onRemoveCode, t, changeLanguage, currentLanguage, showToast, selectedInstance }) {
   const [activeTab, setActiveTab] = useState('general')
   const [ram, setRam] = useState(4096)
+  const [systemRam, setSystemRam] = useState(0) // Default 0 to check if value is received
   const [javaArgs, setJavaArgs] = useState('')
   const [autoJoin, setAutoJoin] = useState(false)
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
@@ -13,11 +14,28 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
   const [resolutionWidth, setResolutionWidth] = useState(854)
   const [resolutionHeight, setResolutionHeight] = useState(480)
   const [fullscreen, setFullscreen] = useState(false)
+  const [maxDownloadSpeed, setMaxDownloadSpeed] = useState(0)
+  const [maxConcurrentDownloads, setMaxConcurrentDownloads] = useState(5)
+  const [autoCheckUpdates, setAutoCheckUpdates] = useState(true)
+  const [checkingForUpdates, setCheckingForUpdates] = useState(false)
+  const [theme, setTheme] = useState(localStorage.getItem('theme') || '#ffd700')
+  const [closeBehavior, setCloseBehavior] = useState('ask')
+
+  const themes = [
+    { name: 'Gold', color: '#ffd700' },
+    { name: 'Red', color: '#ff4d4d' },
+    { name: 'Blue', color: '#4d79ff' },
+    { name: 'Green', color: '#00e676' },
+    { name: 'Purple', color: '#d500f9' },
+    { name: 'Cyan', color: '#00e5ff' },
+    { name: 'Pink', color: '#ff4081' }
+  ]
 
   useEffect(() => {
     if (window.api && window.api.getSettings) {
         window.api.getSettings().then(s => {
             if (s && s.ram) setRam(s.ram)
+            if (s && typeof s.systemRam !== 'undefined') setSystemRam(s.systemRam)
             if (s && s.javaArgs) setJavaArgs(s.javaArgs)
             if (s && typeof s.autoJoin !== 'undefined') setAutoJoin(s.autoJoin)
             if (s && s.resolution) {
@@ -25,6 +43,10 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
                 setResolutionHeight(s.resolution.height || 480)
             }
             if (s && typeof s.fullscreen !== 'undefined') setFullscreen(s.fullscreen)
+            if (s && typeof s.maxDownloadSpeed !== 'undefined') setMaxDownloadSpeed(s.maxDownloadSpeed)
+            if (s && typeof s.maxConcurrentDownloads !== 'undefined') setMaxConcurrentDownloads(s.maxConcurrentDownloads)
+            if (s && typeof s.autoCheckUpdates !== 'undefined') setAutoCheckUpdates(s.autoCheckUpdates)
+            if (s && typeof s.closeBehavior !== 'undefined') setCloseBehavior(s.closeBehavior)
         })
     }
   }, [])
@@ -36,7 +58,11 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
             javaArgs, 
             autoJoin, 
             resolution: { width: resolutionWidth, height: resolutionHeight },
-            fullscreen
+            fullscreen,
+            maxDownloadSpeed,
+            maxConcurrentDownloads,
+            autoCheckUpdates,
+            closeBehavior
         })
       }
       if (showToast) showToast(t('settings.saved'), 'success')
@@ -70,11 +96,16 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
             const defaults = await window.api.resetSettings()
             if (defaults) {
                 setRam(defaults.ram)
+                if (defaults.systemRam) setSystemRam(defaults.systemRam)
                 setJavaArgs(defaults.javaArgs)
                 setAutoJoin(defaults.autoJoin)
                 setResolutionWidth(defaults.resolution.width)
                 setResolutionHeight(defaults.resolution.height)
                 setFullscreen(defaults.fullscreen)
+                setMaxDownloadSpeed(defaults.maxDownloadSpeed)
+                setMaxConcurrentDownloads(defaults.maxConcurrentDownloads)
+                setAutoCheckUpdates(defaults.autoCheckUpdates)
+                setCloseBehavior(defaults.closeBehavior || 'ask')
                 if (showToast) showToast(t('settings.saved'), 'success')
             }
         }
@@ -84,6 +115,34 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
   const confirmLogout = () => {
       onLogout()
       onClose()
+  }
+
+  const handleThemeChange = (color) => {
+      setTheme(color)
+      localStorage.setItem('theme', color)
+      document.documentElement.style.setProperty('--accent', color)
+  }
+
+  const handleBackup = async () => {
+      if (!selectedInstance) return
+      
+      if (!window.api || typeof window.api.backupInstanceData !== 'function') {
+          if (showToast) showToast(currentLanguage === 'th' ? "กรุณาปิดและเปิดโปรแกรมใหม่เพื่อใช้งานฟีเจอร์นี้" : "Please restart the Launcher to use this feature.", 'error')
+          return
+      }
+      
+      if (showToast) showToast(t('main.preparing') || "Preparing...", 'info')
+      
+      try {
+          const result = await window.api.backupInstanceData(selectedInstance)
+          if (result.success) {
+              if (showToast) showToast(t('settings.backupSuccess') || "Backup Successful!", 'success')
+          } else {
+              if (showToast) showToast((t('settings.backupError') || "Backup Failed") + ": " + result.error, 'error')
+          }
+      } catch (err) {
+          if (showToast) showToast("Error: " + err.message, 'error')
+      }
   }
 
   return (
@@ -109,6 +168,23 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
                 }}
               >
                 {t('settings.general')}
+              </button>
+
+              <button 
+                onClick={() => setActiveTab('launcher')}
+                style={{ 
+                    textAlign: 'left', 
+                    padding: '10px 15px', 
+                    background: activeTab === 'launcher' ? 'var(--accent)' : 'transparent', 
+                    color: activeTab === 'launcher' ? '#000' : '#aaa', 
+                    border: 'none', 
+                    borderRadius: '6px', 
+                    cursor: 'pointer',
+                    fontWeight: activeTab === 'launcher' ? 'bold' : 'normal',
+                    transition: 'all 0.2s'
+                }}
+              >
+                {t('settings.launcherGraphics') || 'Launcher Interface'}
               </button>
 
               <button 
@@ -173,11 +249,16 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
                       
                       {/* RAM Allocation */}
                       <div style={{ marginBottom: '25px' }}>
-                          <label style={{ display: 'block', marginBottom: '10px', color: '#ccc' }}>{t('settings.ramAllocation')}: <span style={{ color: 'var(--accent)', fontWeight: 'bold' }}>{ram} MB</span></label>
+                          <label style={{ display: 'block', marginBottom: '5px', color: '#ccc' }}>
+                            {t('settings.ramAllocation')}: <span style={{ color: 'var(--accent)', fontWeight: 'bold' }}>{ram} MB</span>
+                          </label>
+                          <div style={{ fontSize: '0.8em', color: '#666', marginBottom: '10px' }}>
+                              {t('settings.systemRam') || (currentLanguage === 'th' ? 'RAM ทั้งหมดในเครื่อง' : 'System RAM')}: {systemRam > 0 ? systemRam : '...'} MB
+                          </div>
                           <input 
                             type="range" 
                             min="1024" 
-                            max="16384" 
+                            max={Math.max(16384, systemRam > 0 ? systemRam : 16384)} // Limit max slider to system ram if possible, or 16GB
                             step="512" 
                             value={ram} 
                             onChange={e => setRam(Number(e.target.value))}
@@ -186,7 +267,7 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
                           />
                           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8em', color: '#666', marginTop: '5px' }}>
                               <span>1 GB</span>
-                              <span>16 GB</span>
+                              <span>{Math.round(Math.max(16384, systemRam > 0 ? systemRam : 16384) / 1024)} GB</span>
                           </div>
                       </div>
 
@@ -240,31 +321,167 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
 
                       {/* Repair Game Files */}
                       {selectedInstance && (
-                          <div style={{ marginBottom: '25px' }}>
-                              <label style={{ display: 'block', marginBottom: '10px', color: '#ccc' }}>{t('settings.troubleshoot') || 'Troubleshoot'}</label>
+                          <>
+                              <div style={{ marginBottom: '25px' }}>
+                                  <label style={{ display: 'block', marginBottom: '10px', color: '#ccc' }}>{t('settings.troubleshoot') || 'Troubleshoot'}</label>
+                                  <button
+                                      onClick={() => setShowRepairModal(true)}
+                                      style={{
+                                          width: '100%',
+                                          padding: '12px',
+                                          background: '#d9534f',
+                                          color: 'white',
+                                          border: 'none',
+                                          borderRadius: '6px',
+                                          cursor: 'pointer',
+                                          fontWeight: 'bold',
+                                          transition: 'background 0.2s',
+                                          marginBottom: '5px'
+                                      }}
+                                      onMouseOver={(e) => e.target.style.background = '#c9302c'}
+                                      onMouseOut={(e) => e.target.style.background = '#d9534f'}
+                                  >
+                                      {t('settings.repairGame') || (currentLanguage === 'th' ? 'ซ่อมแซมไฟล์เกม (แก้เกมเด้ง)' : 'Repair Game Files')}
+                                  </button>
+                                  <div style={{ fontSize: '0.8em', color: '#888', lineHeight: '1.4' }}>
+                                      {t('settings.repairDesc') || (currentLanguage === 'th' ? 'ใช้เมื่อเข้าเกมไม่ได้ หรือไฟล์ไม่ครบ' : 'Use this if game crashes on startup.')}
+                                  </div>
+                              </div>
+
+                              <div style={{ marginBottom: '25px' }}>
+                                  <label style={{ display: 'block', marginBottom: '10px', color: '#ccc' }}>{t('settings.backupData') || 'Backup Data'}</label>
+                                  <button
+                                      onClick={handleBackup}
+                                      style={{
+                                          width: '100%',
+                                          padding: '12px',
+                                          background: '#333',
+                                          border: '1px solid #555',
+                                          color: '#ccc',
+                                          borderRadius: '6px',
+                                          cursor: 'pointer',
+                                          fontWeight: 'bold',
+                                          transition: 'all 0.2s',
+                                          marginBottom: '5px'
+                                      }}
+                                      onMouseOver={(e) => { e.target.style.background = '#444'; e.target.style.color = '#fff'; e.target.style.borderColor = '#666' }}
+                                      onMouseOut={(e) => { e.target.style.background = '#333'; e.target.style.color = '#ccc'; e.target.style.borderColor = '#555' }}
+                                  >
+                                      {t('settings.backupNow') || 'Backup Now'}
+                                  </button>
+                                  <div style={{ fontSize: '0.8em', color: '#888', lineHeight: '1.4' }}>
+                                      {t('settings.backupDataDesc') || 'Backup Emotes, Skin, Figura, etc.'}
+                                  </div>
+                              </div>
+                          </>
+                      )}
+
+                      {/* Download Speed */}
+                      <div style={{ marginBottom: '25px' }}>
+                          <label style={{ display: 'block', marginBottom: '10px', color: '#ccc' }}>
+                              {t('settings.downloadSpeed') || (currentLanguage === 'th' ? 'ความเร็วการดาวน์โหลด (สูงสุด)' : 'Max Download Speed')}
+                          </label>
+                          <select
+                              value={maxDownloadSpeed}
+                              onChange={(e) => setMaxDownloadSpeed(Number(e.target.value))}
+                              style={{
+                                  width: '100%',
+                                  padding: '10px',
+                                  background: '#333',
+                                  border: '1px solid #444',
+                                  borderRadius: '4px',
+                                  color: '#fff'
+                              }}
+                          >
+                              <option value={0}>{currentLanguage === 'th' ? 'ไม่จำกัด (Unlimited)' : 'Unlimited'}</option>
+                              <option value={1}>1 MB/s</option>
+                              <option value={2}>2 MB/s</option>
+                              <option value={5}>5 MB/s</option>
+                              <option value={10}>10 MB/s</option>
+                              <option value={20}>20 MB/s</option>
+                          </select>
+                      </div>
+
+                      {/* Concurrent Downloads */}
+                      <div style={{ marginBottom: '25px' }}>
+                          <label style={{ display: 'block', marginBottom: '10px', color: '#ccc' }}>
+                              {t('settings.concurrentDownloads') || (currentLanguage === 'th' ? 'จำนวนไฟล์ที่โหลดพร้อมกัน' : 'Concurrent Downloads')}: <span style={{ color: 'var(--accent)', fontWeight: 'bold' }}>{maxConcurrentDownloads}</span>
+                          </label>
+                          <input 
+                            type="range" 
+                            min="1" 
+                            max="10" 
+                            step="1" 
+                            value={maxConcurrentDownloads} 
+                            onChange={e => setMaxConcurrentDownloads(Number(e.target.value))}
+                            className="ram-slider"
+                            style={{ width: '100%', cursor: 'pointer', margin: '10px 0' }}
+                          />
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8em', color: '#666', marginTop: '5px' }}>
+                              <span>1</span>
+                              <span>10</span>
+                          </div>
+                      </div>
+
+                      {/* Updates */}
+                      <div style={{ marginBottom: '25px' }}>
+                          <label style={{ display: 'block', marginBottom: '10px', color: '#ccc' }}>
+                              {t('settings.updates') || (currentLanguage === 'th' ? 'การอัปเดต' : 'Updates')}
+                          </label>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                              {/* Auto Check Toggle */}
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                  <span style={{ color: '#aaa' }}>{t('settings.autoCheckUpdate') || (currentLanguage === 'th' ? 'ตรวจสอบอัตโนมัติเมื่อเปิดโปรแกรม' : 'Auto-check on startup')}</span>
+                                  <div 
+                                      onClick={() => setAutoCheckUpdates(!autoCheckUpdates)}
+                                      style={{
+                                          width: '40px',
+                                          height: '20px',
+                                          background: autoCheckUpdates ? 'var(--accent)' : '#444',
+                                          borderRadius: '10px',
+                                          position: 'relative',
+                                          cursor: 'pointer',
+                                          transition: 'background 0.3s'
+                                      }}
+                                  >
+                                      <div style={{
+                                          width: '16px',
+                                          height: '16px',
+                                          background: '#fff',
+                                          borderRadius: '50%',
+                                          position: 'absolute',
+                                          top: '2px',
+                                          left: autoCheckUpdates ? '22px' : '2px',
+                                          transition: 'left 0.3s'
+                                      }} />
+                                  </div>
+                              </div>
+                              
+                              {/* Check Now Button */}
                               <button
-                                  onClick={() => setShowRepairModal(true)}
+                                  onClick={async () => {
+                                      setCheckingForUpdates(true)
+                                      if (window.api && window.api.checkForUpdates) {
+                                          await window.api.checkForUpdates()
+                                          if (showToast) showToast(currentLanguage === 'th' ? 'กำลังตรวจสอบการอัปเดต...' : 'Checking for updates...', 'info')
+                                      }
+                                      setTimeout(() => setCheckingForUpdates(false), 2000)
+                                  }}
+                                  disabled={checkingForUpdates}
                                   style={{
                                       width: '100%',
                                       padding: '10px',
-                                      background: '#d9534f',
-                                      color: 'white',
-                                      border: 'none',
+                                      background: '#333',
+                                      border: '1px solid #555',
+                                      color: checkingForUpdates ? '#888' : '#fff',
                                       borderRadius: '4px',
-                                      cursor: 'pointer',
-                                      fontWeight: 'bold',
-                                      transition: 'background 0.2s'
+                                      cursor: checkingForUpdates ? 'default' : 'pointer'
                                   }}
-                                  onMouseOver={(e) => e.target.style.background = '#c9302c'}
-                                  onMouseOut={(e) => e.target.style.background = '#d9534f'}
                               >
-                                  {t('settings.repairGame') || (currentLanguage === 'th' ? 'ซ่อมแซมไฟล์เกม (แก้เกมเด้ง)' : 'Repair Game Files')}
+                                  {checkingForUpdates ? (currentLanguage === 'th' ? 'กำลังตรวจสอบ...' : 'Checking...') : (currentLanguage === 'th' ? 'ตรวจสอบการอัปเดตเดี๋ยวนี้' : 'Check for Updates Now')}
                               </button>
-                              <div style={{ fontSize: '0.8em', color: '#888', marginTop: '5px' }}>
-                                  {t('settings.repairDesc') || (currentLanguage === 'th' ? 'ใช้เมื่อเข้าเกมไม่ได้ หรือไฟล์ไม่ครบ' : 'Use this if game crashes on startup.')}
-                              </div>
                           </div>
-                      )}
+                      </div>
 
                       {/* Language Selection */}
                       <div style={{ marginBottom: '20px' }}>
@@ -335,6 +552,72 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
                             </button>
                         </div>
                     </div>
+                  </div>
+              )}
+
+              {/* Launcher Graphics Tab */}
+              {activeTab === 'launcher' && (
+                  <div style={{ animation: 'fadeIn 0.3s' }}>
+                      <h3 style={{ marginTop: 0, marginBottom: '20px', borderBottom: '1px solid #444', paddingBottom: '10px' }}>{t('settings.launcherGraphics') || 'Launcher Interface'}</h3>
+                      
+                      {/* Theme Selection */}
+                      <div style={{ marginBottom: '25px' }}>
+                          <label style={{ display: 'block', marginBottom: '15px', color: '#ccc' }}>{t('settings.theme') || 'Theme Color'}</label>
+                          <div style={{ display: 'flex', gap: '15px', flexWrap: 'wrap' }}>
+                              {themes.map((th) => (
+                                  <div 
+                                      key={th.name}
+                                      onClick={() => handleThemeChange(th.color)}
+                                      style={{
+                                          width: '60px',
+                                          height: '60px',
+                                          borderRadius: '50%',
+                                          background: th.color,
+                                          cursor: 'pointer',
+                                          border: theme === th.color ? '4px solid #fff' : '2px solid transparent',
+                                          boxShadow: theme === th.color ? '0 0 15px ' + th.color : 'none',
+                                          transition: 'all 0.2s',
+                                          position: 'relative',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          justifyContent: 'center'
+                                      }}
+                                      title={th.name}
+                                  >
+                                      {theme === th.color && (
+                                          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#000" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                                              <polyline points="20 6 9 17 4 12"></polyline>
+                                          </svg>
+                                      )}
+                                  </div>
+                              ))}
+                          </div>
+                          <div style={{ fontSize: '0.8em', color: '#888', marginTop: '10px' }}>
+                              {t('settings.themeDesc') || 'Choose the main accent color'}
+                          </div>
+                      </div>
+
+                      <div style={{ marginBottom: '25px' }}>
+                          <label style={{ display: 'block', marginBottom: '10px', color: '#ccc' }}>
+                              {t('settings.closeBehavior') || (currentLanguage === 'th' ? 'ตั้งค่าการปิด Launcher' : 'Launcher Close Behavior')}
+                          </label>
+                          <select
+                              value={closeBehavior}
+                              onChange={(e) => setCloseBehavior(e.target.value)}
+                              style={{
+                                  width: '100%',
+                                  padding: '10px',
+                                  background: '#333',
+                                  border: '1px solid #444',
+                                  borderRadius: '4px',
+                                  color: '#fff'
+                              }}
+                          >
+                              <option value="ask">{t('settings.closeBehaviorAsk') || (currentLanguage === 'th' ? 'ถามทุกครั้ง' : 'Ask Every Time')}</option>
+                              <option value="tray">{t('settings.closeBehaviorTray') || (currentLanguage === 'th' ? 'พับหน้าจอลง (Tray)' : 'Minimize to Tray')}</option>
+                              <option value="quit">{t('settings.closeBehaviorQuit') || (currentLanguage === 'th' ? 'ปิดโปรแกรม' : 'Exit Application')}</option>
+                          </select>
+                      </div>
                   </div>
               )}
 
@@ -617,14 +900,16 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
                       onConfirm={async () => {
                           setShowRepairModal(false)
                           try {
-                              if (window.api && window.api.invoke) {
+                              if (window.api && window.api.repairInstance) {
                                   showToast(currentLanguage === 'th' ? 'กำลังซ่อมแซม...' : 'Repairing...', 'info')
-                                  const result = await window.api.invoke('repair-game', selectedInstance.id)
+                                  const result = await window.api.repairInstance(selectedInstance)
                                   if (result.success) {
                                       showToast(currentLanguage === 'th' ? 'ซ่อมแซมเสร็จสิ้น! กรุณากดเข้าเกมใหม่' : 'Repair successful! Please launch the game.', 'success')
                                   } else {
                                       showToast((currentLanguage === 'th' ? 'ซ่อมแซมล้มเหลว: ' : 'Repair failed: ') + result.error, 'error')
                                   }
+                              } else {
+                                  console.error("repairInstance API not available")
                               }
                           } catch (e) {
                               showToast('Error: ' + e.message, 'error')

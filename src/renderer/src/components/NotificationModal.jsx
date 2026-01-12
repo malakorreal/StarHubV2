@@ -49,7 +49,6 @@ function NotificationModal({ title, message, type = 'info', onClose }) {
     }}>
       <div style={{
         background: 'rgba(30, 30, 40, 0.95)',
-        border: `1px solid ${color}`,
         borderRadius: '16px',
         padding: '30px',
         width: '400px',
@@ -87,8 +86,7 @@ function NotificationModal({ title, message, type = 'info', onClose }) {
             fontSize: '14px',
             fontWeight: '600',
             cursor: 'pointer',
-            transition: 'all 0.2s',
-            boxShadow: `0 4px 15px ${color}40`
+            transition: 'all 0.2s'
           }}
           onMouseOver={(e) => { e.currentTarget.style.filter = 'brightness(1.1)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
           onMouseOut={(e) => { e.currentTarget.style.filter = 'brightness(1)'; e.currentTarget.style.transform = 'translateY(0)'; }}

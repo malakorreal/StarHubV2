@@ -29,14 +29,20 @@ export default {
     update: "อัปเดต",
     updateAvailable: "มีการอัปเดตใหม่",
     enableAnimation: "เปิดภาพเคลื่อนไหว",
-    disableAnimation: "ปิดภาพเคลื่อนไหว"
+    disableAnimation: "ปิดภาพเคลื่อนไหว",
+    serverClosed: "เซิร์ฟเวอร์ปิดชั่วคราว กรุณาลองใหม่ภายหลัง"
   },
   settings: {
     title: "การตั้งค่า",
     general: "ทั่วไป",
     account: "บัญชี",
+    updates: "เช็คการอัพเดต",
+    autoCheckUpdate: "เช็คอัพเดตอัตโนมัติ",
+    downloadSpeed: "ความเร็วการดาวน์โหลด",
+    concurrentDownloads: "จำนวนไฟล์ที่โหลดพร้อมกัน",
     redeemCode: "กรอกโค้ด",
     ramAllocation: "การจัดสรรแรม (RAM)",
+    systemRam: "RAM ทั้งหมดในเครื่อง",
     language: "ภาษา",
     save: "บันทึกการเปลี่ยนแปลง",
     cancel: "ยกเลิก",
@@ -53,8 +59,8 @@ export default {
     online: "ออนไลน์",
     uuid: "UUID",
     noUuid: "ไม่มี UUID",
-    javaArgs: "Arguments เสริม (Java)",
-    autoJoin: "เข้าเซิร์ฟเวอร์อัตโนมัติ",
+    javaArgs: "Java Arguments (ถ้ามี)",
+    autoJoin: "เข้าเซิร์ฟเวอร์อัตโนมัติเมื่อเริ่มเกม",
     saved: "บันทึกการตั้งค่าเรียบร้อยแล้ว",
     graphics: "กราฟิก",
     bgAnimation: "ภาพเคลื่อนไหวพื้นหลัง",
@@ -65,7 +71,18 @@ export default {
     fullscreen: "เต็มหน้าจอ",
     width: "กว้าง",
     height: "สูง",
-    launcherGraphics: "กราฟิกตัวเปิดเกม",
+    launcherGraphics: "ธีม",
+    theme: "ธีมสี",
+    themeDesc: "เลือกสีหลักของ Launcher",
+    closeBehavior: "ตั้งค่าการปิด Launcher",
+    closeBehaviorAsk: "ถามทุกครั้ง",
+    closeBehaviorTray: "พับหน้าจอลง (Tray)",
+    closeBehaviorQuit: "ปิดโปรแกรม",
+    backupData: "สำรองข้อมูลส่วนตัว",
+    backupDataDesc: "สำรองข้อมูลสำคัญ (Emotes, Skin, Figura, Screenshots) เก็บไว้เป็นไฟล์ Zip",
+    backupNow: "สำรองข้อมูลทันที",
+    backupSuccess: "สำรองข้อมูลสำเร็จ!",
+    backupError: "สำรองข้อมูลล้มเหลว",
     gameGraphics: "ตั้งค่ากราฟิกเกม",
     troubleshoot: "การแก้ไขปัญหา",
     repairGame: "ซ่อมแซมไฟล์เกมและไลบรารี",
@@ -87,7 +104,10 @@ export default {
     repairComplete: "ซ่อมแซมเสร็จสิ้น!",
     repairVerification: "ยืนยันการซ่อมแซม",
     repairConfirmMessage: "คุณแน่ใจหรือไม่ที่จะซ่อมแซม <span style='color: var(--accent); font-weight: bold;'>{instanceName}</span>? <br/><br/>ระบบจะทำการดาวน์โหลดไฟล์หลักและ <span style='color: #ff4d4d'>Library ทั้งหมดใหม่</span> (ใช้เวลาสักครู่)",
-    repairNow: "ซ่อมแซมทันที"
+    repairNow: "ซ่อมแซมทันที",
+    updateVerification: "ยืนยันการอัปเดต",
+    updateNow: "อัปเดตทันที",
+    updateConfirmMessage: "คุณแน่ใจหรือไม่ที่จะอัปเดต <span style='color: var(--accent); font-weight: bold;'>{instanceName}</span>? <br/><br/>ระบบจะทำการดาวน์โหลดไฟล์หลักและตรวจสอบความสมบูรณ์ใหม่"
   },
   notifications: {
     folderNotFound: "ไม่พบโฟลเดอร์",
@@ -101,8 +121,8 @@ export default {
     cancel: "ยกเลิก"
   },
   noInstances: {
-    title: "จำกัดการเข้าถึง",
-    message: "สวัสดี, ดูเหมือนว่าคุณจะยังไม่มีสิทธิ์เข้าถึง Instance ใดๆ กรุณาติดต่อผู้ดูแลระบบ",
+    title: "เงียบจังห์แหะ",
+    message: "อืมมม, ดูเหมือนว่าคุณจะยังไม่มีสิทธิ์เข้าถึง Instance ใดๆ กรุณาติดต่อผู้สร้าง (MALAKOR) / หรือไม่ก็ลองเปลื่ยนบัญชีที่มีสิทธิ์การเข้าถึง Instance",
     settings: "ตั้งค่าบัญชี"
   },
   update: {

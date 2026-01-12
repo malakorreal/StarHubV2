@@ -11,7 +11,7 @@ export function setupAuth(ipcMain, mainWindow) {
         const authManager = new Auth("select_account")
         const xboxManager = await authManager.launch("electron", {
             icon: icon,
-            title: "StarHub Login",
+            title: "StarHub",
             width: 600,
             height: 700,
             autoHideMenuBar: true,

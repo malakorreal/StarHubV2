@@ -33,14 +33,20 @@ export default {
     update: "Update",
     updateAvailable: "Update Available",
     enableAnimation: "Enable Animation",
-    disableAnimation: "Disable Animation"
+    disableAnimation: "Disable Animation",
+    serverClosed: "Server Closed Temporarily"
   },
   settings: {
     title: "Settings",
     general: "General",
     account: "Account",
+    updates: "Check Updates",
+    autoCheckUpdate: "Auto Check Updates",
+    downloadSpeed: "Download Speed",
+    concurrentDownloads: "Concurrent Downloads",
     redeemCode: "Redeem Code",
     ramAllocation: "Memory Allocation (RAM)",
+    systemRam: "System RAM",
     language: "Language",
     save: "Save Changes",
     cancel: "Cancel",
@@ -57,8 +63,8 @@ export default {
     online: "Online",
     uuid: "UUID",
     noUuid: "No UUID",
-    javaArgs: "Java Arguments",
-    autoJoin: "Auto Join Server",
+    javaArgs: "Java Arguments (Optional)",
+    autoJoin: "Auto Join Server on Launch",
     saved: "Settings Saved",
     graphics: "Graphics",
     bgAnimation: "Background Animation",
@@ -70,6 +76,17 @@ export default {
     width: "Width",
     height: "Height",
     launcherGraphics: "Launcher Interface",
+    theme: "Theme Color",
+    themeDesc: "Choose the main accent color",
+    closeBehavior: "Launcher Close Behavior",
+    closeBehaviorAsk: "Ask Every Time",
+    closeBehaviorTray: "Minimize to Tray",
+    closeBehaviorQuit: "Exit Application",
+    backupData: "Backup Personal Data",
+    backupDataDesc: "Backup important data (Emotes, Skin, Figura, Screenshots) to a Zip file",
+    backupNow: "Backup Now",
+    backupSuccess: "Backup Successful!",
+    backupError: "Backup Failed",
     gameGraphics: "Game Graphics",
     troubleshoot: "Troubleshoot",
     repairGame: "Repair Game Files",
@@ -91,7 +108,10 @@ export default {
     repairComplete: "Repair complete!",
     repairVerification: "Repair Verification",
     repairConfirmMessage: "Are you sure you want to repair <span style='color: var(--accent); font-weight: bold;'>{instanceName}</span>? <br/><br/>This will re-download core files and <span style='color: #ff4d4d'>all libraries</span>.",
-    repairNow: "Repair Now"
+    repairNow: "Repair Now",
+    updateVerification: "Update Verification",
+    updateNow: "Update Now",
+    updateConfirmMessage: "Are you sure you want to update <span style='color: var(--accent); font-weight: bold;'>{instanceName}</span>? <br/><br/>This will re-download core files and verify integrity."
   },
   notifications: {
     folderNotFound: "Folder Not Found",
@@ -105,8 +125,8 @@ export default {
     cancel: "Cancel"
   },
   noInstances: {
-    title: "Access Restricted",
-    message: "Hello, it seems you don't have access to any instances yet. Please contact an administrator to get whitelisted.",
+    title: "So Quiet T_T",
+    message: "Hmm, it seems you don't have access to any instances yet. Please contact an dev (MALAKOR) to get whitelisted / or try switching to a different account.",
     settings: "Account Settings"
   },
   update: {

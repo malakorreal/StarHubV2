@@ -3,13 +3,39 @@ import path from 'path'
 import { exec } from 'child_process'
 import axios from 'axios'
 import AdmZip from 'adm-zip'
+import { getStore } from './store'
+import { Transform } from 'stream'
 
 // ----------------------------------------------------------------------
 // 🔧 SYNC CONFIGURATION
 // ----------------------------------------------------------------------
-const CONCURRENCY_LIMIT = 5
 const MAX_RETRIES = 3
 const CHUNK_SIZE = 10 * 1024 * 1024 // 10MB chunks
+
+class Throttle extends Transform {
+    constructor(bps) {
+        super()
+        this.bps = bps
+        this.sent = 0
+        this.startTime = Date.now()
+    }
+
+    _transform(chunk, encoding, callback) {
+        this.sent += chunk.length
+        const elapsed = Date.now() - this.startTime
+        const expected = (this.sent / this.bps) * 1000
+        
+        if (elapsed < expected) {
+            setTimeout(() => {
+                this.push(chunk)
+                callback()
+            }, expected - elapsed)
+        } else {
+            this.push(chunk)
+            callback()
+        }
+    }
+}
 
 export class SyncManager {
   constructor(mainWindow) {
@@ -110,7 +136,14 @@ export class SyncManager {
                 }
             })
 
-            response.data.pipe(writer)
+            const maxSpeed = getStore().get('maxDownloadSpeed', 0)
+            if (maxSpeed > 0) {
+                const bps = maxSpeed * 1024 * 1024
+                const throttle = new Throttle(bps)
+                response.data.pipe(throttle).pipe(writer)
+            } else {
+                response.data.pipe(writer)
+            }
 
             await new Promise((resolve, reject) => {
                 writer.on('finish', resolve)
@@ -165,6 +198,7 @@ export class SyncManager {
          while (retries <= MAX_RETRIES) {
              if (signal?.aborted) throw new Error('Download aborted')
              try {
+                 const startTime = Date.now()
                  const response = await axios({
                      method: 'get',
                      url: url,
@@ -179,6 +213,17 @@ export class SyncManager {
                  // Write at specific position (safe for concurrency)
                  await fd.write(response.data, 0, response.data.length, start)
                  
+                 // Throttling
+                 const maxSpeed = getStore().get('maxDownloadSpeed', 0)
+                 if (maxSpeed > 0) {
+                     const bps = maxSpeed * 1024 * 1024
+                     const expectedTime = (response.data.length / bps) * 1000
+                     const actualTime = Date.now() - startTime
+                     if (actualTime < expectedTime) {
+                         await this.sleep(expectedTime - actualTime)
+                     }
+                 }
+
                  // Update progress
                  downloadedTotal += response.data.length
                  // Explicitly free buffer memory
@@ -203,8 +248,9 @@ export class SyncManager {
      
      // Shared error state to stop other workers
      let abortError = null
+     const concurrency = getStore().get('maxConcurrentDownloads', 5)
 
-     for (let w = 0; w < CONCURRENCY_LIMIT; w++) {
+     for (let w = 0; w < concurrency; w++) {
          workers.push((async () => {
              while (queue.length > 0) {
                  if (abortError || signal?.aborted) return
@@ -252,6 +298,27 @@ export class SyncManager {
       let completed = 0
       const total = mods.length
       
+      // Store progress of each running download (key: modUrl, value: percentage 0-1)
+      const currentProgress = new Map()
+
+      // Helper to calculate and send global progress
+      const updateGlobalProgress = () => {
+          // Base progress from completed files (each counts as 100%)
+          let totalProgressPoints = completed * 100
+          
+          // Add partial progress from active downloads
+          for (const p of currentProgress.values()) {
+              totalProgressPoints += p
+          }
+          
+          // Calculate average percentage
+          // Max points = total * 100
+          const globalPercent = total > 0 ? (totalProgressPoints / total) : 0
+          
+          // Send as 0-100 range
+          this.sendProgress('Checking/Downloading Mods', Math.min(globalPercent, 99.9), 100)
+      }
+
       // Simple queue for concurrency
       const queue = [...mods]
       
@@ -260,6 +327,9 @@ export class SyncManager {
       const next = async () => {
           if (queue.length === 0 || abortError || signal?.aborted) return
           const modUrl = queue.shift()
+          
+          // Initialize progress for this mod
+          currentProgress.set(modUrl, 0)
           
           try {
             if (signal?.aborted) throw new Error('Download aborted')
@@ -272,13 +342,19 @@ export class SyncManager {
             try {
                 await fs.promises.stat(dest)
                 // Exists, skip
+                // Mark as 100% immediately for calculation
+                currentProgress.set(modUrl, 100)
+                updateGlobalProgress()
             } catch (e) {
                 // Not exist, download
                 await this.downloadFile(modUrl, dest, {
                     signal,
                     onProgress: (loaded, full) => {
-                        // Too noisy to send progress for every mod's bytes
-                        // Just track completion count
+                        if (full > 0) {
+                            const percent = (loaded / full) * 100
+                            currentProgress.set(modUrl, percent)
+                            updateGlobalProgress()
+                        }
                     }
                 })
             }
@@ -292,7 +368,14 @@ export class SyncManager {
           } finally {
               if (!abortError && !signal?.aborted) {
                   completed++
-                  this.sendProgress('Checking/Downloading Mods', completed, total)
+                  currentProgress.delete(modUrl) // Remove from partial list
+                  // No need to sendProgress here if we rely on updateGlobalProgress inside loop,
+                  // BUT we need to ensure the "completed" count is reflected if we switch logic.
+                  // Actually, updateGlobalProgress uses `completed`.
+                  // So when we finish, we increment `completed` and remove from `currentProgress`.
+                  // Then update again.
+                  updateGlobalProgress()
+                  
                   // Process next item
                   await next()
               }
@@ -301,7 +384,8 @@ export class SyncManager {
 
       // Start initial batch
       const workers = []
-      for (let i = 0; i < Math.min(CONCURRENCY_LIMIT, mods.length); i++) {
+      const concurrency = getStore().get('maxConcurrentDownloads', 5)
+      for (let i = 0; i < Math.min(concurrency, mods.length); i++) {
           workers.push(next())
       }
       

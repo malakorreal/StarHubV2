@@ -7,29 +7,31 @@ let currentLang = 'th' // Default
 
 const translations = {
     en: {
-        browsing: 'Browsing StarHub',
-        inLauncher: 'In Launcher',
+        using: 'Using StarHub',
+        login: 'At Login Screen',
+        selecting: 'Selecting Instance',
         playing: 'Playing',
-        inGame: 'In Game'
+        inLauncher: 'In Launcher'
     },
     th: {
-        browsing: 'กำลังเลือก Instance',
-        inLauncher: 'อยู่ในลันเชอร์',
+        using: 'กําลังใช้ StarHub',
+        login: 'อยู่หน้า Login',
+        selecting: 'กำลังเลือก Instance',
         playing: 'กำลังเล่น',
-        inGame: 'ในเกม'
+        inLauncher: 'อยู่ในลันเชอร์'
     }
 }
 
 export function updateRPCLanguage(lang) {
     currentLang = lang
     // Force refresh with last known state
-    if (rpc && lastDetails) {
-        setActivity(lastDetails, lastState, lastTimestamp)
+    if (rpc && lastStatus) {
+        setActivity(lastStatus, lastInstanceName, lastTimestamp)
     }
 }
 
-let lastDetails = 'Browsing StarHub'
-let lastState = 'In Launcher'
+let lastStatus = 'selecting'
+let lastInstanceName = null
 let lastTimestamp = null
 
 export function setupRPC(mainWindow) {
@@ -39,42 +41,45 @@ export function setupRPC(mainWindow) {
 
   rpc.on('ready', () => {
     console.log('Discord RPC Ready')
-    setActivity('Browsing StarHub', 'In Launcher')
+    setActivity('selecting')
   })
 
   rpc.login({ clientId }).catch(console.error)
 }
 
-export function setActivity(details, state, startTimestamp) {
-  // If details/state match keys, translate them. 
-  // But usually they are dynamic (instance names).
-  // So we expect the CALLER to provide raw strings, OR we handle specific keys.
-  
-  // Strategy: The caller (launcher.js) passes raw keys or names.
-  // But launcher.js sends "Browsing StarHub".
-  
-  // Let's check if the input matches our dictionary values (reverse lookup? No, too complex).
-  // Better: Allow setActivity to accept keys, OR just hardcode the check here.
-  
-  let displayDetails = details
-  let displayState = state
-  
+export function setActivity(status, instanceName = null, startTimestamp = null) {
   const t = translations[currentLang] || translations.en
 
-  // Map known statuses
-  if (details === 'Browsing StarHub') displayDetails = t.browsing
-  if (state === 'In Launcher') displayState = t.inLauncher
-  if (state === 'In Game') displayState = t.inGame
-  
-  // Handle "Playing X"
-  if (details && details.startsWith('Playing ')) {
-      const instanceName = details.replace('Playing ', '')
-      displayDetails = `${t.playing} ${instanceName}`
+  let details = t.using // Static: "กําลังใช้ StarHub"
+  let state = t.inLauncher
+
+  if (status === 'login') {
+      state = t.login
+  } else if (status === 'selecting') {
+      state = t.selecting
+  } else if (status === 'playing') {
+      if (instanceName) {
+          state = `${t.playing} ${instanceName}`
+      } else {
+          state = t.playing
+      }
+  } else if (status === 'in_launcher') {
+      state = t.inLauncher
+  } else {
+      // Fallback if legacy calls pass "Browsing StarHub" etc.
+      if (status === 'Browsing StarHub') state = t.selecting
+      else if (status === 'In Launcher') state = t.inLauncher
+      else if (status && status.startsWith('Playing ')) {
+          const name = status.replace('Playing ', '')
+          state = `${t.playing} ${name}`
+      } else {
+          state = status || t.inLauncher
+      }
   }
 
   // Store for refresh
-  lastDetails = details
-  lastState = state
+  lastStatus = status
+  lastInstanceName = instanceName
   lastTimestamp = startTimestamp
 
   if (!rpc) return
@@ -83,14 +88,15 @@ export function setActivity(details, state, startTimestamp) {
   const auth = store.get('auth')
 
   const activity = {
-    details: displayDetails,
-    state: displayState,
+    details: details,
+    state: state,
     startTimestamp,
     largeImageKey: 'shubnopeople',
     largeImageText: 'StarHub',
     instance: false,
     buttons: [
-        { label: "Made by Malakor", url: "https://guns.lol/malakorkubb" }
+        { label: "Made by Malakor", url: "https://guns.lol/malakorkubb" },
+        { label: "Starlight Discord", url: "https://discord.gg/JHsk2kGPVH" }
     ]
   }
 

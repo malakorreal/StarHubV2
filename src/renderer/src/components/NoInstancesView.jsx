@@ -20,7 +20,7 @@ function NoInstancesView({ user, onOpenSettings }) {
           marginBottom: '20px', 
           opacity: 0.2 
       }}>
-        🚫
+        
       </div>
       
       <h2 style={{ marginBottom: '10px', color: '#fff' }}>{t('noInstances.title')}</h2>
@@ -48,7 +48,6 @@ function NoInstancesView({ user, onOpenSettings }) {
             onMouseOut={e => e.currentTarget.style.transform = 'scale(1)'}
           >
              <span>{t('noInstances.settings')}</span>
-             <span>⚙️</span>
           </button>
       </div>
     </div>

@@ -4,7 +4,7 @@ import { getStore } from './store'
 import { getInstances } from './instances'
 import { SyncManager } from './sync'
 import { JavaManager } from './javaManager'
-import { shell, app, dialog } from 'electron'
+import { shell, app } from 'electron'
 import fs from 'fs'
 import path from 'path'
 import axios from 'axios'
@@ -15,9 +15,10 @@ const launcher = new Client()
 export function setupLauncher(ipcMain, mainWindow) {
   const store = getStore()
   const syncManager = new SyncManager(mainWindow)
-  const javaManager = new JavaManager(mainWindow)
+  const javaManager = new JavaManager(mainWindow, syncManager)
 
   let currentLaunchController = null
+  let activeLauncherProcess = null
 
   // Helper to prepare files (Download/Extract)
   const prepareGameFiles = async (instance, forceRepair = false, signal = null) => {
@@ -98,34 +99,38 @@ export function setupLauncher(ipcMain, mainWindow) {
     }
 
     // 2.1 Auto-Fix: Scan for corrupt libraries (Common Issue)
+    // Optimization: Only check 0-byte files on normal launch. Check headers only on repair.
     const librariesPath = path.join(rootPath, 'libraries')
     if (fs.existsSync(librariesPath)) {
         try {
             console.log("[AUTO-FIX] Scanning for corrupt libraries...")
-            const scanAndClean = (dir) => {
-                const files = fs.readdirSync(dir)
+            const scanAndClean = async (dir) => {
+                const files = await fs.promises.readdir(dir)
                 for (const file of files) {
                     const fullPath = path.join(dir, file)
-                    const stat = fs.statSync(fullPath)
+                    const stat = await fs.promises.stat(fullPath)
                     if (stat.isDirectory()) {
-                        scanAndClean(fullPath)
+                        await scanAndClean(fullPath)
                     } else if (file.endsWith('.jar')) {
-                        // Check 1: Zero Byte
+                        // Check 1: Zero Byte (Fast)
                         if (stat.size === 0) {
                             console.log(`[AUTO-FIX] Deleting 0-byte file: ${file}`)
-                            fs.unlinkSync(fullPath)
+                            await fs.promises.unlink(fullPath)
                             continue
                         }
-                        // Check 2: Invalid Zip Header (Basic Check)
+                        
+                        // Check 2: Invalid Zip Header (Thorough Check)
+                        // User requested thorough verification to avoid missing file issues.
+                        // We check every jar file header to ensure it's a valid zip.
                         try {
-                            const fd = fs.openSync(fullPath, 'r')
+                            const handle = await fs.promises.open(fullPath, 'r')
                             const buffer = Buffer.alloc(4)
-                            fs.readSync(fd, buffer, 0, 4, 0)
-                            fs.closeSync(fd)
+                            await handle.read(buffer, 0, 4, 0)
+                            await handle.close()
                             // PK.. (0x50 0x4B 0x03 0x04)
                             if (buffer[0] !== 0x50 || buffer[1] !== 0x4B) {
                                 console.log(`[AUTO-FIX] Deleting invalid header file: ${file}`)
-                                fs.unlinkSync(fullPath)
+                                await fs.promises.unlink(fullPath)
                             }
                         } catch (e) {
                             console.log(`[AUTO-FIX] Error checking file ${file}: ${e.message}`)
@@ -133,7 +138,7 @@ export function setupLauncher(ipcMain, mainWindow) {
                     }
                 }
             }
-            scanAndClean(librariesPath)
+            await scanAndClean(librariesPath)
         } catch (e) {
             console.error("[AUTO-FIX] Library scan failed:", e)
         }
@@ -281,6 +286,11 @@ export function setupLauncher(ipcMain, mainWindow) {
   })
 
   ipcMain.handle('launch-game', async (event, { instance, auth }) => {
+    // Prevent multiple instances
+    if (activeLauncherProcess) {
+        return { success: false, error: 'Game is already running!' }
+    }
+
     // Create a new launcher instance per launch to avoid event listener leaks
     const launcher = new Client()
     
@@ -341,13 +351,14 @@ export function setupLauncher(ipcMain, mainWindow) {
         // If loader is specified, we assume we are launching a custom version (Forge/Fabric)
         // The version ID must match what is installed or provided in the modpack
         if (instance.loader && instance.loader !== 'vanilla') {
-            versionOpts.type = "custom"
+            // We'll set type/custom below only if we actually have a detected/explicit custom version.
             
             // ------------------------------------------------------------------
             // 🔎 AUTO-DETECT CUSTOM VERSION FROM FOLDER
             // ------------------------------------------------------------------
             // If the JSON doesn't provide a specific ID, we try to find it in the versions folder
             let detectedVersionId = null
+            let detectedForgeForThisMc = null
             
             const versionsPath = path.join(rootPath, 'versions')
             if (fs.existsSync(versionsPath)) {
@@ -358,11 +369,15 @@ export function setupLauncher(ipcMain, mainWindow) {
                     
                     // Logic: Find a directory that contains "Forge", "Fabric", "Quilt", or "NeoForge"
                     // AND matches the base game version partially if possible
-                    const customDir = dirs.find(d => 
-                        d.toLowerCase().includes(instance.loader.toLowerCase()) || 
-                        d.toLowerCase().includes('forge') || 
-                        d.toLowerCase().includes('fabric')
-                    )
+                    const customDir = dirs.find(d => {
+                        const dl = d.toLowerCase()
+                        const matchLoader = dl.includes(instance.loader.toLowerCase()) || dl.includes('forge') || dl.includes('fabric')
+                        const matchMc = dl.includes(instance.version.toLowerCase())
+                        if (matchLoader && dl.includes('forge')) {
+                            detectedForgeForThisMc = d
+                        }
+                        return matchLoader && matchMc
+                    })
                     
                     if (customDir) {
                         console.log(`[AUTO-DETECT] Found custom version folder: ${customDir}`)
@@ -483,13 +498,30 @@ export function setupLauncher(ipcMain, mainWindow) {
                 }
             }
 
+            // Decide version selection strategy:
+            // - If we already have a custom version folder (detectedVersionId or explicit), use custom.
+            // - Else, rely on MCLC + forge installer to create the profile from the base MC version.
             if (instance.customVersionId) {
+                versionOpts.type = "custom"
                 versionOpts.custom = instance.customVersionId
+                console.log(`[VERSION] Using explicit custom version: ${versionOpts.custom}`)
             } else if (detectedVersionId) {
-                 versionOpts.custom = detectedVersionId
-            } else {
-                // Fallback: assume instance.version IS the ID (risky if it's just "1.20.1")
-                versionOpts.custom = instance.version
+                versionOpts.type = "custom"
+                versionOpts.custom = detectedVersionId
+                console.log(`[VERSION] Using detected custom version: ${versionOpts.custom}`)
+            } else if (instance.loader === 'fabric') {
+                // Fabric JSON may have been generated above
+                if (fs.existsSync(path.join(rootPath, 'versions'))) {
+                    const dirs = fs.readdirSync(path.join(rootPath, 'versions')).filter(d => d.toLowerCase().includes('fabric') && d.includes(instance.version))
+                    if (dirs[0]) {
+                        versionOpts.type = "custom"
+                        versionOpts.custom = dirs[0]
+                        console.log(`[VERSION] Using generated Fabric version: ${dirs[0]}`)
+                    }
+                }
+            } else if (instance.loader === 'forge') {
+                // Keep versionOpts as release and pass installer path so MCLC installs forge profile for us.
+                console.log("[VERSION] No Forge profile detected; will install via installer during launch.")
             }
         }
 
@@ -603,27 +635,57 @@ export function setupLauncher(ipcMain, mainWindow) {
             mainWindow.webContents.send('game-log', `${e}`)
         })
         
+        let lastProgressTime = 0
         launcher.on('progress', (e) => {
-             mainWindow.webContents.send('launch-progress', e)
+             const now = Date.now()
+             // Throttle progress updates to avoid IPC flooding (especially during asset checks)
+             if (now - lastProgressTime > 100 || e.type !== 'assets') {
+                 mainWindow.webContents.send('launch-progress', e)
+                 lastProgressTime = now
+             }
         })
 
         launcher.on('arguments', (e) => {
             console.log("Game Launched")
             mainWindow.webContents.send('launch-success')
             mainWindow.hide() // Hide to Tray
-            setActivity(`Playing ${instance.name}`, 'In Game', Date.now())
+            setActivity('playing', instance.name, Date.now())
         })
 
         launcher.on('close', (code) => {
              console.log("Game Closed with code", code)
-             setActivity('Browsing StarHub', 'In Launcher')
+             activeLauncherProcess = null
+             setActivity('selecting')
              mainWindow.webContents.send('game-closed', code)
              mainWindow.show()
         })
         
         // Await launch to catch initialization errors
-        await launcher.launch(opts)
+        try {
+            await launcher.launch(opts)
+        } catch (primaryErr) {
+            // Retry strategy for Forge: if installer exists and no custom profile selected, try once more after cleaning the versions folder
+            if (instance.loader === 'forge' && forgeInstallerPath) {
+                try {
+                    console.warn("[FORGE][RETRY] Primary launch failed. Cleaning Forge versions and retrying once...")
+                    const versionsPath = path.join(rootPath, 'versions')
+                    if (fs.existsSync(versionsPath)) {
+                        const dirs = fs.readdirSync(versionsPath).filter(d => d.toLowerCase().includes('forge') && d.includes(instance.version))
+                        for (const d of dirs) {
+                            await fs.promises.rm(path.join(versionsPath, d), { recursive: true, force: true })
+                        }
+                    }
+                    await launcher.launch(opts)
+                } catch (retryErr) {
+                    throw retryErr
+                }
+            } else {
+                throw primaryErr
+            }
+        }
         
+        activeLauncherProcess = true // Mark as running
+
         return { success: true }
 
     } catch (error) {
@@ -634,6 +696,13 @@ export function setupLauncher(ipcMain, mainWindow) {
 
   ipcMain.handle('open-instance-folder', async (event, instance) => {
       if (!instance) return { success: false, reason: 'no_instance' }
+      
+      // Security: Validate instance ID to prevent path traversal
+      if (!/^[a-zA-Z0-9_-]+$/.test(instance.id)) {
+          console.error(`[SECURITY] Invalid instance ID attempted: ${instance.id}`)
+          return { success: false, reason: 'invalid_id' }
+      }
+
       const baseDir = app.getPath('userData')
       const folder = path.join(baseDir, 'instances', instance.id)
       
@@ -656,10 +725,10 @@ export function setupLauncher(ipcMain, mainWindow) {
           console.log(`[REPAIR] Deleting libraries for instance: ${instanceId}`)
           
           if (fs.existsSync(librariesPath)) {
-              fs.rmSync(librariesPath, { recursive: true, force: true })
+              await fs.promises.rm(librariesPath, { recursive: true, force: true })
           }
           if (fs.existsSync(assetsPath)) {
-              fs.rmSync(assetsPath, { recursive: true, force: true })
+              await fs.promises.rm(assetsPath, { recursive: true, force: true })
           }
 
           return { success: true }
