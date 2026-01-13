@@ -185,11 +185,12 @@ app.whenReady().then(() => {
 
   autoUpdater.on('update-downloaded', () => {
     mainWindow.webContents.send('updater-event', { type: 'downloaded' })
+    autoUpdater.quitAndInstall(true, true)
   })
 
   // Install Update Handler
   ipcMain.handle('install-update', () => {
-    autoUpdater.quitAndInstall()
+    autoUpdater.quitAndInstall(true, true)
   })
 
   // Check for Updates Handler
@@ -261,6 +262,30 @@ app.whenReady().then(() => {
       
     } catch (err) {
       console.error('Backup failed:', err)
+      return { success: false, error: err.message }
+    }
+  })
+  
+  ipcMain.handle('open-crash-reports', async (event, instance) => {
+    try {
+      if (!instance || (!instance.path && !instance.id)) return { success: false, error: 'Invalid instance' }
+      let instancePath = instance.path
+      if (!instancePath) {
+        const baseDir = app.getPath('userData')
+        instancePath = join(baseDir, 'instances', instance.id)
+      }
+      const crashDir = join(instancePath, 'crash-reports')
+      try {
+        await fs.access(crashDir)
+      } catch {
+        await fs.mkdir(crashDir, { recursive: true })
+      }
+      const err = await shell.openPath(crashDir)
+      if (err) {
+        return { success: false, error: err }
+      }
+      return { success: true, path: crashDir, created: true }
+    } catch (err) {
       return { success: false, error: err.message }
     }
   })

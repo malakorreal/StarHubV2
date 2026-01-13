@@ -9,6 +9,8 @@ import fs from 'fs'
 import path from 'path'
 import axios from 'axios'
 import AdmZip from 'adm-zip'
+import os from 'os'
+import { execSync } from 'child_process'
 
 const launcher = new Client()
 
@@ -19,6 +21,18 @@ export function setupLauncher(ipcMain, mainWindow) {
 
   let currentLaunchController = null
   let activeLauncherProcess = null
+  const getFreeSpaceGB = (targetPath) => {
+    try {
+      const root = path.parse(targetPath).root // e.g., C:\\
+      const drive = root ? root.replace(':\\', '') : 'C'
+      const cmd = `powershell -NoProfile -NonInteractive -Command "(Get-PSDrive -Name '${drive}').Free/1GB"`
+      const out = execSync(cmd, { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim()
+      const val = parseFloat(out)
+      return isNaN(val) ? 0 : val
+    } catch {
+      return 0
+    }
+  }
 
   // Helper to prepare files (Download/Extract)
   const prepareGameFiles = async (instance, forceRepair = false, signal = null) => {
@@ -329,6 +343,12 @@ export function setupLauncher(ipcMain, mainWindow) {
 
         console.log("Launching instance:", instance.name)
         const ram = store.get('ram', 4096)
+        const totalMemMB = Math.floor(os.totalmem() / 1024 / 1024)
+        const safeCap = Math.floor(totalMemMB * 0.75)
+        const ramToUse = Math.min(ram, safeCap)
+        if (ramToUse < ram) {
+            syncManager.sendProgress('Adjusting Memory...', 1, 1, `Using ${ramToUse} MB (cap ${safeCap} MB)`)
+        }
         
         // Use AppData to avoid non-ASCII path issues
         const baseDir = app.getPath('userData')
@@ -340,6 +360,10 @@ export function setupLauncher(ipcMain, mainWindow) {
         // Skipped here because 'prepare-launch' should have been called.
         // But for safety, ensure folders exist
         if (!fs.existsSync(rootPath)) fs.mkdirSync(rootPath, { recursive: true })
+        const freeGB = getFreeSpaceGB(rootPath)
+        if (freeGB > 0 && freeGB < 2) {
+            throw new Error(`Insufficient disk space (${freeGB.toFixed(2)} GB free). Require at least 2 GB.`)
+        }
         
         // Basic Loader Handling
         let forgeInstallerPath = null
@@ -455,13 +479,41 @@ export function setupLauncher(ipcMain, mainWindow) {
                     if (!forgeVersion && !detectedVersionId && !instance.customVersionId) {
                         console.log("[FORGE] No version detected. Fetching recommended...")
                         const promoUrl = `https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json`
-                        const { data: promo } = await axios.get(promoUrl)
-                        forgeVersion = promo.promos[`${instance.version}-recommended`] || promo.promos[`${instance.version}-latest`]
+                        try {
+                            const { data: promo } = await axios.get(promoUrl, {
+                                headers: {
+                                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                                },
+                                timeout: 15000
+                            })
+                            if (promo && promo.promos) {
+                                forgeVersion = promo.promos[`${instance.version}-recommended`] || promo.promos[`${instance.version}-latest`]
+                            }
+                        } catch (e) {
+                            console.error(`[FORGE] Failed to fetch promotions: ${e.message}`)
+                        }
+
+                        // Fallback for common versions if fetch failed
+                        if (!forgeVersion) {
+                            if (instance.version === '1.20.1') forgeVersion = '47.2.0'
+                            else if (instance.version === '1.16.5') forgeVersion = '36.2.34'
+                            else if (instance.version === '1.18.2') forgeVersion = '40.2.0'
+                            else if (instance.version === '1.19.2') forgeVersion = '43.2.0'
+                            else if (instance.version === '1.19.4') forgeVersion = '45.1.0'
+                            else if (instance.version === '1.20.2') forgeVersion = '48.1.0'
+                            
+                            if (forgeVersion) {
+                                console.warn(`[FORGE] Used fallback version for ${instance.version}: ${forgeVersion}`)
+                            }
+                        }
                     }
 
                     // 3. If we have a forgeVersion, prepare the installer
                     if (forgeVersion) {
-                        const forgeFullVersion = `${instance.version}-${forgeVersion}`
+                        // Ensure version doesn't already contain the MC version (some detections might include it)
+                        const cleanForgeVersion = forgeVersion.replace(`${instance.version}-`, '')
+                        const forgeFullVersion = `${instance.version}-${cleanForgeVersion}`
+                        
                         const installerUrl = `https://maven.minecraftforge.net/net/minecraftforge/forge/${forgeFullVersion}/forge-${forgeFullVersion}-installer.jar`
                         
                         const cacheDir = path.join(baseDir, 'cache')
@@ -485,7 +537,15 @@ export function setupLauncher(ipcMain, mainWindow) {
 
                         if (needsInstallerDownload) {
                              console.log(`Downloading Forge Installer: ${installerUrl}`)
-                             await syncManager.downloadLargeFile(installerUrl, installerPath, { signal })
+                             syncManager.sendProgress('Downloading Forge Installer...', 0, 1)
+                             try {
+                               await syncManager.downloadLargeFile(installerUrl, installerPath, { signal })
+                             } catch (e) {
+                               console.warn(`[FORGE] Primary Maven download failed: ${e.message}. Trying mirror...`)
+                               const mirror = `https://bmclapi2.bangbang93.com/maven/net/minecraftforge/forge/${forgeFullVersion}/forge-${forgeFullVersion}-installer.jar`
+                               await syncManager.downloadLargeFile(mirror, installerPath, { signal })
+                             }
+                             syncManager.sendProgress('Downloading Forge Installer...', 1, 1)
                         }
                         
                         console.log(`[FORGE] Installer ready at: ${installerPath}`)
@@ -605,7 +665,7 @@ export function setupLauncher(ipcMain, mainWindow) {
             root: rootPath,
             version: versionOpts,
             memory: {
-                max: ram + "M",
+                max: ramToUse + "M",
                 min: "1024M"
             },
             window: {
@@ -630,9 +690,27 @@ export function setupLauncher(ipcMain, mainWindow) {
             // console.log(`[DEBUG] ${e}`) // Too verbose for main console usually, but good for game log
             mainWindow.webContents.send('game-log', `[DEBUG] ${e}`)
         })
+        let vlcErrorDetected = false
+
+        // Log session to file for crash reports
+        const logsDir = path.join(rootPath, 'logs')
+        if (!fs.existsSync(logsDir)) fs.mkdirSync(logsDir, { recursive: true })
+        const sessionStamp = new Date().toISOString().replace(/[:.]/g, '-')
+        const sessionLogPath = path.join(logsDir, `session-${sessionStamp}.log`)
+        const sessionStream = fs.createWriteStream(sessionLogPath)
+        let exceptionDetected = false
         launcher.on('data', (e) => {
             console.log(`[DATA] ${e}`)
             mainWindow.webContents.send('game-log', `${e}`)
+            try { sessionStream.write(String(e) + '\n') } catch {}
+            
+            // Auto-detect VLC errors (FancyMenu/Video Mods)
+            if (e.includes('libvlc error') || e.includes('no suitable interface module')) {
+                 vlcErrorDetected = true
+            }
+            if (String(e).toLowerCase().includes('exception') || String(e).toLowerCase().includes('error')) {
+                exceptionDetected = true
+            }
         })
         
         let lastProgressTime = 0
@@ -656,7 +734,43 @@ export function setupLauncher(ipcMain, mainWindow) {
              console.log("Game Closed with code", code)
              activeLauncherProcess = null
              setActivity('selecting')
-             mainWindow.webContents.send('game-closed', code)
+             try { sessionStream.end() } catch {}
+             
+             if (vlcErrorDetected) {
+                 mainWindow.webContents.send('game-closed', { 
+                     code, 
+                     error: 'Video Mod Error (VLC)', 
+                     details: 'Mod ที่ใช้วิดีโอ (เช่น FancyMenu) ทำงานผิดพลาด\nโปรดติดตั้ง Visual C++ Redistributable (x64)' 
+                 })
+             } else {
+                 // If non-zero exit or exceptions detected, create crash bundle
+                 if (code !== 0 || exceptionDetected) {
+                     try {
+                         const crashDir = path.join(rootPath, 'crash-reports')
+                         if (!fs.existsSync(crashDir)) fs.mkdirSync(crashDir, { recursive: true })
+                         const bundlePath = path.join(crashDir, `crash-${sessionStamp}.zip`)
+                         const zip = new AdmZip()
+                         zip.addLocalFile(sessionLogPath)
+                         const envInfo = {
+                           instance: { id: instance.id, name: instance.name, version: instance.version, loader: instance.loader || 'vanilla' },
+                           javaPath,
+                           memoryMB: ramToUse,
+                           os: { platform: os.platform(), release: os.release(), arch: os.arch() }
+                         }
+                         const envJsonPath = path.join(crashDir, `env-${sessionStamp}.json`)
+                         fs.writeFileSync(envJsonPath, JSON.stringify(envInfo, null, 2))
+                         zip.addLocalFile(envJsonPath)
+                         zip.writeZip(bundlePath)
+                         try { fs.unlinkSync(envJsonPath) } catch {}
+                         mainWindow.webContents.send('game-closed', { code, error: 'Game closed unexpectedly', details: `สร้างไฟล์รายงานไว้ที่:\n${bundlePath}` })
+                     } catch (e) {
+                         mainWindow.webContents.send('game-closed', code)
+                     }
+                 } else {
+                     mainWindow.webContents.send('game-closed', code)
+                 }
+             }
+             
              mainWindow.show()
         })
         

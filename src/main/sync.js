@@ -92,7 +92,12 @@ export class SyncManager {
                 // Use async fs.stat
                 const stats = await fs.promises.stat(dest)
                 if (checkSize) {
-                    const head = await axios.head(url)
+                    const head = await axios.head(url, {
+                        headers: {
+                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                        },
+                        timeout: 15000
+                    })
                     const remoteSize = parseInt(head.headers['content-length'], 10)
                     if (remoteSize && remoteSize === stats.size) {
                         this.log(`File already exists and matches size: ${path.basename(dest)}`)
@@ -115,7 +120,11 @@ export class SyncManager {
             const response = await axios({
                 method: 'get',
                 url: url,
-                responseType: 'stream'
+                responseType: 'stream',
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                },
+                timeout: 30000
             })
 
             const totalLength = response.headers['content-length']
@@ -171,7 +180,12 @@ export class SyncManager {
      let totalSize = 0
      try {
          if (signal?.aborted) throw new Error('Download aborted')
-         const head = await axios.head(url)
+         const head = await axios.head(url, {
+             headers: {
+                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+             },
+             timeout: 15000
+         })
          totalSize = parseInt(head.headers['content-length'], 10)
      } catch (e) {
          if (signal?.aborted || e.message === 'Download aborted') throw new Error('Download aborted')
@@ -199,14 +213,15 @@ export class SyncManager {
              if (signal?.aborted) throw new Error('Download aborted')
              try {
                  const startTime = Date.now()
-                 const response = await axios({
-                     method: 'get',
-                     url: url,
-                     headers: {
-                         Range: `bytes=${start}-${end}`
-                     },
-                     responseType: 'arraybuffer'
-                 })
+                const response = await axios({
+                    method: 'get',
+                    url: url,
+                    headers: {
+                        Range: `bytes=${start}-${end}`
+                    },
+                    responseType: 'arraybuffer',
+                    timeout: 30000
+                })
                  
                  if (signal?.aborted) throw new Error('Download aborted')
 
@@ -492,22 +507,44 @@ export class SyncManager {
   }
 
   /**
-   * Extract Zip file
+   * Extract Zip file with Progress
    */
   async extractZip(zipPath, targetDir, options = {}) {
       const { signal = null } = options
       if (signal?.aborted) throw new Error('Extraction aborted')
 
       this.log(`Extracting ${path.basename(zipPath)}...`)
-      this.sendProgress('Extracting Modpack...', 0, 100) // Indeterminate
       
       // Use a temp directory to handle nested folder structures correctly
       const tempDir = path.join(path.dirname(targetDir), `temp_${Date.now()}`)
       if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true })
 
       try {
-          // Use Native Unzip to save RAM
-          await this.nativeUnzip(zipPath, tempDir, signal)
+          // ----------------------------------------------------------------
+          // 1. UNZIP with Progress (Using AdmZip entry-by-entry)
+          // ----------------------------------------------------------------
+          // Replaced nativeUnzip to provide progress updates
+          const zip = new AdmZip(zipPath)
+          const entries = zip.getEntries()
+          const totalEntries = entries.length
+          let extractedCount = 0
+
+          for (const entry of entries) {
+              if (signal?.aborted) throw new Error('Extraction aborted')
+              
+              // Extract individual entry
+              // extractEntryTo(entry, targetPath, maintainEntryPath, overwrite)
+              zip.extractEntryTo(entry, tempDir, true, true)
+              
+              extractedCount++
+              
+              // Throttle progress updates (every 20 files or last one)
+              if (extractedCount % 20 === 0 || extractedCount === totalEntries) {
+                  this.sendProgress('Extracting Modpack...', extractedCount, totalEntries)
+                  // Yield to event loop to prevent UI freeze
+                  await new Promise(resolve => setTimeout(resolve, 1))
+              }
+          }
           
           if (signal?.aborted) throw new Error('Extraction aborted')
 
@@ -568,6 +605,9 @@ export class SyncManager {
                           const sourceRelativePaths = sourceFiles.map(f => path.relative(sourceDir, f))
                           
                           // 2. Copy/Update Files (Source -> Target)
+                          let processedFiles = 0
+                          const totalFiles = sourceRelativePaths.length
+                          
                           for (const relPath of sourceRelativePaths) {
                               if (signal?.aborted) throw new Error('Extraction aborted')
 
@@ -580,6 +620,7 @@ export class SyncManager {
                                                
                               if (isSettings && fs.existsSync(destFile)) {
                                   this.log(`Skipping settings file: ${relPath}`)
+                                  processedFiles++
                                   continue
                               }
 
@@ -594,6 +635,13 @@ export class SyncManager {
                               
                               // Rename is faster
                               await fs.promises.rename(srcFile, destFile)
+                              
+                              processedFiles++
+                              // Update progress for installation phase
+                              if (processedFiles % 10 === 0 || processedFiles === totalFiles) {
+                                  this.sendProgress('Installing Files...', processedFiles, totalFiles)
+                                  await new Promise(resolve => setTimeout(resolve, 1))
+                              }
                           }
                           
                           // 3. Cleanup Extra Files (Target -> Delete)

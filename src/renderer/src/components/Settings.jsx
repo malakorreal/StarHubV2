@@ -20,6 +20,29 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
   const [checkingForUpdates, setCheckingForUpdates] = useState(false)
   const [theme, setTheme] = useState(localStorage.getItem('theme') || '#ffd700')
   const [closeBehavior, setCloseBehavior] = useState('ask')
+  const handleBackup = async () => {
+    if (selectedInstance && window.api && window.api.backupInstanceData) {
+      const res = await window.api.backupInstanceData(selectedInstance)
+      if (res && res.success) {
+        if (showToast) showToast(t('settings.backupSuccess') || 'Backup created and folder opened.', 'success')
+      } else {
+        if (showToast) showToast(res?.error || (t('settings.backupFailed') || 'Backup failed'), 'error')
+      }
+    }
+  }
+  const handleOpenCrashReports = async () => {
+    if (selectedInstance && window.api && window.api.openCrashReports) {
+      if (showToast) showToast(currentLanguage === 'th' ? 'กำลังเปิดโฟลเดอร์ Crash Reports...' : 'Opening Crash Reports folder...', 'info')
+      const res = await window.api.openCrashReports(selectedInstance)
+      if (res && res.success) {
+        if (showToast) showToast((currentLanguage === 'th' ? 'เปิดโฟลเดอร์ Crash Reports แล้ว' : 'Opened Crash Reports folder'), 'success')
+      } else if (res && res.reason === 'not_found') {
+        if (showToast) showToast((currentLanguage === 'th' ? 'ยังไม่มีไฟล์ Crash Reports ในเครื่องนี้' : 'No crash reports found on this machine'), 'warning')
+      } else {
+        if (showToast) showToast(res?.error || (currentLanguage === 'th' ? 'เปิดโฟลเดอร์ไม่สำเร็จ' : 'Failed to open folder'), 'error')
+      }
+    }
+  }
 
   const themes = [
     { name: 'Gold', color: '#ffd700' },
@@ -121,28 +144,6 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
       setTheme(color)
       localStorage.setItem('theme', color)
       document.documentElement.style.setProperty('--accent', color)
-  }
-
-  const handleBackup = async () => {
-      if (!selectedInstance) return
-      
-      if (!window.api || typeof window.api.backupInstanceData !== 'function') {
-          if (showToast) showToast(currentLanguage === 'th' ? "กรุณาปิดและเปิดโปรแกรมใหม่เพื่อใช้งานฟีเจอร์นี้" : "Please restart the Launcher to use this feature.", 'error')
-          return
-      }
-      
-      if (showToast) showToast(t('main.preparing') || "Preparing...", 'info')
-      
-      try {
-          const result = await window.api.backupInstanceData(selectedInstance)
-          if (result.success) {
-              if (showToast) showToast(t('settings.backupSuccess') || "Backup Successful!", 'success')
-          } else {
-              if (showToast) showToast((t('settings.backupError') || "Backup Failed") + ": " + result.error, 'error')
-          }
-      } catch (err) {
-          if (showToast) showToast("Error: " + err.message, 'error')
-      }
   }
 
   return (
@@ -368,6 +369,25 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
                                       onMouseOut={(e) => { e.target.style.background = '#333'; e.target.style.color = '#ccc'; e.target.style.borderColor = '#555' }}
                                   >
                                       {t('settings.backupNow') || 'Backup Now'}
+                                  </button>
+                                  <button
+                                      onClick={handleOpenCrashReports}
+                                      style={{
+                                          width: '100%',
+                                          padding: '12px',
+                                          background: '#333',
+                                          border: '1px solid #555',
+                                          color: '#ccc',
+                                          borderRadius: '6px',
+                                          cursor: 'pointer',
+                                          fontWeight: 'bold',
+                                          transition: 'all 0.2s',
+                                          marginBottom: '5px'
+                                      }}
+                                      onMouseOver={(e) => { e.target.style.background = '#444'; e.target.style.color = '#fff'; e.target.style.borderColor = '#666' }}
+                                      onMouseOut={(e) => { e.target.style.background = '#333'; e.target.style.color = '#ccc'; e.target.style.borderColor = '#555' }}
+                                  >
+                                      {currentLanguage === 'th' ? 'เปิดโฟลเดอร์ Crash Reports' : 'Open Crash Reports Folder'}
                                   </button>
                                   <div style={{ fontSize: '0.8em', color: '#888', lineHeight: '1.4' }}>
                                       {t('settings.backupDataDesc') || 'Backup Emotes, Skin, Figura, etc.'}

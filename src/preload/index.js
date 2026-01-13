@@ -14,6 +14,7 @@ const api = {
   fetchImageBase64: (url) => ipcRenderer.invoke('fetch-image-base64', url),
   repairInstance: (instance) => ipcRenderer.invoke('repair-instance', instance),
   openInstanceFolder: (instance) => ipcRenderer.invoke('open-instance-folder', instance),
+  openCrashReports: (instance) => ipcRenderer.invoke('open-crash-reports', instance),
   getSettings: () => ipcRenderer.invoke('get-settings'),
   setSettings: (settings) => ipcRenderer.invoke('set-settings', settings),
   resetSettings: () => ipcRenderer.invoke('reset-settings'),

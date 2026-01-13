@@ -1,6 +1,6 @@
 {
   "name": "starhub-v2",
-  "version": "1.0.58",
+  "version": "1.0.59",
   "author": "Malakor",
   "description": "",
   "main": "out/main/index.js",
@@ -36,12 +36,14 @@
   },
   "build": {
     "directories": {
-      "output": "dist_v1.0.58"
+      "output": "dist_v1.0.59"
     },
+    "asar": true,
     "compression": "maximum",
     "appId": "com.starhub.launcher",
     "productName": "StarHub",
     "artifactName": "${productName}-Setup-${version}.${ext}",
+    "afterPack": "scripts/trim-locales.js",
     "publish": [
       {
         "provider": "github",
