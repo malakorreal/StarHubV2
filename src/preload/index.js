@@ -62,6 +62,7 @@ const api = {
   // Updater
   checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
   installUpdate: () => ipcRenderer.invoke('install-update'),
+  installVcRedist: () => ipcRenderer.invoke('install-vcredist'),
   onUpdaterEvent: (callback) => {
     ipcRenderer.removeAllListeners('updater-event')
     const listener = (event, value) => callback(value)

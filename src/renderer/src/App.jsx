@@ -284,10 +284,40 @@ function App() {
     }
     
     if (window.api.onGameClosed) {
-        const unsub = window.api.onGameClosed(() => {
+        const unsub = window.api.onGameClosed((data) => {
             setLaunchStatus('idle')
             setLaunchProgress(null)
             fetchInstances(false, true)
+
+            // Handle Crash/Error Reports
+            if (data && typeof data === 'object' && data.error) {
+                if (data.error === 'Video Mod Error (VLC)') {
+                    setNotification({
+                        title: data.error,
+                        message: data.details,
+                        type: 'error',
+                        action: {
+                            label: currentLanguage === 'th' ? 'ติดตั้ง Visual C++ (x64)' : 'Install Visual C++',
+                            onClick: async () => {
+                                setNotification(null)
+                                showToast(currentLanguage === 'th' ? 'กำลังดาวน์โหลดและติดตั้ง...' : 'Downloading and installing...', 'info')
+                                const res = await window.api.installVcRedist()
+                                if (res.success) {
+                                    showToast(currentLanguage === 'th' ? 'เริ่มการติดตั้งแล้ว กรุณาทำตามขั้นตอนในหน้าต่างที่เปิดขึ้น' : 'Installation started. Please follow the instructions in the window.', 'success')
+                                } else {
+                                    showToast(res.error || 'Failed to install', 'error')
+                                }
+                            }
+                        }
+                    })
+                } else {
+                    setNotification({
+                        title: data.error,
+                        message: data.details,
+                        type: 'error'
+                    })
+                }
+            }
         })
         if (typeof unsub === 'function') unsubs.push(unsub)
     }

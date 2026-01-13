@@ -1,6 +1,6 @@
 {
   "name": "starhub-v2",
-  "version": "1.0.60",
+  "version": "1.0.61",
   "author": "Malakor",
   "description": "",
   "main": "out/main/index.js",
@@ -36,7 +36,7 @@
   },
   "build": {
     "directories": {
-      "output": "dist_v1.0.60"
+      "output": "dist_v1.0.61_build"
     },
     "asar": true,
     "compression": "maximum",

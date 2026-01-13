@@ -10,7 +10,7 @@ import path from 'path'
 import axios from 'axios'
 import AdmZip from 'adm-zip'
 import os from 'os'
-import { execSync } from 'child_process'
+import { execSync, spawn } from 'child_process'
 
 const launcher = new Client()
 
@@ -805,6 +805,43 @@ export function setupLauncher(ipcMain, mainWindow) {
     } catch (error) {
         console.error("Launch Error:", error)
         return { success: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('install-vcredist', async () => {
+    try {
+      const vcredistUrl = 'https://aka.ms/vs/17/release/vc_redist.x64.exe'
+      const tempPath = path.join(app.getPath('temp'), 'vc_redist.x64.exe')
+      
+      console.log(`[VCREDIST] Downloading from ${vcredistUrl}...`)
+      const response = await axios({
+        method: 'get',
+        url: vcredistUrl,
+        responseType: 'stream'
+      })
+
+      const writer = fs.createWriteStream(tempPath)
+      response.data.pipe(writer)
+
+      await new Promise((resolve, reject) => {
+        writer.on('finish', resolve)
+        writer.on('error', reject)
+      })
+
+      console.log(`[VCREDIST] Downloaded to ${tempPath}. Starting installation...`)
+      
+      // Run installer silently: /install /quiet /norestart
+      const child = spawn(tempPath, ['/install', '/passive', '/norestart'], {
+        detached: true,
+        stdio: 'ignore'
+      })
+      
+      child.unref()
+      
+      return { success: true }
+    } catch (error) {
+      console.error("[VCREDIST] Installation failed:", error)
+      return { success: false, error: error.message }
     }
   })
 

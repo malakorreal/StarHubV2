@@ -1,6 +1,6 @@
 import React from 'react'
 
-function NotificationModal({ title, message, type = 'info', onClose }) {
+function NotificationModal({ title, message, type = 'info', action, onClose }) {
   // Types: info, success, warning, error
   const colors = {
     info: '#4a90e2',
@@ -75,24 +75,47 @@ function NotificationModal({ title, message, type = 'info', onClose }) {
         <h3 style={{ margin: '0 0 10px 0', fontSize: '20px', fontWeight: '600', color: 'white' }}>{title}</h3>
         <p style={{ margin: '0 0 25px 0', color: '#aaa', lineHeight: '1.5' }}>{message}</p>
         
-        <button 
-          onClick={onClose}
-          style={{
-            background: color,
-            color: '#fff',
-            border: 'none',
-            padding: '12px 30px',
-            borderRadius: '8px',
-            fontSize: '14px',
-            fontWeight: '600',
-            cursor: 'pointer',
-            transition: 'all 0.2s'
-          }}
-          onMouseOver={(e) => { e.currentTarget.style.filter = 'brightness(1.1)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
-          onMouseOut={(e) => { e.currentTarget.style.filter = 'brightness(1)'; e.currentTarget.style.transform = 'translateY(0)'; }}
-        >
-          Got it
-        </button>
+        <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
+          {action && (
+            <button
+              onClick={action.onClick}
+              style={{
+                background: color,
+                color: '#fff',
+                border: 'none',
+                padding: '12px 24px',
+                borderRadius: '8px',
+                fontSize: '14px',
+                fontWeight: '600',
+                cursor: 'pointer',
+                transition: 'all 0.2s'
+              }}
+              onMouseOver={(e) => { e.currentTarget.style.filter = 'brightness(1.1)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
+              onMouseOut={(e) => { e.currentTarget.style.filter = 'brightness(1)'; e.currentTarget.style.transform = 'translateY(0)'; }}
+            >
+              {action.label}
+            </button>
+          )}
+
+          <button 
+            onClick={onClose}
+            style={{
+              background: action ? 'rgba(255,255,255,0.1)' : color,
+              color: '#fff',
+              border: 'none',
+              padding: '12px 30px',
+              borderRadius: '8px',
+              fontSize: '14px',
+              fontWeight: '600',
+              cursor: 'pointer',
+              transition: 'all 0.2s'
+            }}
+            onMouseOver={(e) => { e.currentTarget.style.filter = 'brightness(1.1)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
+            onMouseOut={(e) => { e.currentTarget.style.filter = 'brightness(1)'; e.currentTarget.style.transform = 'translateY(0)'; }}
+          >
+            {action ? 'Close' : 'Got it'}
+          </button>
+        </div>
       </div>
       
       <style>
