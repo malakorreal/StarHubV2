@@ -2,7 +2,8 @@ export default {
   auth: {
     guest: "แขก (ยังไม่ได้ Login)",
     loginFailed: "เข้าสู่ระบบไม่สำเร็จ",
-    loginError: "เกิดข้อผิดพลาดในการเข้าสู่ระบบ"
+    loginError: "เกิดข้อผิดพลาดในการเข้าสู่ระบบ",
+    noMinecraft: "ไม่พบ Minecraft Java Edition ในบัญชีนี้"
   },
   sidebar: {
     library: "คลัง Instance",
@@ -19,6 +20,8 @@ export default {
     announcement: "ประกาศ",
     version: "เวอร์ชัน",
     play: "เล่นเกม",
+    loadingInstances: "กำลังโหลด Instance...",
+    checkSession: "กำลังตรวจสอบเซสชัน...",
     launching: "กำลังเริ่ม...",
     repairing: "กำลังซ่อมแซม...",
     running: "กำลังเล่น",
@@ -34,8 +37,16 @@ export default {
   },
   settings: {
     title: "การตั้งค่า",
+    loadingAccounts: "กำลังโหลดบัญชี...",
+    addAccount: "เพิ่มบัญชี",
     general: "ทั่วไป",
     account: "บัญชี",
+    noAccounts: "ไม่ค้นพบบัญชี",
+    active: "กําลังใช้งาน",
+    inactive: "ไม่ได้ใช้งาน",
+    switch: "เลือกใช้",
+    removeAccount: "ลบบัญชี",
+    confirmRemoveAccount: "คุณต้องการลบบัญชีนี้ใช่หรือไม่?",
     updates: "เช็คการอัพเดต",
     autoCheckUpdate: "เช็คอัพเดตอัตโนมัติ",
     downloadSpeed: "ความเร็วการดาวน์โหลด",
@@ -71,6 +82,7 @@ export default {
     fullscreen: "เต็มหน้าจอ",
     width: "กว้าง",
     height: "สูง",
+    uninstallInstance: "ลบ Instance",
     launcherGraphics: "ธีม",
     theme: "ธีมสี",
     themeDesc: "เลือกสีหลักของ Launcher",
@@ -85,8 +97,10 @@ export default {
     backupError: "สำรองข้อมูลล้มเหลว",
     gameGraphics: "ตั้งค่ากราฟิกเกม",
     troubleshoot: "การแก้ไขปัญหา",
-    repairGame: "ซ่อมแซมไฟล์เกมและไลบรารี",
+    repairGame: "ซ่อมแซมไฟล์เกม",
+    
     repairDesc: "ใช้เมื่อเข้าเกมไม่ได้ หรือไฟล์ไม่ครบ (โหลด Library ใหม่ทั้งหมด) ซึ่งจะใช้เวลานานกว่าปกติ !",
+    restartLauncher: "รีสตาร์ท Launcher",
     reset: "คืนค่าเริ่มต้น",
     resetDesc: "คืนค่าการตั้งค่าทั้งหมดเป็นค่าเริ่มต้น",
     resetConfirm: "คุณแน่ใจหรือไม่ว่าต้องการคืนค่าการตั้งค่าทั้งหมด?"
@@ -107,7 +121,10 @@ export default {
     repairNow: "ซ่อมแซมทันที",
     updateVerification: "ยืนยันการอัปเดต",
     updateNow: "อัปเดตทันที",
-    updateConfirmMessage: "คุณแน่ใจหรือไม่ที่จะอัปเดต <span style='color: var(--accent); font-weight: bold;'>{instanceName}</span>? <br/><br/>ระบบจะทำการดาวน์โหลดไฟล์หลักและตรวจสอบความสมบูรณ์ใหม่"
+    updateConfirmMessage: "คุณแน่ใจหรือไม่ที่จะอัปเดต <span style='color: var(--accent); font-weight: bold;'>{instanceName}</span>? <br/><br/>ระบบจะทำการดาวน์โหลดไฟล์หลักและตรวจสอบความสมบูรณ์ใหม่",
+    uninstallVerification: "ถอดการติดตั้ง Instance",
+    uninstallNow: "ถอดการติดตั้งทันที",
+    uninstallConfirmMessage: "ต้องการถอดการติดตั้ง <span style='color: var(--accent); font-weight: bold;'>{instanceName}</span> ออกจากเครื่องนี้หรือไม่?<br/><br/>ไฟล์เกมของ Instance นี้จะถูกลบออกจากเครื่อง แต่ยังสามารถติดตั้งใหม่ได้อีกครั้งเมื่อกดเล่น"
   },
   notifications: {
     folderNotFound: "ไม่พบโฟลเดอร์",
@@ -136,6 +153,14 @@ export default {
     error: "การอัปเดตล้มเหลว",
     errorMessage: "เกิดข้อผิดพลาดในการอัปเดต โปรดลองใหม่อีกครั้งในภายหลัง",
     checkRepoVisibility: "กรุณาตรวจสอบว่า GitHub Repository ถูกตั้งค่าเป็น Public หรือไม่"
+  },
+  patch: {
+    changes: "สรุปการเปลี่ยนแปลงไฟล์",
+    added: "เพิ่มใหม่: {count} ไฟล์",
+    deleted: "ลบออก: {count} ไฟล์",
+    corrupt: "ไฟล์เสียหาย: {count} ไฟล์",
+    noChanges: "ไม่พบการเปลี่ยนแปลงไฟล์",
+    title: "สถานะไฟล์เกม"
   },
   common: {
     close: "ปิด"

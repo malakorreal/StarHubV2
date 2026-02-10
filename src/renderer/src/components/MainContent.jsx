@@ -1,11 +1,13 @@
 import React, { memo, useState, useEffect, useMemo } from 'react'
 
-const MainContent = memo(({ instance, installedVersion, status, progress, onLaunch, onCancel, onOpenSettings, onOpenFolder, onRepair, onOpenConsole, user, paused, t, enableAnimation, toggleAnimation, enableCubes, showToast }) => {
+const MainContent = memo(({ instance, installedVersion, status, progress, onLaunch, onCancel, onOpenSettings, onOpenFolder, onRepair, onOpenConsole, onUninstallInstance, user, paused, t, enableAnimation, toggleAnimation, enableCubes, showToast }) => {
   const [bgLoaded, setBgLoaded] = useState(false)
   const [staticGif, setStaticGif] = useState(null)
   const [serverStatus, setServerStatus] = useState(null)
   const videoRef = React.useRef(null)
   const [progressSteps, setProgressSteps] = useState([])
+  const [showToolsMenu, setShowToolsMenu] = useState(false)
+  const [toolsMenuAnimate, setToolsMenuAnimate] = useState(false)
   
   // Determine Video Source
   const { videoSrc, isVideoOnly, isBgGif } = useMemo(() => {
@@ -52,6 +54,16 @@ const MainContent = memo(({ instance, installedVersion, status, progress, onLaun
   }, [instance, installedVersion])
 
   const isMaintenance = instance?.maintenance === true
+  const canModifyInstance = status === 'idle'
+
+  useEffect(() => {
+      if (showToolsMenu) {
+          const id = setTimeout(() => setToolsMenuAnimate(true), 10)
+          return () => clearTimeout(id)
+      } else {
+          setToolsMenuAnimate(false)
+      }
+  }, [showToolsMenu])
 
   // Fetch Server Status
   useEffect(() => {
@@ -191,7 +203,7 @@ const MainContent = memo(({ instance, installedVersion, status, progress, onLaun
   )
 
   return (
-    <div style={{ flex: 1, position: 'relative', overflow: 'hidden', background: '#111' }}>
+    <div style={{ flex: 1, position: 'relative', overflow: 'hidden', background: 'var(--sidebar-bg)' }}>
       {/* Background Image with Transition */}
       {!isVideoOnly && (
         <div style={{
@@ -273,22 +285,20 @@ const MainContent = memo(({ instance, installedVersion, status, progress, onLaun
         {instance.logo ? (
             <img 
                 src={instance.logo} 
-                alt={instance.name} 
+                alt="Logo" 
                 style={{ 
                     height: '420px',
                     maxWidth: '900px',
                     objectFit: 'contain', 
-                    filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.3))',
                     willChange: 'transform'
                 }} 
             />
         ) : (
             <h1 style={{ 
                 margin: 0, 
-                color: '#fff', 
+                color: 'var(--text-primary)', 
                 fontSize: '4em', 
                 fontWeight: '800', 
-                textShadow: '0 4px 8px rgba(0,0,0,0.3)',
                 lineHeight: 1.1
             }}>
                 {instance.name}
@@ -299,10 +309,10 @@ const MainContent = memo(({ instance, installedVersion, status, progress, onLaun
       {/* Header */}
       <div style={{ position: 'absolute', top: '40px', right: '40px', display: 'flex', alignItems: 'center', gap: '15px', zIndex: 10 }}>
         <div style={{ textAlign: 'right' }}>
-           <div style={{ fontWeight: 'bold', fontSize: '1.1em', color: '#fff' }}>{user ? user.name : t('auth.guest')}</div>
+           <div style={{ fontWeight: 'bold', fontSize: '1.1em', color: 'var(--text-primary)' }}>{user ? user.name : t('auth.guest')}</div>
            <div 
              onClick={onOpenSettings}
-             style={{ fontSize: '0.9em', color: '#ccc', cursor: 'pointer', opacity: 0.8, transition: 'opacity 0.2s' }}
+             style={{ fontSize: '0.9em', color: 'var(--text-secondary)', cursor: 'pointer', opacity: 0.8, transition: 'opacity 0.2s' }}
              onMouseOver={(e) => e.target.style.opacity = 1}
              onMouseOut={(e) => e.target.style.opacity = 0.8}
            >
@@ -332,7 +342,7 @@ const MainContent = memo(({ instance, installedVersion, status, progress, onLaun
       }}>
         {/* Description */}
         <div>
-            <h3 style={{ margin: 0, color: '#fff', fontSize: '1.2em', fontWeight: 'bold', marginBottom: '8px' }}>
+            <h3 style={{ margin: 0, color: 'var(--text-primary)', fontSize: '1.2em', fontWeight: 'bold', marginBottom: '8px' }}>
                 {t('main.serverInfo')}
             </h3>
 
@@ -353,7 +363,7 @@ const MainContent = memo(({ instance, installedVersion, status, progress, onLaun
                         Online ({serverStatus.players.online}/{serverStatus.players.max})
                         {serverStatus.ping ? ` • ${serverStatus.ping}ms` : ''}
                     </span>
-                    <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#00e676', boxShadow: '0 0 5px #00e676' }}></div>
+                    <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#00e676' }}></div>
                 </div>
             )}
              
@@ -375,7 +385,7 @@ const MainContent = memo(({ instance, installedVersion, status, progress, onLaun
                 </div>
             )}
 
-            <p style={{ margin: 0, color: '#ccc', fontSize: '0.95em', lineHeight: '1.5' }}>
+            <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: '0.95em', lineHeight: '1.5' }}>
                 {instance.description || t('main.readyToPlay')}
             </p>
         </div>
@@ -442,10 +452,9 @@ const MainContent = memo(({ instance, installedVersion, status, progress, onLaun
                 style={{
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     width: '50px', height: '50px', borderRadius: '50%',
-                    background: 'rgba(0,0,0,0.5)', color: '#fff',
-                    border: '1px solid rgba(255,255,255,0.2)',
+                    background: 'var(--input-bg)', color: 'var(--text-primary)',
+                    border: '1px solid var(--border-color)',
                     transition: 'transform 0.2s',
-                    boxShadow: '0 4px 15px rgba(0,0,0,0.3)',
                     cursor: 'pointer'
                 }}
                 onMouseOver={e => e.currentTarget.style.transform = 'scale(1.1)'}
@@ -465,7 +474,6 @@ const MainContent = memo(({ instance, installedVersion, status, progress, onLaun
                        width: '50px', height: '50px', borderRadius: '50%',
                        background: '#5865F2', color: '#fff', 
                        transition: 'transform 0.2s',
-                       boxShadow: '0 4px 15px rgba(0,0,0,0.3)',
                        textDecoration: 'none'
                    }}
                    onMouseOver={e => e.currentTarget.style.transform = 'scale(1.1)'}
@@ -484,10 +492,9 @@ const MainContent = memo(({ instance, installedVersion, status, progress, onLaun
                    style={{
                        display: 'flex', alignItems: 'center', justifyContent: 'center',
                        width: '50px', height: '50px', borderRadius: '50%',
-                       background: 'rgba(255,255,255,0.1)', color: '#fff',
-                       border: '1px solid rgba(255,255,255,0.2)',
+                       background: 'var(--input-bg)', color: 'var(--text-primary)',
+                       border: '1px solid var(--border-color)',
                        transition: 'transform 0.2s',
-                       boxShadow: '0 4px 15px rgba(0,0,0,0.3)',
                        textDecoration: 'none'
                    }}
                    onMouseOver={e => e.currentTarget.style.transform = 'scale(1.1)'}
@@ -513,7 +520,7 @@ const MainContent = memo(({ instance, installedVersion, status, progress, onLaun
                         width: '64px',
                         height: '64px',
                         borderRadius: '12px',
-                        background: '#333',
+                        background: 'var(--input-bg)',
                         color: '#ff6b6b',
                         border: 'none',
                         cursor: 'pointer',
@@ -523,8 +530,8 @@ const MainContent = memo(({ instance, installedVersion, status, progress, onLaun
                         transition: 'all 0.2s',
                         animation: 'fadeIn 0.3s ease-out'
                     }}
-                    onMouseOver={(e) => { e.currentTarget.style.background = '#444'; e.currentTarget.style.transform = 'scale(1.05)'; }}
-                    onMouseOut={(e) => { e.currentTarget.style.background = '#333'; e.currentTarget.style.transform = 'scale(1)'; }}
+                    onMouseOver={(e) => { e.currentTarget.style.background = 'var(--card-bg)'; e.currentTarget.style.transform = 'scale(1.05)'; }}
+                    onMouseOut={(e) => { e.currentTarget.style.background = 'var(--input-bg)'; e.currentTarget.style.transform = 'scale(1)'; }}
                 >
                     <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -542,9 +549,9 @@ const MainContent = memo(({ instance, installedVersion, status, progress, onLaun
                         minHeight: '64px',
                         fontSize: '1.2em',
                         fontWeight: '600',
-                        background: status === 'idle' ? (isMaintenance ? '#2d2d2d' : isUpdateAvailable ? '#e67e22' : 'var(--accent)') : '#333', // Orange for Update, Dark for Maintenance
-                        color: status === 'idle' ? (isMaintenance ? '#666' : isUpdateAvailable ? '#fff' : '#000') : '#fff',
-                        border: isMaintenance ? '1px solid #444' : 'none',
+                        background: status === 'idle' ? (isMaintenance ? 'var(--input-bg)' : isUpdateAvailable ? '#e67e22' : 'var(--accent)') : 'var(--input-bg)', // Orange for Update, Dark for Maintenance
+                        color: status === 'idle' ? (isMaintenance ? 'var(--text-secondary)' : isUpdateAvailable ? '#fff' : '#000') : 'var(--text-primary)',
+                        border: isMaintenance ? '1px solid var(--border-color)' : 'none',
                         borderRadius: '12px',
                         cursor: (status === 'idle' && !isMaintenance) ? 'pointer' : 'not-allowed',
                         transition: 'all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
@@ -552,8 +559,7 @@ const MainContent = memo(({ instance, installedVersion, status, progress, onLaun
                         alignItems: 'center',
                         justifyContent: 'center',
                         gap: '12px',
-                        letterSpacing: '0.5px',
-                        boxShadow: isMaintenance ? 'none' : '0 4px 15px rgba(0,0,0,0.3)'
+                        letterSpacing: '0.5px'
                     }}
                     onMouseOver={(e) => { if (status === 'idle' && !isMaintenance) { e.currentTarget.style.filter = 'brightness(1.1)'; e.currentTarget.style.transform = 'translateY(-2px)'; } }}
                     onMouseOut={(e) => { if (status === 'idle' && !isMaintenance) { e.currentTarget.style.filter = 'brightness(1)'; e.currentTarget.style.transform = 'translateY(0)'; } }}
@@ -653,16 +659,16 @@ const MainContent = memo(({ instance, installedVersion, status, progress, onLaun
             {t('main.version')} {instance.version}
         </div>
 
-        <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
-            <button 
-                onClick={onOpenFolder}
-                title={t('main.openFolder') || "Open Instance Folder"}
+        <div style={{ display: 'flex', gap: '20px', alignItems: 'center', position: 'relative' }}>
+            <button
+                onClick={() => setShowToolsMenu(!showToolsMenu)}
+                title={t('main.tools') || "Instance Tools"}
                 style={{
-                    width: '56px',
-                    height: '56px',
-                    borderRadius: '12px',
-                    border: '1px solid rgba(255,255,255,0.1)',
-                    background: 'rgba(255,255,255,0.05)',
+                    width: '52px',
+                    height: '52px',
+                    borderRadius: '26px',
+                    border: '1px solid rgba(255,255,255,0.08)',
+                    background: 'rgba(0,0,0,0.6)',
                     color: '#fff',
                     cursor: 'pointer',
                     display: 'flex',
@@ -672,45 +678,162 @@ const MainContent = memo(({ instance, installedVersion, status, progress, onLaun
                     backdropFilter: 'blur(4px)',
                     WebkitBackdropFilter: 'blur(4px)',
                     willChange: 'transform, background'
-            }}
-                onMouseOver={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.15)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
-                onMouseOut={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; e.currentTarget.style.transform = 'translateY(0)'; }}
-            >
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
-                </svg>
-            </button>
-
-            <button 
-                onClick={() => onRepair('Repair')}
-                title={t('settings.repairGame') || "Repair Instance"}
-                disabled={status !== 'idle'}
-                style={{
-                    width: '56px',
-                    height: '56px',
-                    borderRadius: '12px',
-                    border: '1px solid rgba(255,255,255,0.1)',
-                    background: 'rgba(255,255,255,0.05)',
-                    color: '#fff',
-                    cursor: status === 'idle' ? 'pointer' : 'not-allowed',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    transition: 'all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
-                    backdropFilter: 'blur(4px)',
-                    WebkitBackdropFilter: 'blur(4px)',
-                    willChange: 'transform, background',
-                    opacity: status === 'idle' ? 1 : 0.5
                 }}
-                onMouseOver={(e) => { if(status === 'idle') { e.currentTarget.style.background = 'rgba(255,255,255,0.15)'; e.currentTarget.style.transform = 'translateY(-2px)'; } }}
-                onMouseOut={(e) => { if(status === 'idle') { e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; e.currentTarget.style.transform = 'translateY(0)'; } }}
+                onMouseOver={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.12)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
+                onMouseOut={(e) => { e.currentTarget.style.background = 'rgba(0,0,0,0.6)'; e.currentTarget.style.transform = 'translateY(0)'; }}
             >
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path>
-                </svg>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <span style={{ width: '18px', height: '2px', borderRadius: '999px', background: '#fff', opacity: 0.9 }} />
+                    <span style={{ width: '18px', height: '2px', borderRadius: '999px', background: '#fff', opacity: 0.9 }} />
+                    <span style={{ width: '18px', height: '2px', borderRadius: '999px', background: '#fff', opacity: 0.9 }} />
+                </div>
             </button>
 
-            {/* Animation Toggle Button */}
+            {showToolsMenu && (
+                <div
+                    style={{
+                        position: 'absolute',
+                        left: 0,
+                        bottom: 68,
+                        background: 'rgba(0,0,0,0.9)',
+                        borderRadius: '14px',
+                        padding: '8px 0',
+                        border: '1px solid rgba(255,255,255,0.08)',
+                        minWidth: '220px',
+                        backdropFilter: 'blur(6px)',
+                        WebkitBackdropFilter: 'blur(6px)',
+                        zIndex: 20,
+                        opacity: toolsMenuAnimate ? 1 : 0,
+                        transform: toolsMenuAnimate ? 'translateY(0) scale(1)' : 'translateY(10px) scale(0.96)',
+                        transition: 'all 0.18s cubic-bezier(0.25, 0.8, 0.25, 1)'
+                    }}
+                >
+                    <button
+                        onClick={() => { setShowToolsMenu(false); onOpenFolder && onOpenFolder() }}
+                        style={{
+                            width: '100%',
+                            padding: '10px 16px',
+                            background: 'transparent',
+                            border: 'none',
+                            color: '#fff',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'flex-start',
+                            gap: '10px',
+                            cursor: 'pointer',
+                            fontSize: '0.9em'
+                        }}
+                        onMouseOver={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.08)' }}
+                        onMouseOut={(e) => { e.currentTarget.style.background = 'transparent' }}
+                    >
+                        <span
+                            style={{
+                                width: '26px',
+                                height: '26px',
+                                borderRadius: '999px',
+                                background: 'rgba(255,255,255,0.08)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center'
+                            }}
+                        >
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                            </svg>
+                        </span>
+                        <span>{t('main.openFolder') || "Open Instance Folder"}</span>
+                    </button>
+
+                    <button
+                        onClick={() => {
+                            if (!canModifyInstance) return
+                            setShowToolsMenu(false)
+                            onRepair && onRepair('Repair')
+                        }}
+                        disabled={!canModifyInstance}
+                        style={{
+                            width: '100%',
+                            padding: '10px 16px',
+                            background: 'transparent',
+                            border: 'none',
+                            color: canModifyInstance ? '#fff' : 'rgba(255,255,255,0.4)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'flex-start',
+                            gap: '10px',
+                            cursor: canModifyInstance ? 'pointer' : 'not-allowed',
+                            fontSize: '0.9em'
+                        }}
+                        onMouseOver={(e) => { if (canModifyInstance) e.currentTarget.style.background = 'rgba(255,255,255,0.08)' }}
+                        onMouseOut={(e) => { e.currentTarget.style.background = 'transparent' }}
+                    >
+                        <span
+                            style={{
+                                width: '26px',
+                                height: '26px',
+                                borderRadius: '999px',
+                                background: 'rgba(255,255,255,0.08)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center'
+                            }}
+                        >
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path>
+                            </svg>
+                        </span>
+                        <span>{t('settings.repairGame') || "Repair Game Files"}</span>
+                    </button>
+
+                    {onUninstallInstance && (
+                        <button
+                            onClick={() => {
+                                if (!canModifyInstance) return
+                                setShowToolsMenu(false)
+                                onUninstallInstance()
+                            }}
+                            disabled={!canModifyInstance}
+                            style={{
+                                width: '100%',
+                                padding: '10px 16px',
+                                background: 'transparent',
+                                border: 'none',
+                                color: canModifyInstance ? '#ff8a80' : 'rgba(255,255,255,0.4)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'flex-start',
+                                gap: '10px',
+                                cursor: canModifyInstance ? 'pointer' : 'not-allowed',
+                                fontSize: '0.9em'
+                            }}
+                            onMouseOver={(e) => { if (canModifyInstance) e.currentTarget.style.background = 'rgba(255,64,64,0.16)' }}
+                            onMouseOut={(e) => { e.currentTarget.style.background = 'transparent' }}
+                        >
+                            <span
+                                style={{
+                                    width: '26px',
+                                    height: '26px',
+                                    borderRadius: '999px',
+                                    background: 'rgba(255,64,64,0.2)',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center'
+                                }}
+                            >
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <polyline points="3 6 5 6 21 6"></polyline>
+                                    <path d="M19 6l-1 14H6L5 6"></path>
+                                    <path d="M10 11v6"></path>
+                                    <path d="M14 11v6"></path>
+                                    <path d="M9 6V4h6v2"></path>
+                                </svg>
+                            </span>
+                            <span>{t('settings.uninstallInstance') || "Uninstall Instance"}</span>
+                        </button>
+                    )}
+                </div>
+            )}
+
             {(videoSrc || isBgGif) && (
                 <button 
                     onClick={toggleAnimation}
@@ -718,21 +841,29 @@ const MainContent = memo(({ instance, installedVersion, status, progress, onLaun
                     style={{
                         width: '56px',
                         height: '56px',
-                        borderRadius: '12px',
-                        border: '1px solid rgba(255,255,255,0.1)',
-                        background: enableAnimation ? 'rgba(255, 215, 0, 0.1)' : 'rgba(255,255,255,0.05)',
-                        color: enableAnimation ? 'var(--accent)' : '#fff',
+                        borderRadius: '14px',
+                        border: 'none',
+                        background: 'rgba(20, 20, 20, 0.6)',
+                        color: enableAnimation ? 'var(--accent)' : 'rgba(255, 255, 255, 0.6)',
                         cursor: 'pointer',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        transition: 'all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
-                        backdropFilter: 'blur(4px)',
-                        WebkitBackdropFilter: 'blur(4px)',
+                        transition: 'all 0.2s ease',
+                        backdropFilter: 'blur(10px)',
+                        WebkitBackdropFilter: 'blur(10px)',
                         willChange: 'transform, background'
                     }}
-                    onMouseOver={(e) => { e.currentTarget.style.background = enableAnimation ? 'rgba(255, 215, 0, 0.2)' : 'rgba(255,255,255,0.15)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
-                    onMouseOut={(e) => { e.currentTarget.style.background = enableAnimation ? 'rgba(255, 215, 0, 0.1)' : 'rgba(255,255,255,0.05)'; e.currentTarget.style.transform = 'translateY(0)'; }}
+                    onMouseOver={(e) => { 
+                        e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)'; 
+                        e.currentTarget.style.transform = 'scale(1.05)'; 
+                        e.currentTarget.style.color = 'var(--accent)';
+                    }}
+                    onMouseOut={(e) => { 
+                        e.currentTarget.style.background = 'rgba(20, 20, 20, 0.6)'; 
+                        e.currentTarget.style.transform = 'scale(1)'; 
+                        e.currentTarget.style.color = enableAnimation ? 'var(--accent)' : 'rgba(255, 255, 255, 0.6)';
+                    }}
                 >
                     {enableAnimation ? (
                             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

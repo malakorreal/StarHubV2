@@ -3,6 +3,7 @@ export default {
     guest: "Guest",
     loginFailed: "Login Failed",
     loginError: "Login Error",
+    noMinecraft: "Minecraft Java Edition not found on this account.",
     loginFailedPrefix: "Login Failed: ",
     loginErrorPrefix: "Login Error: ",
     launchFailedPrefix: "Launch Failed: ",
@@ -20,6 +21,8 @@ export default {
     serverInfo: "Server Info",
     readyToPlay: "Ready to play.",
     maintenance: "Server Closed",
+    loadingInstance: "Loading Instance...",
+    checkSession: "Checking Session...",
     announcement: "Announcement",
     version: "Version",
     play: "Play",
@@ -38,8 +41,16 @@ export default {
   },
   settings: {
     title: "Settings",
+    loadingAccounts: "Loading Accounts...",
+    addAccount: "Add Account",
     general: "General",
     account: "Account",
+    noAccounts: "No accounts found.",
+    active: "Using Account",
+    inactive: "Inactive",
+    switch: "Switch",
+    removeAccount: "Remove Account",
+    confirmRemoveAccount: "Are you sure you want to remove this account?",
     updates: "Check Updates",
     autoCheckUpdate: "Auto Check Updates",
     downloadSpeed: "Download Speed",
@@ -48,6 +59,7 @@ export default {
     ramAllocation: "Memory Allocation (RAM)",
     systemRam: "System RAM",
     language: "Language",
+    uninstallInstance: "Uninstall Instance",
     save: "Save Changes",
     cancel: "Cancel",
     switchAccount: "Switch Account",
@@ -74,6 +86,7 @@ export default {
     resolution: "Screen Resolution",
     fullscreen: "Fullscreen",
     width: "Width",
+    noAccount: "Not found Account",
     height: "Height",
     launcherGraphics: "Launcher Interface",
     theme: "Theme Color",
@@ -91,6 +104,7 @@ export default {
     troubleshoot: "Troubleshoot",
     repairGame: "Repair Game Files",
     repairDesc: "Use this if game crashes or files are missing.",
+    restartLauncher: "Restart Launcher",
     reset: "Reset Settings",
     resetDesc: "Reset all settings to default",
     resetConfirm: "Are you sure you want to reset all settings?"
@@ -111,7 +125,10 @@ export default {
     repairNow: "Repair Now",
     updateVerification: "Update Verification",
     updateNow: "Update Now",
-    updateConfirmMessage: "Are you sure you want to update <span style='color: var(--accent); font-weight: bold;'>{instanceName}</span>? <br/><br/>This will re-download core files and verify integrity."
+    updateConfirmMessage: "Are you sure you want to update <span style='color: var(--accent); font-weight: bold;'>{instanceName}</span>? <br/><br/>This will re-download core files and verify integrity.",
+    uninstallVerification: "Uninstall Instance",
+    uninstallNow: "Uninstall Now",
+    uninstallConfirmMessage: "Are you sure you want to uninstall <span style='color: var(--accent); font-weight: bold;'>{instanceName}</span> from this PC?<br/><br/>Local game files for this instance will be removed, but you can reinstall it later by launching again."
   },
   notifications: {
     folderNotFound: "Folder Not Found",
@@ -140,6 +157,14 @@ export default {
     error: "Update Failed",
     errorMessage: "Something went wrong while updating. Please try again later.",
     checkRepoVisibility: "Please check if the GitHub Repository is set to Public."
+  },
+  patch: {
+    changes: "File Changes Summary",
+    added: "Added: {count} files",
+    deleted: "Deleted: {count} files",
+    corrupt: "Corrupt: {count} files",
+    noChanges: "No file changes detected",
+    title: "Game File Status"
   },
   common: {
     close: "Close"

@@ -3,7 +3,7 @@ import { getStore } from './store'
 
 const clientId = '1432203667829821450' 
 let rpc
-let currentLang = 'th' // Default
+let currentLang = 'th'
 
 const translations = {
     en: {
@@ -22,17 +22,16 @@ const translations = {
     }
 }
 
+let lastStatus = 'selecting'
+let lastInstanceName = null
+let lastTimestamp = null
+
 export function updateRPCLanguage(lang) {
     currentLang = lang
-    // Force refresh with last known state
     if (rpc && lastStatus) {
         setActivity(lastStatus, lastInstanceName, lastTimestamp)
     }
 }
-
-let lastStatus = 'selecting'
-let lastInstanceName = null
-let lastTimestamp = null
 
 export function setupRPC(mainWindow) {
   DiscordRPC.register(clientId)
@@ -50,7 +49,7 @@ export function setupRPC(mainWindow) {
 export function setActivity(status, instanceName = null, startTimestamp = null) {
   const t = translations[currentLang] || translations.en
 
-  let details = t.using // Static: "กําลังใช้ StarHub"
+  let details = t.using
   let state = t.inLauncher
 
   if (status === 'login') {
@@ -66,7 +65,6 @@ export function setActivity(status, instanceName = null, startTimestamp = null) 
   } else if (status === 'in_launcher') {
       state = t.inLauncher
   } else {
-      // Fallback if legacy calls pass "Browsing StarHub" etc.
       if (status === 'Browsing StarHub') state = t.selecting
       else if (status === 'In Launcher') state = t.inLauncher
       else if (status && status.startsWith('Playing ')) {
@@ -77,7 +75,6 @@ export function setActivity(status, instanceName = null, startTimestamp = null) 
       }
   }
 
-  // Store for refresh
   lastStatus = status
   lastInstanceName = instanceName
   lastTimestamp = startTimestamp
@@ -90,7 +87,7 @@ export function setActivity(status, instanceName = null, startTimestamp = null) 
   const activity = {
     details: details,
     state: state,
-    startTimestamp,
+    startTimestamp: startTimestamp ? Math.floor(startTimestamp / 1000) : undefined,
     largeImageKey: 'shubnopeople',
     largeImageText: 'StarHub',
     instance: false,
@@ -106,4 +103,27 @@ export function setActivity(status, instanceName = null, startTimestamp = null) 
   }
 
   rpc.setActivity(activity)
+}
+
+export function clearRPCActivity() {
+    lastStatus = null
+    lastInstanceName = null
+    lastTimestamp = null
+    if (!rpc) return
+    try {
+        rpc.clearActivity()
+    } catch (e) {
+        console.error('Failed to clear RPC activity', e)
+    }
+}
+
+export function shutdownRPC() {
+    clearRPCActivity()
+    if (!rpc) return
+    try {
+        rpc.destroy()
+    } catch (e) {
+        console.error('Failed to destroy RPC client', e)
+    }
+    rpc = null
 }

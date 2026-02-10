@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react'
+import { themes as availableThemes } from '../themes'
 import RepairConfirmationModal from './RepairConfirmationModal'
 
-function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = [], onAddCode, onRemoveCode, t, changeLanguage, currentLanguage, showToast, selectedInstance }) {
+function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = [], onAddCode, onRemoveCode, t, changeLanguage, currentLanguage, showToast, onInstalledVersionsChange, onUninstallInstance, selectedInstance, enableAnimation, setEnableAnimation }) {
   const [activeTab, setActiveTab] = useState('general')
   const [ram, setRam] = useState(4096)
   const [systemRam, setSystemRam] = useState(0) // Default 0 to check if value is received
@@ -18,8 +19,29 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
   const [maxConcurrentDownloads, setMaxConcurrentDownloads] = useState(5)
   const [autoCheckUpdates, setAutoCheckUpdates] = useState(true)
   const [checkingForUpdates, setCheckingForUpdates] = useState(false)
-  const [theme, setTheme] = useState(localStorage.getItem('theme') || '#ffd700')
+  const [themeId, setThemeId] = useState(localStorage.getItem('theme_id') || 'gold')
   const [closeBehavior, setCloseBehavior] = useState('ask')
+  const [bgAnimation, setBgAnimation] = useState(!!enableAnimation)
+  const [accounts, setAccounts] = useState([])
+  const [loadingAccounts, setLoadingAccounts] = useState(false)
+
+  useEffect(() => {
+      if (activeTab === 'account' && window.api && window.api.getAccounts) {
+          setLoadingAccounts(true)
+          window.api.getAccounts()
+            .then(accs => {
+                setAccounts(accs)
+            })
+            .catch(console.error)
+            .finally(() => setLoadingAccounts(false))
+      }
+  }, [activeTab, user])
+
+  const handleRestartLauncher = () => {
+    if (window.api && window.api.restartLauncher) {
+      window.api.restartLauncher()
+    }
+  }
   const handleBackup = async () => {
     if (selectedInstance && window.api && window.api.backupInstanceData) {
       const res = await window.api.backupInstanceData(selectedInstance)
@@ -43,16 +65,11 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
       }
     }
   }
-
-  const themes = [
-    { name: 'Gold', color: '#ffd700' },
-    { name: 'Red', color: '#ff4d4d' },
-    { name: 'Blue', color: '#4d79ff' },
-    { name: 'Green', color: '#00e676' },
-    { name: 'Purple', color: '#d500f9' },
-    { name: 'Cyan', color: '#00e5ff' },
-    { name: 'Pink', color: '#ff4081' }
-  ]
+  const handleUninstallInstance = () => {
+    if (!selectedInstance) return
+    if (!onUninstallInstance) return
+    onUninstallInstance()
+  }
 
   useEffect(() => {
     if (window.api && window.api.getSettings) {
@@ -70,6 +87,10 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
             if (s && typeof s.maxConcurrentDownloads !== 'undefined') setMaxConcurrentDownloads(s.maxConcurrentDownloads)
             if (s && typeof s.autoCheckUpdates !== 'undefined') setAutoCheckUpdates(s.autoCheckUpdates)
             if (s && typeof s.closeBehavior !== 'undefined') setCloseBehavior(s.closeBehavior)
+            if (s && typeof s.bgAnimation !== 'undefined') {
+                setBgAnimation(!!s.bgAnimation)
+                if (setEnableAnimation) setEnableAnimation(!!s.bgAnimation)
+            }
         })
     }
   }, [])
@@ -85,9 +106,11 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
             maxDownloadSpeed,
             maxConcurrentDownloads,
             autoCheckUpdates,
-            closeBehavior
+            closeBehavior,
+            bgAnimation
         })
       }
+      if (setEnableAnimation) setEnableAnimation(bgAnimation)
       if (showToast) showToast(t('settings.saved'), 'success')
       onClose()
   }
@@ -129,6 +152,8 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
                 setMaxConcurrentDownloads(defaults.maxConcurrentDownloads)
                 setAutoCheckUpdates(defaults.autoCheckUpdates)
                 setCloseBehavior(defaults.closeBehavior || 'ask')
+                setBgAnimation(!!defaults.bgAnimation)
+                if (setEnableAnimation) setEnableAnimation(!!defaults.bgAnimation)
                 if (showToast) showToast(t('settings.saved'), 'success')
             }
         }
@@ -140,19 +165,25 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
       onClose()
   }
 
-  const handleThemeChange = (color) => {
-      setTheme(color)
-      localStorage.setItem('theme', color)
-      document.documentElement.style.setProperty('--accent', color)
+  const handleThemeChange = (id) => {
+      setThemeId(id)
+      localStorage.setItem('theme_id', id)
+      
+      const theme = availableThemes[id]
+      if (theme) {
+          Object.entries(theme.colors).forEach(([key, value]) => {
+              document.documentElement.style.setProperty(key, value)
+          })
+      }
   }
 
   return (
     <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 2000, backdropFilter: 'blur(5px)', willChange: 'opacity, transform' }}>
-       <div style={{ background: '#222', borderRadius: '12px', width: '600px', height: '480px', display: 'flex', overflow: 'hidden', boxShadow: '0 10px 30px rgba(0,0,0,0.5)' }}>
+       <div style={{ background: 'var(--modal-bg)', borderRadius: '12px', width: '600px', height: '480px', display: 'flex', overflow: 'hidden', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}>
           
           {/* Sidebar */}
-          <div style={{ width: '180px', background: '#2a2a2a', padding: '20px', display: 'flex', flexDirection: 'column', gap: '5px' }}>
-              <div style={{ marginBottom: '20px', fontWeight: 'bold', fontSize: '1.2em', color: '#fff' }}>{t('settings.title')}</div>
+          <div style={{ width: '180px', background: 'var(--sidebar-bg)', padding: '20px', display: 'flex', flexDirection: 'column', gap: '5px' }}>
+              <div style={{ marginBottom: '20px', fontWeight: 'bold', fontSize: '1.2em', color: 'var(--text-primary)' }}>{t('settings.title')}</div>
               
               <button 
                 onClick={() => setActiveTab('general')}
@@ -160,7 +191,7 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
                     textAlign: 'left', 
                     padding: '10px 15px', 
                     background: activeTab === 'general' ? 'var(--accent)' : 'transparent', 
-                    color: activeTab === 'general' ? '#000' : '#aaa', 
+                    color: activeTab === 'general' ? '#000' : 'var(--text-secondary)', 
                     border: 'none', 
                     borderRadius: '6px', 
                     cursor: 'pointer',
@@ -177,7 +208,7 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
                     textAlign: 'left', 
                     padding: '10px 15px', 
                     background: activeTab === 'launcher' ? 'var(--accent)' : 'transparent', 
-                    color: activeTab === 'launcher' ? '#000' : '#aaa', 
+                    color: activeTab === 'launcher' ? '#000' : 'var(--text-secondary)', 
                     border: 'none', 
                     borderRadius: '6px', 
                     cursor: 'pointer',
@@ -194,7 +225,7 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
                     textAlign: 'left', 
                     padding: '10px 15px', 
                     background: activeTab === 'graphics' ? 'var(--accent)' : 'transparent', 
-                    color: activeTab === 'graphics' ? '#000' : '#aaa', 
+                    color: activeTab === 'graphics' ? '#000' : 'var(--text-secondary)', 
                     border: 'none', 
                     borderRadius: '6px', 
                     cursor: 'pointer',
@@ -211,7 +242,7 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
                     textAlign: 'left', 
                     padding: '10px 15px', 
                     background: activeTab === 'account' ? 'var(--accent)' : 'transparent', 
-                    color: activeTab === 'account' ? '#000' : '#aaa', 
+                    color: activeTab === 'account' ? '#000' : 'var(--text-secondary)', 
                     border: 'none', 
                     borderRadius: '6px', 
                     cursor: 'pointer',
@@ -228,7 +259,7 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
                     textAlign: 'left', 
                     padding: '10px 15px', 
                     background: activeTab === 'redeem' ? 'var(--accent)' : 'transparent', 
-                    color: activeTab === 'redeem' ? '#000' : '#aaa', 
+                    color: activeTab === 'redeem' ? '#000' : 'var(--text-secondary)', 
                     border: 'none', 
                     borderRadius: '6px', 
                     cursor: 'pointer',
@@ -246,14 +277,49 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
               {/* General Tab */}
               {activeTab === 'general' && (
                   <div style={{ animation: 'fadeIn 0.3s' }}>
-                      <h3 style={{ marginTop: 0, marginBottom: '20px', borderBottom: '1px solid #444', paddingBottom: '10px' }}>{t('settings.general')}</h3>
+                      <h3 style={{ marginTop: 0, marginBottom: '20px', borderBottom: '1px solid var(--border-color)', paddingBottom: '10px', color: 'var(--text-primary)' }}>{t('settings.general')}</h3>
                       
+                      {/* Theme Selector */}
+                      <div style={{ marginBottom: '25px' }}>
+                          <label style={{ display: 'block', marginBottom: '10px', color: 'var(--text-secondary)' }}>{t('settings.theme') || 'Theme'}</label>
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
+                              {Object.values(availableThemes).map(theme => (
+                                  <div 
+                                      key={theme.id}
+                                      onClick={() => handleThemeChange(theme.id)}
+                                      style={{
+                                          padding: '10px',
+                                          borderRadius: '8px',
+                                          border: `2px solid ${themeId === theme.id ? 'var(--accent)' : 'transparent'}`,
+                                          background: theme.colors['--card-bg'],
+                                          cursor: 'pointer',
+                                          textAlign: 'center',
+                                          transition: 'all 0.2s',
+                                          opacity: 0.9
+                                      }}
+                                      onMouseOver={e => e.currentTarget.style.opacity = 1}
+                                      onMouseOut={e => e.currentTarget.style.opacity = 0.9}
+                                  >
+                                      <div style={{ 
+                                          width: '100%', height: '30px', 
+                                          background: theme.colors['--sidebar-bg'], 
+                                          borderRadius: '4px', marginBottom: '8px',
+                                          display: 'flex', alignItems: 'center', justifyContent: 'center'
+                                      }}>
+                                          <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: theme.colors['--accent'] }}></div>
+                                      </div>
+                                      <div style={{ fontSize: '0.85em', color: theme.colors['--text-primary'], fontWeight: 'bold' }}>{theme.name}</div>
+                                  </div>
+                              ))}
+                          </div>
+                      </div>
+
                       {/* RAM Allocation */}
                       <div style={{ marginBottom: '25px' }}>
-                          <label style={{ display: 'block', marginBottom: '5px', color: '#ccc' }}>
+                          <label style={{ display: 'block', marginBottom: '5px', color: 'var(--text-secondary)' }}>
                             {t('settings.ramAllocation')}: <span style={{ color: 'var(--accent)', fontWeight: 'bold' }}>{ram} MB</span>
                           </label>
-                          <div style={{ fontSize: '0.8em', color: '#666', marginBottom: '10px' }}>
+                          <div style={{ fontSize: '0.8em', color: 'var(--text-secondary)', marginBottom: '10px' }}>
                               {t('settings.systemRam') || (currentLanguage === 'th' ? 'RAM ทั้งหมดในเครื่อง' : 'System RAM')}: {systemRam > 0 ? systemRam : '...'} MB
                           </div>
                           <input 
@@ -266,7 +332,7 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
                             className="ram-slider"
                             style={{ width: '100%', cursor: 'pointer', margin: '10px 0' }}
                           />
-                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8em', color: '#666', marginTop: '5px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8em', color: 'var(--text-secondary)', marginTop: '5px' }}>
                               <span>1 GB</span>
                               <span>{Math.round(Math.max(16384, systemRam > 0 ? systemRam : 16384) / 1024)} GB</span>
                           </div>
@@ -274,7 +340,7 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
 
                       {/* Java Arguments */}
                       <div style={{ marginBottom: '25px' }}>
-                        <label style={{ display: 'block', marginBottom: '10px', color: '#ccc' }}>{t('settings.javaArgs')}</label>
+                        <label style={{ display: 'block', marginBottom: '10px', color: 'var(--text-secondary)' }}>{t('settings.javaArgs')}</label>
                         <input
                             type="text"
                             value={javaArgs}
@@ -283,10 +349,10 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
                             style={{
                                 width: '100%',
                                 padding: '10px',
-                                background: '#333',
-                                border: '1px solid #444',
+                                background: 'var(--input-bg)',
+                                border: '1px solid var(--border-color)',
                                 borderRadius: '4px',
-                                color: '#fff',
+                                color: 'var(--text-primary)',
                                 fontFamily: 'monospace'
                             }}
                         />
@@ -294,13 +360,13 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
 
                       {/* Auto Join Toggle */}
                       <div style={{ marginBottom: '25px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <label style={{ color: '#ccc' }}>{t('settings.autoJoin') || 'Auto Join Server'}</label>
+                        <label style={{ color: 'var(--text-secondary)' }}>{t('settings.autoJoin') || 'Auto Join Server'}</label>
                         <div 
                             onClick={() => setAutoJoin(!autoJoin)}
                             style={{
                                 width: '50px',
                                 height: '26px',
-                                background: autoJoin ? 'var(--accent)' : '#444',
+                                background: autoJoin ? 'var(--accent)' : 'var(--input-bg)',
                                 borderRadius: '13px',
                                 position: 'relative',
                                 cursor: 'pointer',
@@ -310,7 +376,7 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
                             <div style={{
                                 width: '20px',
                                 height: '20px',
-                                background: '#fff',
+                                background: 'var(--text-primary)',
                                 borderRadius: '50%',
                                 position: 'absolute',
                                 top: '3px',
@@ -324,14 +390,14 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
                       {selectedInstance && (
                           <>
                               <div style={{ marginBottom: '25px' }}>
-                                  <label style={{ display: 'block', marginBottom: '10px', color: '#ccc' }}>{t('settings.troubleshoot') || 'Troubleshoot'}</label>
+                                  <label style={{ display: 'block', marginBottom: '10px', color: 'var(--text-secondary)' }}>{t('settings.troubleshoot') || 'Troubleshoot'}</label>
                                   <button
                                       onClick={() => setShowRepairModal(true)}
                                       style={{
                                           width: '100%',
                                           padding: '12px',
-                                          background: '#d9534f',
-                                          color: 'white',
+                                          background: 'var(--danger)',
+                                          color: 'var(--text-primary)',
                                           border: 'none',
                                           borderRadius: '6px',
                                           cursor: 'pointer',
@@ -339,34 +405,34 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
                                           transition: 'background 0.2s',
                                           marginBottom: '5px'
                                       }}
-                                      onMouseOver={(e) => e.target.style.background = '#c9302c'}
-                                      onMouseOut={(e) => e.target.style.background = '#d9534f'}
+                                      onMouseOver={(e) => e.target.style.opacity = '0.8'}
+                                      onMouseOut={(e) => e.target.style.opacity = '1'}
                                   >
                                       {t('settings.repairGame') || (currentLanguage === 'th' ? 'ซ่อมแซมไฟล์เกม (แก้เกมเด้ง)' : 'Repair Game Files')}
                                   </button>
-                                  <div style={{ fontSize: '0.8em', color: '#888', lineHeight: '1.4' }}>
+                                  <div style={{ fontSize: '0.8em', color: 'var(--text-secondary)', lineHeight: '1.4' }}>
                                       {t('settings.repairDesc') || (currentLanguage === 'th' ? 'ใช้เมื่อเข้าเกมไม่ได้ หรือไฟล์ไม่ครบ' : 'Use this if game crashes on startup.')}
                                   </div>
                               </div>
 
                               <div style={{ marginBottom: '25px' }}>
-                                  <label style={{ display: 'block', marginBottom: '10px', color: '#ccc' }}>{t('settings.backupData') || 'Backup Data'}</label>
+                                  <label style={{ display: 'block', marginBottom: '10px', color: 'var(--text-secondary)' }}>{t('settings.backupData') || 'Backup Data'}</label>
                                   <button
                                       onClick={handleBackup}
                                       style={{
                                           width: '100%',
                                           padding: '12px',
-                                          background: '#333',
-                                          border: '1px solid #555',
-                                          color: '#ccc',
+                                          background: 'var(--input-bg)',
+                                          border: '1px solid var(--border-color)',
+                                          color: 'var(--text-primary)',
                                           borderRadius: '6px',
                                           cursor: 'pointer',
                                           fontWeight: 'bold',
                                           transition: 'all 0.2s',
                                           marginBottom: '5px'
                                       }}
-                                      onMouseOver={(e) => { e.target.style.background = '#444'; e.target.style.color = '#fff'; e.target.style.borderColor = '#666' }}
-                                      onMouseOut={(e) => { e.target.style.background = '#333'; e.target.style.color = '#ccc'; e.target.style.borderColor = '#555' }}
+                                      onMouseOver={(e) => { e.target.style.background = 'var(--border-color)'; }}
+                                      onMouseOut={(e) => { e.target.style.background = 'var(--input-bg)'; }}
                                   >
                                       {t('settings.backupNow') || 'Backup Now'}
                                   </button>
@@ -375,30 +441,55 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
                                       style={{
                                           width: '100%',
                                           padding: '12px',
-                                          background: '#333',
-                                          border: '1px solid #555',
-                                          color: '#ccc',
+                                          background: 'var(--input-bg)',
+                                          border: '1px solid var(--border-color)',
+                                          color: 'var(--text-primary)',
                                           borderRadius: '6px',
                                           cursor: 'pointer',
                                           fontWeight: 'bold',
                                           transition: 'all 0.2s',
                                           marginBottom: '5px'
                                       }}
-                                      onMouseOver={(e) => { e.target.style.background = '#444'; e.target.style.color = '#fff'; e.target.style.borderColor = '#666' }}
-                                      onMouseOut={(e) => { e.target.style.background = '#333'; e.target.style.color = '#ccc'; e.target.style.borderColor = '#555' }}
+                                      onMouseOver={(e) => { e.target.style.background = 'var(--border-color)'; }}
+                                      onMouseOut={(e) => { e.target.style.background = 'var(--input-bg)'; }}
                                   >
                                       {currentLanguage === 'th' ? 'เปิดโฟลเดอร์ Crash Reports' : 'Open Crash Reports Folder'}
                                   </button>
-                                  <div style={{ fontSize: '0.8em', color: '#888', lineHeight: '1.4' }}>
+                                  <div style={{ fontSize: '0.8em', color: 'var(--text-secondary)', lineHeight: '1.4' }}>
                                       {t('settings.backupDataDesc') || 'Backup Emotes, Skin, Figura, etc.'}
                                   </div>
                               </div>
                           </>
                       )}
 
+                      <div style={{ marginBottom: '25px' }}>
+                          <label style={{ display: 'block', marginBottom: '10px', color: 'var(--text-secondary)' }}>
+                              {t('settings.troubleshoot') || 'Troubleshoot'}
+                          </label>
+                          <button
+                              onClick={handleRestartLauncher}
+                              style={{
+                                  width: '100%',
+                                  padding: '12px',
+                                  background: 'var(--input-bg)',
+                                  border: '1px solid var(--border-color)',
+                                  color: 'var(--text-primary)',
+                                  borderRadius: '6px',
+                                  cursor: 'pointer',
+                                  fontWeight: 'bold',
+                                  transition: 'background 0.2s',
+                                  marginBottom: '5px'
+                              }}
+                              onMouseOver={(e) => { e.target.style.background = 'var(--border-color)' }}
+                              onMouseOut={(e) => { e.target.style.background = 'var(--input-bg)' }}
+                          >
+                              {t('settings.restartLauncher') || (currentLanguage === 'th' ? 'รีสตาร์ท Launcher' : 'Restart Launcher')}
+                          </button>
+                      </div>
+
                       {/* Download Speed */}
                       <div style={{ marginBottom: '25px' }}>
-                          <label style={{ display: 'block', marginBottom: '10px', color: '#ccc' }}>
+                          <label style={{ display: 'block', marginBottom: '10px', color: 'var(--text-secondary)' }}>
                               {t('settings.downloadSpeed') || (currentLanguage === 'th' ? 'ความเร็วการดาวน์โหลด (สูงสุด)' : 'Max Download Speed')}
                           </label>
                           <select
@@ -407,10 +498,10 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
                               style={{
                                   width: '100%',
                                   padding: '10px',
-                                  background: '#333',
-                                  border: '1px solid #444',
+                                  background: 'var(--input-bg)',
+                                  border: '1px solid var(--border-color)',
                                   borderRadius: '4px',
-                                  color: '#fff'
+                                  color: 'var(--text-primary)'
                               }}
                           >
                               <option value={0}>{currentLanguage === 'th' ? 'ไม่จำกัด (Unlimited)' : 'Unlimited'}</option>
@@ -424,7 +515,7 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
 
                       {/* Concurrent Downloads */}
                       <div style={{ marginBottom: '25px' }}>
-                          <label style={{ display: 'block', marginBottom: '10px', color: '#ccc' }}>
+                          <label style={{ display: 'block', marginBottom: '10px', color: 'var(--text-secondary)' }}>
                               {t('settings.concurrentDownloads') || (currentLanguage === 'th' ? 'จำนวนไฟล์ที่โหลดพร้อมกัน' : 'Concurrent Downloads')}: <span style={{ color: 'var(--accent)', fontWeight: 'bold' }}>{maxConcurrentDownloads}</span>
                           </label>
                           <input 
@@ -437,7 +528,7 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
                             className="ram-slider"
                             style={{ width: '100%', cursor: 'pointer', margin: '10px 0' }}
                           />
-                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8em', color: '#666', marginTop: '5px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8em', color: 'var(--text-secondary)', marginTop: '5px' }}>
                               <span>1</span>
                               <span>10</span>
                           </div>
@@ -445,19 +536,19 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
 
                       {/* Updates */}
                       <div style={{ marginBottom: '25px' }}>
-                          <label style={{ display: 'block', marginBottom: '10px', color: '#ccc' }}>
+                          <label style={{ display: 'block', marginBottom: '10px', color: 'var(--text-secondary)' }}>
                               {t('settings.updates') || (currentLanguage === 'th' ? 'การอัปเดต' : 'Updates')}
                           </label>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                               {/* Auto Check Toggle */}
                               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                  <span style={{ color: '#aaa' }}>{t('settings.autoCheckUpdate') || (currentLanguage === 'th' ? 'ตรวจสอบอัตโนมัติเมื่อเปิดโปรแกรม' : 'Auto-check on startup')}</span>
+                                  <span style={{ color: 'var(--text-secondary)' }}>{t('settings.autoCheckUpdate') || (currentLanguage === 'th' ? 'ตรวจสอบอัตโนมัติเมื่อเปิดโปรแกรม' : 'Auto-check on startup')}</span>
                                   <div 
                                       onClick={() => setAutoCheckUpdates(!autoCheckUpdates)}
                                       style={{
                                           width: '40px',
                                           height: '20px',
-                                          background: autoCheckUpdates ? 'var(--accent)' : '#444',
+                                          background: autoCheckUpdates ? 'var(--accent)' : 'var(--input-bg)',
                                           borderRadius: '10px',
                                           position: 'relative',
                                           cursor: 'pointer',
@@ -467,7 +558,7 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
                                       <div style={{
                                           width: '16px',
                                           height: '16px',
-                                          background: '#fff',
+                                          background: 'var(--text-primary)',
                                           borderRadius: '50%',
                                           position: 'absolute',
                                           top: '2px',
@@ -491,9 +582,9 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
                                   style={{
                                       width: '100%',
                                       padding: '10px',
-                                      background: '#333',
-                                      border: '1px solid #555',
-                                      color: checkingForUpdates ? '#888' : '#fff',
+                                      background: 'var(--input-bg)',
+                                      border: '1px solid var(--border-color)',
+                                      color: checkingForUpdates ? 'var(--text-secondary)' : 'var(--text-primary)',
                                       borderRadius: '4px',
                                       cursor: checkingForUpdates ? 'default' : 'pointer'
                                   }}
@@ -505,17 +596,17 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
 
                       {/* Language Selection */}
                       <div style={{ marginBottom: '20px' }}>
-                        <label style={{ display: 'block', marginBottom: '10px', color: '#ccc' }}>{t('settings.language')}</label>
+                        <label style={{ display: 'block', marginBottom: '10px', color: 'var(--text-secondary)' }}>{t('settings.language')}</label>
                         <div style={{ display: 'flex', gap: '10px' }}>
                             <button
                                 onClick={() => changeLanguage('th')}
                                 style={{
                                     flex: 1,
                                     padding: '10px',
-                                    background: currentLanguage === 'th' ? 'var(--accent)' : 'rgba(255,255,255,0.1)',
-                                    color: currentLanguage === 'th' ? '#000' : '#fff',
+                                    background: currentLanguage === 'th' ? 'var(--accent)' : 'var(--input-bg)',
+                                    color: currentLanguage === 'th' ? '#000' : 'var(--text-primary)',
                                     border: '1px solid',
-                                    borderColor: currentLanguage === 'th' ? 'var(--accent)' : 'rgba(255,255,255,0.1)',
+                                    borderColor: currentLanguage === 'th' ? 'var(--accent)' : 'var(--border-color)',
                                     borderRadius: '6px',
                                     cursor: 'pointer',
                                     transition: 'all 0.2s',
@@ -530,10 +621,10 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
                                 style={{
                                     flex: 1,
                                     padding: '10px',
-                                    background: currentLanguage === 'en' ? 'var(--accent)' : 'rgba(255,255,255,0.1)',
-                                    color: currentLanguage === 'en' ? '#000' : '#fff',
+                                    background: currentLanguage === 'en' ? 'var(--accent)' : 'var(--input-bg)',
+                                    color: currentLanguage === 'en' ? '#000' : 'var(--text-primary)',
                                     border: '1px solid',
-                                    borderColor: currentLanguage === 'en' ? 'var(--accent)' : 'rgba(255,255,255,0.1)',
+                                    borderColor: currentLanguage === 'en' ? 'var(--accent)' : 'var(--border-color)',
                                     borderRadius: '6px',
                                     cursor: 'pointer',
                                     transition: 'all 0.2s',
@@ -547,10 +638,10 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
                     </div>
 
                     {/* Reset Settings */}
-                    <div style={{ marginTop: '20px', paddingTop: '20px', borderTop: '1px solid #444' }}>
-                        <label style={{ display: 'block', marginBottom: '10px', color: '#ff4d4d', fontWeight: 'bold' }}>{t('settings.troubleshoot') || 'Troubleshoot'}</label>
+                    <div style={{ marginTop: '20px', paddingTop: '20px', borderTop: '1px solid var(--border-color)' }}>
+                        <label style={{ display: 'block', marginBottom: '10px', color: 'var(--danger)', fontWeight: 'bold' }}>{t('settings.troubleshoot') || 'Troubleshoot'}</label>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <div style={{ fontSize: '0.9em', color: '#ccc', maxWidth: '70%' }}>
+                            <div style={{ fontSize: '0.9em', color: 'var(--text-secondary)', maxWidth: '70%' }}>
                                 {t('settings.resetDesc') || 'Reset all settings to default'}
                             </div>
                             <button
@@ -558,15 +649,15 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
                                 style={{
                                     padding: '8px 15px',
                                     background: 'transparent',
-                                    border: '1px solid #ff4d4d',
-                                    color: '#ff4d4d',
+                                    border: '1px solid var(--danger)',
+                                    color: 'var(--danger)',
                                     borderRadius: '4px',
                                     cursor: 'pointer',
                                     fontSize: '0.9em',
                                     transition: 'all 0.2s'
                                 }}
-                                onMouseOver={(e) => { e.target.style.background = '#ff4d4d'; e.target.style.color = '#fff' }}
-                                onMouseOut={(e) => { e.target.style.background = 'transparent'; e.target.style.color = '#ff4d4d' }}
+                                onMouseOver={(e) => { e.target.style.background = 'var(--danger)'; e.target.style.color = 'var(--text-primary)' }}
+                                onMouseOut={(e) => { e.target.style.background = 'transparent'; e.target.style.color = 'var(--danger)' }}
                             >
                                 {t('settings.reset') || 'Reset'}
                             </button>
@@ -578,47 +669,46 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
               {/* Launcher Graphics Tab */}
               {activeTab === 'launcher' && (
                   <div style={{ animation: 'fadeIn 0.3s' }}>
-                      <h3 style={{ marginTop: 0, marginBottom: '20px', borderBottom: '1px solid #444', paddingBottom: '10px' }}>{t('settings.launcherGraphics') || 'Launcher Interface'}</h3>
+                      <h3 style={{ marginTop: 0, marginBottom: '20px', borderBottom: '1px solid var(--border-color)', paddingBottom: '10px', color: 'var(--text-primary)' }}>{t('settings.launcherGraphics') || 'Launcher Interface'}</h3>
                       
-                      {/* Theme Selection */}
-                      <div style={{ marginBottom: '25px' }}>
-                          <label style={{ display: 'block', marginBottom: '15px', color: '#ccc' }}>{t('settings.theme') || 'Theme Color'}</label>
-                          <div style={{ display: 'flex', gap: '15px', flexWrap: 'wrap' }}>
-                              {themes.map((th) => (
-                                  <div 
-                                      key={th.name}
-                                      onClick={() => handleThemeChange(th.color)}
-                                      style={{
-                                          width: '60px',
-                                          height: '60px',
-                                          borderRadius: '50%',
-                                          background: th.color,
-                                          cursor: 'pointer',
-                                          border: theme === th.color ? '4px solid #fff' : '2px solid transparent',
-                                          boxShadow: theme === th.color ? '0 0 15px ' + th.color : 'none',
-                                          transition: 'all 0.2s',
-                                          position: 'relative',
-                                          display: 'flex',
-                                          alignItems: 'center',
-                                          justifyContent: 'center'
-                                      }}
-                                      title={th.name}
-                                  >
-                                      {theme === th.color && (
-                                          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#000" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                                              <polyline points="20 6 9 17 4 12"></polyline>
-                                          </svg>
-                                      )}
-                                  </div>
-                              ))}
+                      <div style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <div>
+                              <div style={{ display: 'block', color: 'var(--text-secondary)', fontWeight: 'bold' }}>
+                                  {t('settings.bgAnimation') || (currentLanguage === 'th' ? 'ภาพเคลื่อนไหวพื้นหลัง' : 'Background Animation')}
+                              </div>
+                              <div style={{ fontSize: '0.8em', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                                  {t('settings.bgAnimationDesc') || (currentLanguage === 'th' ? 'เปิด/ปิด วิดีโอหรือ GIF พื้นหลัง' : 'Enable video/GIF background')}
+                              </div>
                           </div>
-                          <div style={{ fontSize: '0.8em', color: '#888', marginTop: '10px' }}>
-                              {t('settings.themeDesc') || 'Choose the main accent color'}
+                          <div 
+                              onClick={() => setBgAnimation(!bgAnimation)}
+                              style={{
+                                  width: '50px',
+                                  height: '26px',
+                                  background: bgAnimation ? 'var(--accent)' : 'var(--input-bg)',
+                                  borderRadius: '13px',
+                                  position: 'relative',
+                                  cursor: 'pointer',
+                                  flexShrink: 0
+                              }}
+                          >
+                              <div
+                                  style={{
+                                      position: 'absolute',
+                                      top: '3px',
+                                      left: bgAnimation ? '26px' : '3px',
+                                      width: '20px',
+                                      height: '20px',
+                                      borderRadius: '50%',
+                                      background: 'var(--text-primary)',
+                                      transition: 'left 0.2s'
+                                  }}
+                              />
                           </div>
                       </div>
 
                       <div style={{ marginBottom: '25px' }}>
-                          <label style={{ display: 'block', marginBottom: '10px', color: '#ccc' }}>
+                          <label style={{ display: 'block', marginBottom: '10px', color: 'var(--text-secondary)' }}>
                               {t('settings.closeBehavior') || (currentLanguage === 'th' ? 'ตั้งค่าการปิด Launcher' : 'Launcher Close Behavior')}
                           </label>
                           <select
@@ -627,10 +717,10 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
                               style={{
                                   width: '100%',
                                   padding: '10px',
-                                  background: '#333',
-                                  border: '1px solid #444',
+                                  background: 'var(--input-bg)',
+                                  border: '1px solid var(--border-color)',
                                   borderRadius: '4px',
-                                  color: '#fff'
+                                  color: 'var(--text-primary)'
                               }}
                           >
                               <option value="ask">{t('settings.closeBehaviorAsk') || (currentLanguage === 'th' ? 'ถามทุกครั้ง' : 'Ask Every Time')}</option>
@@ -644,14 +734,14 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
               {/* Graphics Tab (Now Game Graphics) */}
               {activeTab === 'graphics' && (
                   <div style={{ animation: 'fadeIn 0.3s' }}>
-                      <h3 style={{ marginTop: 0, marginBottom: '20px', borderBottom: '1px solid #444', paddingBottom: '10px' }}>{t('settings.gameGraphics') || 'Game Graphics'}</h3>
+                      <h3 style={{ marginTop: 0, marginBottom: '20px', borderBottom: '1px solid var(--border-color)', paddingBottom: '10px', color: 'var(--text-primary)' }}>{t('settings.gameGraphics') || 'Game Graphics'}</h3>
                       
                       {/* Resolution */}
                       <div style={{ marginBottom: '25px' }}>
-                          <label style={{ display: 'block', marginBottom: '10px', color: '#ccc' }}>{t('settings.resolution') || 'Screen Resolution'}</label>
+                          <label style={{ display: 'block', marginBottom: '10px', color: 'var(--text-secondary)' }}>{t('settings.resolution') || 'Screen Resolution'}</label>
                           <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
                               <div style={{ flex: 1 }}>
-                                  <div style={{ fontSize: '0.8em', color: '#888', marginBottom: '5px' }}>{t('settings.width') || 'Width'}</div>
+                                  <div style={{ fontSize: '0.8em', color: 'var(--text-secondary)', marginBottom: '5px' }}>{t('settings.width') || 'Width'}</div>
                                   <input 
                                     type="number" 
                                     value={resolutionWidth} 
@@ -659,17 +749,17 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
                                     style={{
                                         width: '100%',
                                         padding: '10px',
-                                        background: '#333',
-                                        border: '1px solid #444',
+                                        background: 'var(--input-bg)',
+                                        border: '1px solid var(--border-color)',
                                         borderRadius: '4px',
-                                        color: '#fff',
+                                        color: 'var(--text-primary)',
                                         textAlign: 'center'
                                     }}
                                   />
                               </div>
-                              <span style={{ color: '#888', marginTop: '20px' }}>x</span>
+                              <span style={{ color: 'var(--text-secondary)', marginTop: '20px' }}>x</span>
                               <div style={{ flex: 1 }}>
-                                  <div style={{ fontSize: '0.8em', color: '#888', marginBottom: '5px' }}>{t('settings.height') || 'Height'}</div>
+                                  <div style={{ fontSize: '0.8em', color: 'var(--text-secondary)', marginBottom: '5px' }}>{t('settings.height') || 'Height'}</div>
                                   <input 
                                     type="number" 
                                     value={resolutionHeight} 
@@ -677,10 +767,10 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
                                     style={{
                                         width: '100%',
                                         padding: '10px',
-                                        background: '#333',
-                                        border: '1px solid #444',
+                                        background: 'var(--input-bg)',
+                                        border: '1px solid var(--border-color)',
                                         borderRadius: '4px',
-                                        color: '#fff',
+                                        color: 'var(--text-primary)',
                                         textAlign: 'center'
                                     }}
                                   />
@@ -691,14 +781,14 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
                       {/* Fullscreen Toggle */}
                       <div style={{ marginBottom: '25px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                         <div>
-                            <label style={{ display: 'block', color: '#ccc', fontWeight: 'bold' }}>{t('settings.fullscreen') || 'Fullscreen'}</label>
+                            <label style={{ display: 'block', color: 'var(--text-secondary)', fontWeight: 'bold' }}>{t('settings.fullscreen') || 'Fullscreen'}</label>
                         </div>
                         <div 
                             onClick={() => setFullscreen(!fullscreen)}
                             style={{
                                 width: '50px',
                                 height: '26px',
-                                background: fullscreen ? 'var(--accent)' : '#444',
+                                background: fullscreen ? 'var(--accent)' : 'var(--input-bg)',
                                 borderRadius: '13px',
                                 position: 'relative',
                                 cursor: 'pointer',
@@ -708,7 +798,7 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
                             <div style={{
                                 width: '20px',
                                 height: '20px',
-                                background: '#fff',
+                                background: 'var(--text-primary)',
                                 borderRadius: '50%',
                                 position: 'absolute',
                                 top: '3px',
@@ -723,60 +813,147 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
               {/* Account Tab */}
               {activeTab === 'account' && (
                   <div style={{ animation: 'fadeIn 0.3s' }}>
-                      <h3 style={{ marginTop: 0, marginBottom: '20px', borderBottom: '1px solid #444', paddingBottom: '10px' }}>{t('settings.account')}</h3>
+                      <h3 style={{ marginTop: 0, marginBottom: '20px', borderBottom: '1px solid var(--border-color)', paddingBottom: '10px', color: 'var(--text-primary)' }}>{t('settings.account')}</h3>
                       
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '30px', background: '#333', padding: '15px', borderRadius: '8px' }}>
-                          <div style={{ 
-                              width: '60px', height: '60px', 
-                              background: '#444', borderRadius: '50%', 
-                              display: 'flex', alignItems: 'center', justifyContent: 'center',
-                              fontSize: '24px', color: '#aaa',
-                              backgroundImage: `url(https://minotar.net/avatar/${user?.name || 'steve'}/100.png)`,
-                              backgroundSize: 'cover'
-                          }}>
-                              {!user && '?'}
-                          </div>
-                          <div>
-                              <div style={{ fontWeight: 'bold', fontSize: '1.1em' }}>{user?.name || t('auth.guest')}</div>
-                              <div style={{ fontSize: '0.9em', color: '#4caf50' }}>● {t('settings.online')}</div>
-                              <div style={{ fontSize: '0.8em', color: '#888', marginTop: '4px', userSelect: 'text', fontFamily: 'monospace' }}>
-                                  UUID: {user?.id || 'N/A'}
-                              </div>
-                          </div>
+                      {/* Account List */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '20px' }}>
+                           {loadingAccounts && (
+                               <div style={{ padding: '10px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                                   {t('settings.loadingAccounts') || 'Loading accounts...'}
+                               </div>
+                           )}
+
+                           {/* Compute display accounts to ensure current user is always shown */}
+                           {(() => {
+                               let displayAccounts = [...accounts];
+                               if (user && !loadingAccounts) {
+                                   const exists = displayAccounts.find(a => a.uuid === user.id);
+                                   if (!exists) {
+                                       // Virtual entry for current legacy user
+                                       displayAccounts.unshift({
+                                           uuid: user.id,
+                                           name: user.name,
+                                           active: true
+                                       });
+                                   }
+                               }
+
+                               if (!loadingAccounts && displayAccounts.length === 0 && user) {
+                                   // Should not happen due to above logic, but fallback
+                                    return (
+                                       <div style={{ padding: '10px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                                           {t('settings.noAccounts') || 'No accounts found.'}
+                                       </div>
+                                   )
+                               }
+
+                               if (!loadingAccounts && displayAccounts.length === 0 && !user) {
+                                    return (
+                                       <div style={{ padding: '10px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                                           {t('settings.noAccounts') || 'No accounts found.'}
+                                       </div>
+                                   )
+                               }
+
+                               return !loadingAccounts && displayAccounts.map(acc => {
+                                   const isActive = user && user.id === acc.uuid;
+                                   return (
+                                       <div key={acc.uuid} style={{ 
+                        display: 'flex', alignItems: 'center', gap: '15px', 
+                        background: 'var(--card-bg)', 
+                        border: isActive ? '1px solid var(--accent)' : '1px solid var(--border-color)',
+                        padding: '10px', borderRadius: '8px' 
+                    }}>
+                                           {/* Avatar */}
+                                           <div style={{ 
+                                                width: '40px', height: '40px', borderRadius: '50%', 
+                                                backgroundImage: `url(https://minotar.net/avatar/${acc.name}/50.png)`,
+                                                backgroundSize: 'cover', backgroundColor: 'var(--input-bg)'
+                                           }} />
+                                           
+                                           {/* Info */}
+                                           <div style={{ flex: 1 }}>
+                                               <div style={{ fontWeight: 'bold', color: 'var(--text-primary)' }}>{acc.name}</div>
+                                               <div style={{ fontSize: '0.8em', color: isActive ? 'var(--success)' : 'var(--text-secondary)' }}>
+                                                   {isActive ? '● ' + (t('settings.active') || 'Active') : (t('settings.inactive') || 'Inactive')}
+                                               </div>
+                                           </div>
+                                           
+                                           {/* Actions */}
+                                           {!isActive && (
+                                               <button 
+                                                   onClick={() => { onSwitchAccount(acc.uuid); onClose(); }}
+                                                   style={{ 
+                                                       padding: '6px 12px', background: 'var(--accent)', color: 'var(--main-bg)', 
+                                                       border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.9em', fontWeight: 'bold' 
+                                                   }}
+                                               >
+                                                   {t('settings.switch') || 'Switch'}
+                                               </button>
+                                           )}
+
+                                           <button 
+                                               onClick={async (e) => {
+                                                   e.stopPropagation();
+                                                   if (window.confirm(t('settings.confirmRemoveAccount') || 'Remove this account?')) {
+                                                       if (window.api && window.api.removeAccount) {
+                                                           await window.api.removeAccount(acc.uuid);
+                                                           if (window.api.getAccounts) {
+                                                               window.api.getAccounts().then(setAccounts);
+                                                           }
+                                                           // If removing active account, logout
+                                                           if (isActive) {
+                                                               onLogout();
+                                                           }
+                                                       }
+                                                   }
+                                               }}
+                                               style={{ 
+                                                   width: '30px', height: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                   background: 'transparent', color: 'var(--text-secondary)', border: 'none', cursor: 'pointer', opacity: 0.7 
+                                               }}
+                                               title={t('settings.removeAccount') || 'Remove Account'}
+                                               onMouseOver={e => { e.currentTarget.style.color = 'var(--danger)'; e.currentTarget.style.opacity = 1; }}
+                                               onMouseOut={e => { e.currentTarget.style.color = 'var(--text-secondary)'; e.currentTarget.style.opacity = 0.7; }}
+                                           >
+                                               ✕
+                                           </button>
+                                       </div>
+                                   )
+                               })
+                           })()}
                       </div>
 
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                          <button 
-                            onClick={() => { onSwitchAccount(); onClose(); }}
-                            style={{ 
-                                padding: '12px', background: '#444', border: 'none', borderRadius: '6px', 
-                                color: 'white', cursor: 'pointer', textAlign: 'left', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                                transition: 'background 0.2s'
-                            }}
-                            onMouseOver={e => e.currentTarget.style.background = '#555'}
-                            onMouseOut={e => e.currentTarget.style.background = '#444'}
-                          >
-                              <span>{t('settings.switchAccount')}</span>
-                              <span style={{ fontSize: '1.2em' }}>⇄</span>
-                          </button>
+                      {/* Add Account Button */}
+                      <button 
+                          onClick={() => { onSwitchAccount(); onClose(); }} // No UUID means add/login new
+                          style={{ 
+                              width: '100%', padding: '12px', 
+                              background: 'var(--input-bg)', border: '1px dashed var(--text-secondary)', borderRadius: '6px', 
+                              color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '10px',
+                              transition: 'all 0.2s'
+                          }}
+                          onMouseOver={e => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.color = 'var(--accent)'; }}
+                          onMouseOut={e => { e.currentTarget.style.borderColor = 'var(--text-secondary)'; e.currentTarget.style.color = 'var(--text-secondary)'; }}
+                      >
+                          <span style={{ fontSize: '1.2em' }}>+</span>
+                          <span>{t('settings.addAccount') || 'Add Account'}</span>
+                      </button>
 
-                          <button 
-                            onClick={handleLogoutClick}
-                            style={{ 
-                                padding: '12px', background: 'rgba(232, 17, 35, 0.1)', border: '1px solid rgba(232, 17, 35, 0.3)', borderRadius: '6px', 
-                                color: '#ff4d4d', cursor: 'pointer', textAlign: 'left', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                                marginTop: '10px', transition: 'all 0.2s'
-                            }}
-                            onMouseOver={e => {
-                                e.currentTarget.style.background = 'rgba(232, 17, 35, 0.2)'
-                            }}
-                            onMouseOut={e => {
-                                e.currentTarget.style.background = 'rgba(232, 17, 35, 0.1)'
-                            }}
-                          >
-                              <span>{t('settings.signOut')}</span>
-                              <span style={{ fontSize: '1.2em' }}>⏻</span>
-                          </button>
+                      <div style={{ marginTop: '20px', borderTop: '1px solid var(--border-color)', paddingTop: '20px' }}>
+                           <button 
+                             onClick={handleLogoutClick}
+                             style={{ 
+                                 width: '100%', padding: '12px', background: 'rgba(255, 0, 0, 0.1)', border: '1px solid var(--danger)', borderRadius: '6px', 
+                                 color: 'var(--danger)', cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '10px',
+                                 transition: 'background 0.2s'
+                             }}
+                             onMouseOver={e => e.currentTarget.style.background = 'rgba(255, 0, 0, 0.2)'}
+                             onMouseOut={e => e.currentTarget.style.background = 'rgba(255, 0, 0, 0.1)'}
+                           >
+                               <span>{t('settings.signOut')}</span>
+                               <span style={{ fontSize: '1.2em' }}>⏻</span>
+                           </button>
                       </div>
                   </div>
               )}
@@ -784,9 +961,9 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
               {/* Redeem Tab */}
               {activeTab === 'redeem' && (
                   <div style={{ animation: 'fadeIn 0.3s' }}>
-                      <h3 style={{ marginTop: 0, marginBottom: '20px', borderBottom: '1px solid #444', paddingBottom: '10px' }}>{t('settings.redeemCode')}</h3>
+                      <h3 style={{ marginTop: 0, marginBottom: '20px', borderBottom: '1px solid var(--border-color)', paddingBottom: '10px' }}>{t('settings.redeemCode')}</h3>
                       
-                      <p style={{ color: '#ccc', marginTop: 0, marginBottom: '20px', fontSize: '0.9em' }}>
+                      <p style={{ color: 'var(--text-secondary)', marginTop: 0, marginBottom: '20px', fontSize: '0.9em' }}>
                           {t('settings.enterCodeDesc')}
                       </p>
 
@@ -799,10 +976,10 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
                               style={{
                                   flex: 1,
                                   padding: '12px 16px',
-                                  background: 'rgba(0,0,0,0.3)',
-                                  border: '1px solid rgba(255,255,255,0.1)',
+                                  background: 'var(--input-bg)',
+                                  border: '1px solid var(--border-color)',
                                   borderRadius: '8px',
-                                  color: 'white',
+                                  color: 'var(--text-primary)',
                                   outline: 'none',
                                   fontSize: '1em'
                               }}
@@ -812,8 +989,8 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
                               disabled={!redeemInput.trim()}
                               style={{
                                   padding: '0 20px',
-                                  background: redeemInput.trim() ? '#ffd700' : 'rgba(255,255,255,0.1)',
-                                  color: redeemInput.trim() ? '#000' : '#555',
+                                  background: redeemInput.trim() ? 'var(--accent)' : 'var(--input-bg)',
+                                  color: redeemInput.trim() ? 'var(--main-bg)' : 'var(--text-secondary)',
                                   border: 'none',
                                   borderRadius: '8px',
                                   cursor: redeemInput.trim() ? 'pointer' : 'default',
@@ -825,13 +1002,13 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
                           </button>
                       </form>
                       
-                      {redeemError && <div style={{ color: '#ff6b6b', fontSize: '0.85em', marginTop: '-15px', marginBottom: '15px' }}>{redeemError}</div>}
+                      {redeemError && <div style={{ color: 'var(--danger)', fontSize: '0.85em', marginTop: '-15px', marginBottom: '15px' }}>{redeemError}</div>}
 
-                      <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '15px' }}>
-                          <h4 style={{ color: '#fff', margin: '0 0 10px 0', fontSize: '0.9em', textTransform: 'uppercase', letterSpacing: '1px', opacity: 0.7 }}>{t('settings.activeCodes')}</h4>
+                      <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '15px' }}>
+                          <h4 style={{ color: 'var(--text-primary)', margin: '0 0 10px 0', fontSize: '0.9em', textTransform: 'uppercase', letterSpacing: '1px', opacity: 0.7 }}>{t('settings.activeCodes')}</h4>
                           
                           {redeemedCodes.length === 0 ? (
-                              <div style={{ color: '#666', fontStyle: 'italic', fontSize: '0.9em', padding: '10px 0' }}>{t('settings.noCodes')}</div>
+                              <div style={{ color: 'var(--text-secondary)', fontStyle: 'italic', fontSize: '0.9em', padding: '10px 0' }}>{t('settings.noCodes')}</div>
                           ) : (
                               <div style={{ maxHeight: '150px', overflowY: 'auto' }}>
                                   {redeemedCodes.map(c => (
@@ -840,18 +1017,18 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
                                           justifyContent: 'space-between', 
                                           alignItems: 'center',
                                           padding: '10px',
-                                          background: 'rgba(255,255,255,0.05)',
+                                          background: 'var(--card-bg)',
                                           borderRadius: '6px',
                                           marginBottom: '8px',
-                                          border: '1px solid rgba(255,255,255,0.05)'
+                                          border: '1px solid var(--border-color)'
                                       }}>
-                                          <span style={{ color: '#fff', fontFamily: 'monospace', fontSize: '1.1em' }}>{c}</span>
+                                          <span style={{ color: 'var(--text-primary)', fontFamily: 'monospace', fontSize: '1.1em' }}>{c}</span>
                                           <button 
                                               onClick={() => onRemoveCode(c)}
                                               style={{
                                                   background: 'transparent',
                                                   border: 'none',
-                                                  color: '#ff6b6b',
+                                                  color: 'var(--danger)',
                                                   cursor: 'pointer',
                                                   padding: '5px',
                                                   display: 'flex',
@@ -880,9 +1057,9 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
 
 
               {/* Footer Actions */}
-              <div style={{ marginTop: 'auto', display: 'flex', justifyContent: 'flex-end', gap: '10px', borderTop: '1px solid #333', paddingTop: '20px' }}>
-                  <button onClick={onClose} style={{ background: 'transparent', color: '#ccc', border: 'none', padding: '10px 20px', borderRadius: '5px', cursor: 'pointer' }}>{t('settings.cancel')}</button>
-                  <button onClick={save} style={{ background: 'var(--accent)', color: 'black', border: 'none', padding: '10px 20px', borderRadius: '5px', cursor: 'pointer', fontWeight: 'bold' }}>{t('settings.save')}</button>
+              <div style={{ marginTop: 'auto', display: 'flex', justifyContent: 'flex-end', gap: '10px', borderTop: '1px solid var(--border-color)', paddingTop: '20px' }}>
+                  <button onClick={onClose} style={{ background: 'transparent', color: 'var(--text-secondary)', border: 'none', padding: '10px 20px', borderRadius: '5px', cursor: 'pointer' }}>{t('settings.cancel')}</button>
+                  <button onClick={save} style={{ background: 'var(--accent)', color: 'var(--main-bg)', border: 'none', padding: '10px 20px', borderRadius: '5px', cursor: 'pointer', fontWeight: 'bold' }}>{t('settings.save')}</button>
               </div>
 
               {/* Logout Confirmation Overlay */}
@@ -896,13 +1073,13 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
                       <div style={{ display: 'flex', gap: '15px' }}>
                           <button 
                             onClick={() => setShowLogoutConfirm(false)}
-                            style={{ padding: '8px 20px', background: '#444', border: 'none', borderRadius: '4px', color: 'white', cursor: 'pointer' }}
+                            style={{ padding: '8px 20px', background: 'var(--input-bg)', border: 'none', borderRadius: '4px', color: 'white', cursor: 'pointer' }}
                           >
                               {t('settings.cancel')}
                           </button>
                           <button 
                             onClick={confirmLogout}
-                            style={{ padding: '8px 20px', background: '#e81123', border: 'none', borderRadius: '4px', color: 'white', cursor: 'pointer' }}
+                            style={{ padding: '8px 20px', background: 'var(--danger)', border: 'none', borderRadius: '4px', color: 'var(--text-primary)', cursor: 'pointer' }}
                           >
                               {t('settings.signOut')}
                           </button>
@@ -952,7 +1129,7 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
             width: 100%;
             height: 6px;
             border-radius: 5px;
-            background: #444;
+            background: var(--input-bg);
             outline: none;
             transition: background 0.2s;
          }
@@ -965,8 +1142,7 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
             border-radius: 50%;
             background: var(--accent);
             cursor: pointer;
-            border: 2px solid #222;
-            box-shadow: 0 0 10px rgba(0,0,0,0.5);
+            border: 2px solid var(--card-bg);
             transition: transform 0.1s;
          }
          

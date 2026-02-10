@@ -53,7 +53,6 @@ function NotificationModal({ title, message, type = 'info', action, onClose }) {
         padding: '30px',
         width: '400px',
         maxWidth: '90%',
-        boxShadow: `0 10px 40px rgba(0,0,0,0.5), 0 0 20px ${color}20`,
         textAlign: 'center',
         transform: 'scale(1)',
         animation: 'scaleUp 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)'

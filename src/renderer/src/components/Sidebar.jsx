@@ -8,7 +8,7 @@ const SidebarItem = memo(({ instance, isSelected, onSelect, isExpanded }) => {
         style={{
           padding: isExpanded ? '12px 16px' : '12px 0',
           cursor: 'pointer',
-          background: isSelected ? 'linear-gradient(90deg, rgba(255, 215, 0, 0.15), rgba(255, 215, 0, 0.05))' : 'transparent',
+          background: isSelected ? 'var(--input-bg)' : 'transparent',
           borderRadius: '12px',
           marginBottom: '8px',
           display: 'flex',
@@ -17,11 +17,11 @@ const SidebarItem = memo(({ instance, isSelected, onSelect, isExpanded }) => {
           gap: isExpanded ? '14px' : '0',
           transition: 'all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)',
           border: '1px solid transparent',
-          borderLeft: isSelected ? '3px solid #ffd700' : '1px solid transparent',
+          borderLeft: isSelected ? '3px solid var(--accent)' : '1px solid transparent',
           position: 'relative',
           overflow: 'hidden'
         }}
-        onMouseOver={(e) => { if (!isSelected) { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; e.currentTarget.style.transform = isExpanded ? 'translateX(5px)' : 'scale(1.05)'; } }}
+        onMouseOver={(e) => { if (!isSelected) { e.currentTarget.style.background = 'var(--card-bg)'; e.currentTarget.style.transform = isExpanded ? 'translateX(5px)' : 'scale(1.05)'; } }}
         onMouseOut={(e) => { if (!isSelected) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.transform = isExpanded ? 'translateX(0)' : 'scale(1)'; } }}
       >
          <div style={{ 
@@ -38,7 +38,6 @@ const SidebarItem = memo(({ instance, isSelected, onSelect, isExpanded }) => {
              color: '#fff',
              fontSize: '1em',
              flexShrink: 0,
-             boxShadow: isSelected ? '0 4px 12px rgba(255, 215, 0, 0.2)' : 'none',
              transition: 'all 0.3s'
          }}>
              {!(instance.icon || instance.image) && instance.name.charAt(0)}
@@ -58,10 +57,10 @@ const SidebarItem = memo(({ instance, isSelected, onSelect, isExpanded }) => {
                whiteSpace: 'nowrap', 
                overflow: 'hidden', 
                textOverflow: 'ellipsis',
-               color: isSelected ? '#fff' : '#ccc',
+               color: isSelected ? 'var(--text-primary)' : 'var(--text-secondary)',
                marginBottom: '2px'
             }}>{instance.name}</div>
-           <div style={{ fontSize: '0.75em', color: isSelected ? 'rgba(255,255,255,0.7)' : '#666' }}>{instance.version}</div>
+           <div style={{ fontSize: '0.75em', color: isSelected ? 'var(--text-primary)' : 'var(--text-secondary)', opacity: 0.7 }}>{instance.version}</div>
          </div>
       </div>
     )
@@ -82,12 +81,11 @@ function Sidebar({ instances, selectedInstance, onSelectInstance, onRefresh, isR
         onMouseLeave={() => setIsExpanded(false)}
         style={{ 
             width: isExpanded ? '280px' : '84px', // Collapsed width just enough for icons + padding
-            background: '#121218', 
+            background: 'var(--sidebar-bg)', 
             display: 'flex', 
             flexDirection: 'column', 
             paddingTop: '40px', 
-            borderRight: '1px solid rgba(255,255,255,0.06)',
-            boxShadow: '10px 0 30px rgba(0,0,0,0.2)',
+            borderRight: '1px solid var(--border-color)',
             zIndex: 100,
             transition: 'width 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)'
         }}
@@ -104,7 +102,7 @@ function Sidebar({ instances, selectedInstance, onSelectInstance, onRefresh, isR
               fontWeight: '800', 
               fontSize: '1.4em', 
               letterSpacing: '-0.5px',
-              color: '#fff',
+              color: 'var(--text-primary)',
               display: isExpanded ? 'block' : 'none',
               whiteSpace: 'nowrap',
               overflow: 'hidden',
@@ -117,23 +115,23 @@ function Sidebar({ instances, selectedInstance, onSelectInstance, onRefresh, isR
             title="Refresh Instances"
             disabled={isRefreshing}
             style={{
-                background: 'rgba(255,255,255,0.05)',
-                border: '1px solid rgba(255,255,255,0.05)',
+                background: 'var(--input-bg)',
+                border: '1px solid var(--border-color)',
                 borderRadius: '8px',
                 width: '32px',
                 height: '32px',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                color: isRefreshing ? 'var(--accent)' : '#888',
+                color: isRefreshing ? 'var(--accent)' : 'var(--text-secondary)',
                 cursor: isRefreshing ? 'default' : 'pointer',
                 fontSize: '1em',
                 transition: 'all 0.3s',
                 transform: isRefreshing ? 'rotate(360deg)' : 'rotate(0deg)',
                 marginLeft: isExpanded ? 0 : 0
             }}
-            onMouseOver={(e) => { if(!isRefreshing) { e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; e.currentTarget.style.color = '#fff'; } }}
-            onMouseOut={(e) => { if(!isRefreshing) { e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; e.currentTarget.style.color = '#888'; } }}
+            onMouseOver={(e) => { if(!isRefreshing) { e.currentTarget.style.background = 'var(--card-bg)'; e.currentTarget.style.color = 'var(--text-primary)'; } }}
+            onMouseOut={(e) => { if(!isRefreshing) { e.currentTarget.style.background = 'var(--input-bg)'; e.currentTarget.style.color = 'var(--text-secondary)'; } }}
           >
             ↻
           </button>
@@ -149,7 +147,7 @@ function Sidebar({ instances, selectedInstance, onSelectInstance, onRefresh, isR
         <div style={{ 
             fontSize: '0.75em', 
             fontWeight: '600', 
-            color: '#555', 
+            color: 'var(--text-secondary)', 
             textTransform: 'uppercase', 
             letterSpacing: '1px',
             marginBottom: '15px',
@@ -163,7 +161,7 @@ function Sidebar({ instances, selectedInstance, onSelectInstance, onRefresh, isR
             Library
         </div>
         {instances.length === 0 && (
-            <div style={{ padding: '40px 20px', color: '#666', fontSize: '0.9em', textAlign: 'center', fontStyle: 'italic', display: isExpanded ? 'block' : 'none' }}>
+            <div style={{ padding: '40px 20px', color: 'var(--text-secondary)', fontSize: '0.9em', textAlign: 'center', fontStyle: 'italic', display: isExpanded ? 'block' : 'none' }}>
                 No instances found.
                 <br/>
                 <span style={{ fontSize: '0.8em', opacity: 0.7 }}>Check your connection</span>
@@ -183,8 +181,8 @@ function Sidebar({ instances, selectedInstance, onSelectInstance, onRefresh, isR
       {/* User Profile Section */}
       <div style={{ 
           padding: isExpanded ? '20px 20px 20px 20px' : '20px 0', 
-          background: 'rgba(0,0,0,0.2)', 
-          borderTop: '1px solid rgba(255,255,255,0.05)', 
+          background: 'var(--card-bg)', 
+          borderTop: '1px solid var(--border-color)', 
           display: 'flex', 
           flexDirection: 'column', 
           alignItems: 'center',
@@ -200,16 +198,16 @@ function Sidebar({ instances, selectedInstance, onSelectInstance, onRefresh, isR
                 alignItems: 'center', 
                 gap: isExpanded ? '14px' : '0', 
                 cursor: 'pointer',
-                background: 'rgba(255,255,255,0.03)',
-                border: '1px solid rgba(255,255,255,0.05)',
+                background: 'var(--input-bg)',
+                border: '1px solid var(--border-color)',
                 transition: 'all 0.2s',
                 marginBottom: '12px',
                 justifyContent: isExpanded ? 'flex-start' : 'center',
                 width: isExpanded ? 'auto' : '48px',
                 height: isExpanded ? 'auto' : '48px'
             }}
-            onMouseOver={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; e.currentTarget.style.transform = isExpanded ? 'translateY(-2px)' : 'scale(1.05)'; }}
-            onMouseOut={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.03)'; e.currentTarget.style.transform = isExpanded ? 'translateY(0)' : 'scale(1)'; }}
+            onMouseOver={e => { e.currentTarget.style.background = 'var(--card-bg)'; e.currentTarget.style.transform = isExpanded ? 'translateY(-2px)' : 'scale(1.05)'; }}
+            onMouseOut={e => { e.currentTarget.style.background = 'var(--input-bg)'; e.currentTarget.style.transform = isExpanded ? 'translateY(0)' : 'scale(1)'; }}
           >
               <div style={{ 
                   width: '36px', height: '36px', borderRadius: '10px', 
@@ -217,7 +215,6 @@ function Sidebar({ instances, selectedInstance, onSelectInstance, onRefresh, isR
                   backgroundSize: 'cover',
                   backgroundPosition: 'center',
                   backgroundColor: '#333',
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
                   flexShrink: 0
               }}></div>
               <div style={{ 
@@ -228,10 +225,10 @@ function Sidebar({ instances, selectedInstance, onSelectInstance, onRefresh, isR
                   transition: 'opacity 0.2s, width 0.2s',
                   display: isExpanded ? 'block' : 'none'
               }}>
-                  <div style={{ fontSize: '0.95em', fontWeight: '700', color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{user ? user.name : 'Guest'}</div>
-                  <div style={{ fontSize: '0.75em', color: '#888' }}>My Account</div>
+                  <div style={{ fontSize: '0.95em', fontWeight: '700', color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{user ? user.name : 'Guest'}</div>
+                  <div style={{ fontSize: '0.75em', color: 'var(--text-secondary)' }}>My Account</div>
               </div>
-              <div style={{ color: '#666', fontSize: '1.2em', display: isExpanded ? 'block' : 'none' }}>⚙️</div>
+              <div style={{ color: 'var(--text-secondary)', fontSize: '1.2em', display: isExpanded ? 'block' : 'none' }}>⚙️</div>
           </div>
           
           {/* About Developer Button */}
@@ -247,18 +244,18 @@ function Sidebar({ instances, selectedInstance, onSelectInstance, onRefresh, isR
                 cursor: 'pointer',
                 background: 'transparent',
                 transition: 'all 0.2s',
-                color: '#777',
-                border: '1px solid rgba(255,255,255,0.05)',
+                color: 'var(--text-secondary)',
+                border: '1px solid var(--border-color)',
                 justifyContent: isExpanded ? 'flex-start' : 'center',
                 width: isExpanded ? 'auto' : '48px',
                 height: isExpanded ? 'auto' : '48px'
             }}
-            onMouseOver={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; e.currentTarget.style.color = '#fff'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'; }}
-            onMouseOut={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#777'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.05)'; }}
+            onMouseOver={e => { e.currentTarget.style.background = 'var(--input-bg)'; e.currentTarget.style.color = 'var(--text-primary)'; e.currentTarget.style.borderColor = 'var(--accent)'; }}
+            onMouseOut={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-secondary)'; e.currentTarget.style.borderColor = 'var(--border-color)'; }}
           >
               <div style={{ 
                   width: '36px', height: '36px', borderRadius: '50%', 
-                  background: 'rgba(255, 255, 255, 0.05)',
+                  background: 'var(--input-bg)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   color: 'inherit', fontSize: '1em',
                   transition: 'color 0.2s',

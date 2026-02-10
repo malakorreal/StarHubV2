@@ -414,6 +414,102 @@ export class SyncManager {
   }
 
   /**
+   * Compare local folder against a list of valid filenames
+   * Returns lists of added (missing locally), deleted (extra locally), kept, and corrupt files.
+   */
+  async comparePatches(folder, validFilenames = [], ignoreList = []) {
+      const result = {
+          added: [],    // In validFilenames but not in folder (New files to download)
+          deleted: [],  // In folder but not in validFilenames (Old files to remove)
+          kept: [],     // In both
+          corrupt: []   // Files that exist but are invalid (0 byte or bad header)
+      }
+
+      if (!fs.existsSync(folder)) {
+          result.added = [...validFilenames]
+          return result
+      }
+
+      try {
+          const files = await fs.promises.readdir(folder)
+          
+          // Hardcoded whitelist for specific mods/folders that should never be deleted
+          // Merge with user-provided ignoreList
+          const systemWhitelist = ['figura', 'fragmentskin', 'cache', 'shaderpacks', 'screenshots', ...ignoreList]
+
+          // Check for deleted files (Files in folder but not in whitelist)
+          for (const file of files) {
+              const filePath = path.join(folder, file)
+              
+              // Check system whitelist first - If ignored, skip all verification
+              if (systemWhitelist.some(w => file.toLowerCase().includes(w.toLowerCase()))) {
+                   result.kept.push(file)
+                   continue
+              }
+
+              let isCorrupt = false
+
+              // Check corruption
+              try {
+                  const stats = await fs.promises.stat(filePath)
+                  if (stats.isFile()) {
+                      if (stats.size === 0) {
+                          isCorrupt = true
+                      } else if (file.endsWith('.jar')) {
+                          // Check Zip Header
+                          const handle = await fs.promises.open(filePath, 'r')
+                          const buffer = Buffer.alloc(4)
+                          await handle.read(buffer, 0, 4, 0)
+                          await handle.close()
+                          // PK.. (0x50 0x4B 0x03 0x04)
+                          if (buffer[0] !== 0x50 || buffer[1] !== 0x4B) {
+                              isCorrupt = true
+                          }
+                      }
+                  }
+              } catch (e) {
+                  // If verify fails, assume corrupt?
+                  // console.warn(`Verify failed for ${file}`, e)
+              }
+
+              if (isCorrupt) {
+                  result.corrupt.push(file)
+                  // If it's also a valid filename, it effectively needs to be 'added' (redownloaded)
+                  // But we list it as corrupt. The caller should delete corrupt files.
+              }
+
+              // Check if file is in validFilenames
+              if (validFilenames.includes(file)) {
+                  if (!isCorrupt) result.kept.push(file)
+                  continue
+              }
+
+              // Only mark as deleted if NOT corrupt (corrupt takes precedence for logging)
+              // Actually, if it's corrupt and also not in whitelist, it's doubly bad.
+              // Let's just put it in corrupt if corrupt.
+              if (!isCorrupt) {
+                  result.deleted.push(file)
+              }
+          }
+
+          // Check for added files (Files in whitelist but not in folder OR are corrupt)
+          // If a file is corrupt, it's effectively "missing" a valid version.
+          for (const valid of validFilenames) {
+              if (!files.includes(valid) || result.corrupt.includes(valid)) {
+                  // Avoid duplicates if logic overlaps
+                  if (!result.added.includes(valid)) {
+                       result.added.push(valid)
+                  }
+              }
+          }
+      } catch (e) {
+          console.error(`[COMPARE] Error reading folder ${folder}:`, e)
+      }
+
+      return result
+  }
+
+  /**
    * Cleanup folder by removing files not in the whitelist
    */
   async cleanupFolder(folder, validFilenames = []) {
@@ -421,23 +517,11 @@ export class SyncManager {
           if (!fs.existsSync(folder)) return
 
           this.log(`[CLEANUP] Checking folder: ${folder}`)
-          const files = await fs.promises.readdir(folder)
           
-          // Hardcoded whitelist for specific mods/folders that should never be deleted
-          const systemWhitelist = ['figura', 'fragmentskin', 'cache', 'shaderpacks', 'screenshots']
+          // Use comparePatches logic to identify files to delete
+          const { deleted } = await this.comparePatches(folder, validFilenames)
 
-          for (const file of files) {
-              // Check if file is in validFilenames
-              if (validFilenames.includes(file)) {
-                  continue
-              }
-
-              // Check system whitelist
-              if (systemWhitelist.some(w => file.toLowerCase().includes(w.toLowerCase()))) {
-                   continue
-              }
-
-              // Delete
+          for (const file of deleted) {
               const filePath = path.join(folder, file)
               this.log(`[CLEANUP] Removing old/extra file: ${file}`)
               await fs.promises.rm(filePath, { recursive: true, force: true })
@@ -510,7 +594,7 @@ export class SyncManager {
    * Extract Zip file with Progress
    */
   async extractZip(zipPath, targetDir, options = {}) {
-      const { signal = null } = options
+      const { signal = null, ignoreFiles = [] } = options
       if (signal?.aborted) throw new Error('Extraction aborted')
 
       this.log(`Extracting ${path.basename(zipPath)}...`)
@@ -647,8 +731,13 @@ export class SyncManager {
                           // 3. Cleanup Extra Files (Target -> Delete)
                           // User request: "Check Config and Mods" -> Remove extras in these folders
                           const foldersToCheck = ['mods', 'config']
-                          // User request: "Figura, fragmentskin ไม่ต้องตรวจสอบและไม่ต้องลบ"
-                          const whitelist = ['figura', 'fragmentskin', 'emotes', 'options'] 
+                          let dynamicWhitelist = []
+                          if (Array.isArray(ignoreFiles)) {
+                              dynamicWhitelist = ignoreFiles
+                          } else if (typeof ignoreFiles === 'string' && ignoreFiles.trim()) {
+                              dynamicWhitelist = [ignoreFiles]
+                          }
+                          const whitelist = ['figura', 'fragmentskin', 'emotes', 'options', ...dynamicWhitelist]
                           
                           for (const folder of foldersToCheck) {
                               if (signal?.aborted) throw new Error('Extraction aborted')

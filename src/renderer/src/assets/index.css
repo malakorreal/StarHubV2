@@ -4,8 +4,13 @@
   --sidebar-bg: #1a1b1e;
   --main-bg: #121212;
   --accent: #ffd700;
+  --accent-hover: #e6c200;
   --text-primary: #ffffff;
   --text-secondary: #aaaaaa;
+  --input-bg: #25262b;
+  --border-color: #373a40;
+  --modal-bg: #1a1b1e;
+  --card-bg: #25262b;
 }
 
 * {

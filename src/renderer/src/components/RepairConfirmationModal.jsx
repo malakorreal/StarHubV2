@@ -5,6 +5,7 @@ function RepairConfirmationModal({ onConfirm, onCancel, instanceName, actionName
   
   const isRepair = actionName === 'Repair';
   const isUpdate = actionName === 'Update';
+  const isUninstall = actionName === 'Uninstall';
   
   let title = `${actionName} Verification`;
   let confirmText = `${actionName} Now`;
@@ -32,6 +33,17 @@ function RepairConfirmationModal({ onConfirm, onCancel, instanceName, actionName
       if (tMsg && tMsg !== 'dialogs.updateConfirmMessage') {
           messageHtml = tMsg.replace('{instanceName}', instanceName);
       }
+  } else if (isUninstall) {
+      const tTitle = safeT('dialogs.uninstallVerification');
+      if (tTitle && tTitle !== 'dialogs.uninstallVerification') title = tTitle;
+      
+      const tConfirm = safeT('dialogs.uninstallNow');
+      if (tConfirm && tConfirm !== 'dialogs.uninstallNow') confirmText = tConfirm;
+      
+      const tMsg = safeT('dialogs.uninstallConfirmMessage');
+      if (tMsg && tMsg !== 'dialogs.uninstallConfirmMessage') {
+          messageHtml = tMsg.replace('{instanceName}', instanceName);
+      }
   }
 
   const cancelText = safeT('dialogs.cancel');
@@ -55,15 +67,12 @@ function RepairConfirmationModal({ onConfirm, onCancel, instanceName, actionName
            width: '400px', 
            textAlign: 'center',
            border: '1px solid #333',
-           boxShadow: 'none', // EXPLICITLY NO SHADOW
-           textShadow: 'none' // EXPLICITLY NO TEXT SHADOW
        }}>
           <h3 style={{ 
               color: '#fff', 
               marginBottom: '15px', 
               fontSize: '1.4em', 
               fontWeight: '600',
-              textShadow: 'none'
           }}>
               {title}
           </h3>
@@ -73,7 +82,6 @@ function RepairConfirmationModal({ onConfirm, onCancel, instanceName, actionName
               marginBottom: '30px', 
               lineHeight: '1.6',
               fontSize: '1em',
-              textShadow: 'none'
           }} dangerouslySetInnerHTML={{ __html: messageHtml }} />
           
           <div style={{ display: 'flex', gap: '15px', justifyContent: 'center' }}>
@@ -88,8 +96,6 @@ function RepairConfirmationModal({ onConfirm, onCancel, instanceName, actionName
                     cursor: 'pointer',
                     fontSize: '1em',
                     transition: 'background 0.2s',
-                    boxShadow: 'none',
-                    textShadow: 'none',
                     fontWeight: '500'
                 }}
                 onMouseOver={(e) => e.target.style.background = '#444'}
@@ -110,8 +116,6 @@ function RepairConfirmationModal({ onConfirm, onCancel, instanceName, actionName
                     fontSize: '1em',
                     fontWeight: 'bold',
                     transition: 'opacity 0.2s',
-                    boxShadow: 'none',
-                    textShadow: 'none'
                 }}
                 onMouseOver={(e) => e.target.style.opacity = '0.9'}
                 onMouseOut={(e) => e.target.style.opacity = '1'}

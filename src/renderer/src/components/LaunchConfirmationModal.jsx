@@ -41,7 +41,6 @@ const LaunchConfirmationModal = ({ isOpen, onConfirm, onCancel, type = 'launch' 
         width: '450px',
         maxWidth: '90%',
         border: '1px solid rgba(111, 111, 247, 0.3)',
-        boxShadow: '0 0 30px rgba(111, 111, 247, 0.2)',
         transform: animate ? 'scale(1) translateY(0)' : 'scale(0.9) translateY(20px)',
         transition: 'all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)',
         display: 'flex',
@@ -59,8 +58,7 @@ const LaunchConfirmationModal = ({ isOpen, onConfirm, onCancel, type = 'launch' 
           justifyContent: 'center',
           alignItems: 'center',
           marginBottom: '24px',
-          border: '2px solid #2ecc71',
-          boxShadow: '0 0 20px rgba(46, 204, 113, 0.3)'
+          border: '2px solid #2ecc71'
         }}>
           <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#2ecc71" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"
                style={{
@@ -77,7 +75,6 @@ const LaunchConfirmationModal = ({ isOpen, onConfirm, onCancel, type = 'launch' 
           fontSize: '24px',
           marginBottom: '12px',
           fontWeight: 'bold',
-          textShadow: '0 2px 4px rgba(0,0,0,0.5)'
         }}>{title}</h2>
 
         <p style={{
@@ -126,17 +123,14 @@ const LaunchConfirmationModal = ({ isOpen, onConfirm, onCancel, type = 'launch' 
               cursor: 'pointer',
               fontSize: '14px',
               fontWeight: 'bold',
-              boxShadow: '0 4px 15px rgba(111, 111, 247, 0.4)',
               transition: 'all 0.2s',
               transform: 'scale(1)'
             }}
             onMouseOver={(e) => {
                 e.currentTarget.style.transform = 'scale(1.05)'
-                e.currentTarget.style.boxShadow = '0 6px 20px rgba(111, 111, 247, 0.6)'
             }}
             onMouseOut={(e) => {
                 e.currentTarget.style.transform = 'scale(1)'
-                e.currentTarget.style.boxShadow = '0 4px 15px rgba(111, 111, 247, 0.4)'
             }}
           >
             {t('dialogs.playNow')}

@@ -42,6 +42,18 @@ export function setupLauncher(ipcMain, mainWindow) {
     const modsFolder = path.join(rootPath, 'mods')
     const zipPath = path.join(rootPath, 'modpack.zip')
 
+    // ---------------------------------------------------------
+    // 🔄 CHECK FOR VERSION UPDATE
+    // ---------------------------------------------------------
+    const installedVersion = store.get(`installed_versions.${instance.id}`)
+    const currentVersion = instance.modpackVersion || instance.version
+    
+    // If versions mismatch, force an update (re-download/re-extract)
+    if (installedVersion && installedVersion !== currentVersion) {
+         console.log(`[UPDATE] Version mismatch detected! Installed: ${installedVersion}, New: ${currentVersion}`)
+         forceRepair = true
+    }
+
     console.log(`[PREPARE] Checking instance at: ${rootPath} (Force: ${forceRepair})`)
     
     if (signal?.aborted) throw new Error('Launch aborted')
@@ -51,7 +63,35 @@ export function setupLauncher(ipcMain, mainWindow) {
         if (fs.existsSync(zipPath)) {
             fs.rmSync(zipPath, { force: true })
         }
-        // Note: We don't remove mods folder anymore to allow Smart Sync
+        
+        // 🚨 FORCE CLEAN MODS FOLDER ON UPDATE/REPAIR
+        // As requested: Delete mods folder but PRESERVE ignored files.
+        if (fs.existsSync(modsFolder)) {
+             console.log("[UPDATE] Cleaning mods folder (Preserving ignored files)...")
+             try {
+                const files = fs.readdirSync(modsFolder)
+                const ignoreList = instance.ignoreFiles || []
+                const systemWhitelist = ['figura', 'fragmentskin', 'cache', 'shaderpacks', 'screenshots', ...ignoreList]
+                
+                for (const file of files) {
+                    // Check if file matches any whitelist pattern
+                    const isIgnored = systemWhitelist.some(w => file.toLowerCase().includes(w.toLowerCase()))
+                    
+                    if (!isIgnored) {
+                        try {
+                            const fullPath = path.join(modsFolder, file)
+                            fs.rmSync(fullPath, { recursive: true, force: true })
+                        } catch (e) {
+                             console.error(`Failed to delete ${file}:`, e)
+                        }
+                    } else {
+                        console.log(`[UPDATE] Preserved ignored file: ${file}`)
+                    }
+                }
+             } catch (e) {
+                console.error("Failed to clean mods folder:", e)
+             }
+        }
     }
 
     // Ensure root exists
@@ -81,7 +121,7 @@ export function setupLauncher(ipcMain, mainWindow) {
         if (needsDownload) {
              console.log(`Downloading Modpack: ${instance.modpackUrl}`)
              await syncManager.downloadLargeFile(instance.modpackUrl, zipPath, { signal })
-             await syncManager.extractZip(zipPath, rootPath, { signal })
+             await syncManager.extractZip(zipPath, rootPath, { signal, ignoreFiles: instance.ignoreFiles })
         } else {
              // Zip exists. Check if mods folder is empty?
              // Or if we just want to ensure everything is synced
@@ -91,7 +131,7 @@ export function setupLauncher(ipcMain, mainWindow) {
              const files = fs.readdirSync(modsFolder)
              if (files.length === 0) {
                  console.log("Mods folder empty. Extracting existing zip...")
-                 await syncManager.extractZip(zipPath, rootPath, { signal })
+                 await syncManager.extractZip(zipPath, rootPath, { signal, ignoreFiles: instance.ignoreFiles })
              } else {
                  // Optional: We could run extraction again for "Smart Sync" even if files exist,
                  // because extractZip now has the Smart Sync logic.
@@ -105,6 +145,118 @@ export function setupLauncher(ipcMain, mainWindow) {
     }
 
     if (signal?.aborted) throw new Error('Launch aborted')
+
+    // ---------------------------------------------------------
+    // 🔍 PATCH COMPARISON & CLEANUP PREPARATION
+    // ---------------------------------------------------------
+    // We calculate valid filenames BEFORE syncing mods to compare "Old vs New".
+    const validFilenames = new Set()
+    
+    try {
+        // Helper to get filename from URL
+        const getFileName = (url) => {
+            try {
+                return decodeURIComponent(url.split('/').pop().split('?')[0])
+            } catch (e) { return null }
+        }
+
+        // 1. From mods array
+        if (instance.mods && Array.isArray(instance.mods)) {
+            instance.mods.forEach(modUrl => {
+                 const name = getFileName(modUrl)
+                 if (name) validFilenames.add(name)
+            })
+        }
+        
+        // 2. From preloadMods
+        if (instance.preloadMods && Array.isArray(instance.preloadMods)) {
+            instance.preloadMods.forEach(mod => {
+                let name = null
+                if (typeof mod === 'string') {
+                    name = getFileName(mod)
+                } else if (typeof mod === 'object' && mod.url) {
+                    name = mod.name || getFileName(mod.url)
+                }
+                if (name) validFilenames.add(name)
+            })
+        }
+        
+        // 3. From Modpack Zip (if exists)
+        if (instance.modpackUrl) {
+             if (fs.existsSync(zipPath)) {
+                try {
+                    const zip = new AdmZip(zipPath)
+                    const entries = zip.getEntries()
+                    entries.forEach(entry => {
+                        if (entry.isDirectory) return
+                        // Normalize slashes
+                        const entryPath = entry.entryName.replace(/\\/g, '/')
+                        const parts = entryPath.split('/')
+                        const modsIndex = parts.indexOf('mods')
+                        // If file is inside a "mods" folder, whitelist the immediate child of "mods"
+                        if (modsIndex !== -1 && modsIndex < parts.length - 1) {
+                            validFilenames.add(parts[modsIndex + 1])
+                        }
+                    })
+                } catch (e) {
+                    console.warn("[CLEANUP] Failed to read modpack zip, skipping cleanup to be safe:", e)
+                    // If zip fails, we might still want to proceed with what we have? 
+                    // But if we cleanup, we might delete zip contents.
+                    // Safe approach: Don't run cleanup if zip is critical but unreadable.
+                    // Throwing here will stop the whole launch though? 
+                    // Let's assume if zip is corrupt, we probably re-downloaded it above (Step 1).
+                    // If it's still corrupt, maybe we should stop.
+                }
+             }
+        }
+        
+        // 🚨 PATCH COMPARISON (Requested Feature)
+        // Compare old vs new files to detect additions, deletions, and corruption.
+        // We do this BEFORE syncMods to accurately show what WILL happen.
+        try {
+             const { added, deleted, corrupt } = await syncManager.comparePatches(modsFolder, Array.from(validFilenames), instance.ignoreFiles || [])
+             
+             // Notify UI about patch summary
+             if (mainWindow && !mainWindow.isDestroyed()) {
+                 mainWindow.webContents.send('patch-summary', { 
+                     added: added.length, 
+                     deleted: deleted.length,
+                     corrupt: corrupt.length
+                 })
+             }
+
+             if (added.length > 0 || deleted.length > 0 || corrupt.length > 0) {
+                 console.log(`[PATCH COMPARE] Changes detected for instance ${instance.id}:`)
+                 if (added.length > 0) {
+                     console.log(`   [+] New Files to Download (${added.length}):`)
+                     added.forEach(f => console.log(`       - ${f}`))
+                 }
+                 if (deleted.length > 0) {
+                     console.log(`   [-] Old Files to Remove (${deleted.length}):`)
+                     deleted.forEach(f => console.log(`       - ${f}`))
+                 }
+                 if (corrupt.length > 0) {
+                     console.log(`   [!] Corrupt/Invalid Files Found (${corrupt.length}):`)
+                     corrupt.forEach(f => console.log(`       - ${f}`))
+                     
+                     // AUTO-FIX: Delete corrupt files immediately so syncMods redownloads them
+                     console.log(`[AUTO-FIX] Removing ${corrupt.length} corrupt files...`)
+                     for (const file of corrupt) {
+                         try {
+                             await fs.promises.unlink(path.join(modsFolder, file))
+                         } catch(e) { console.error(`Failed to delete corrupt file ${file}`, e)}
+                     }
+                 }
+             } else {
+                 console.log(`[PATCH COMPARE] No file changes detected. System healthy.`)
+             }
+        } catch (err) {
+            console.error("[PATCH COMPARE] Error analyzing changes:", err)
+        }
+
+    } catch (e) {
+        console.warn("Failed to prepare cleanup list:", e)
+    }
 
     // 2. Handle Individual Mods
     if (instance.mods && Array.isArray(instance.mods)) {
@@ -192,12 +344,23 @@ export function setupLauncher(ipcMain, mainWindow) {
         }
     }
 
-    // 2.6 Cleanup Old Mods (ONLY if NOT using modpackUrl)
-    // If using modpackUrl, extractZip handles cleanup during repair.
-    // If using ONLY mods/preloadMods, we need to manually clean up orphans.
-    if (!instance.modpackUrl) {
+        // 2.6 Cleanup Old Mods
+        // We consolidate cleanup logic to handle both Modpack and Individual Mods.
         try {
-            const validFilenames = []
+             // We can reuse the validFilenames logic if we scope it out, but for now, since we did the Comparison Block *before* syncMods,
+             // we technically already calculated validFilenames there.
+             // However, that block was inside a try-catch and scoped.
+             // To avoid duplication, we should have scoped validFilenames outside.
+             // But wait, I just inserted the "PATCH COMPARISON" block *before* step 2.
+             // And I duplicated the logic.
+             // That's okay for now, but better to reuse if possible.
+             // Actually, step 2.6 (cleanup) still needs validFilenames.
+             // Let's recalculate it to be safe (idempotent), or we can rely on the previous block if I move the declaration up.
+             
+             // I'll leave the recalculation here as it ensures this block is self-contained for cleanup,
+             // matching the original structure.
+            
+            const validFilenames = new Set()
             
             // Helper to get filename from URL
             const getFileName = (url) => {
@@ -210,7 +373,7 @@ export function setupLauncher(ipcMain, mainWindow) {
             if (instance.mods && Array.isArray(instance.mods)) {
                 instance.mods.forEach(modUrl => {
                      const name = getFileName(modUrl)
-                     if (name) validFilenames.push(name)
+                     if (name) validFilenames.add(name)
                 })
             }
             
@@ -223,17 +386,45 @@ export function setupLauncher(ipcMain, mainWindow) {
                     } else if (typeof mod === 'object' && mod.url) {
                         name = mod.name || getFileName(mod.url)
                     }
-                    if (name) validFilenames.push(name)
+                    if (name) validFilenames.add(name)
                 })
             }
             
-            if (validFilenames.length > 0) {
-                await syncManager.cleanupFolder(modsFolder, validFilenames)
+            // 3. From Modpack Zip (if exists)
+            // If modpackUrl is used, we must whitelist files inside the zip to avoid deleting them.
+            if (instance.modpackUrl) {
+                 if (fs.existsSync(zipPath)) {
+                    try {
+                        const zip = new AdmZip(zipPath)
+                        const entries = zip.getEntries()
+                        entries.forEach(entry => {
+                            if (entry.isDirectory) return
+                            // Normalize slashes
+                            const entryPath = entry.entryName.replace(/\\/g, '/')
+                            const parts = entryPath.split('/')
+                            const modsIndex = parts.indexOf('mods')
+                            // If file is inside a "mods" folder, whitelist the immediate child of "mods"
+                            if (modsIndex !== -1 && modsIndex < parts.length - 1) {
+                                validFilenames.add(parts[modsIndex + 1])
+                            }
+                        })
+                    } catch (e) {
+                        console.warn("[CLEANUP] Failed to read modpack zip, skipping cleanup to be safe:", e)
+                        throw new Error('Zip read failed') 
+                    }
+                 } else {
+                     // Zip missing but url defined? Skip cleanup.
+                     throw new Error('Modpack zip missing')
+                 }
             }
+            
+            // Run cleanup
+            // Note: We already did patch comparison earlier. This is the final cleanup.
+            await syncManager.cleanupFolder(modsFolder, Array.from(validFilenames))
+    
         } catch (e) {
-            console.error("[CLEANUP] Error during mod cleanup:", e)
+            // console.error("[CLEANUP] Skipped:", e)
         }
-    }
 
     // 3. Save Installed Version
     // Prioritize modpackVersion if available, otherwise use Minecraft version
@@ -344,7 +535,21 @@ export function setupLauncher(ipcMain, mainWindow) {
         console.log("Launching instance:", instance.name)
         const ram = store.get('ram', 4096)
         const totalMemMB = Math.floor(os.totalmem() / 1024 / 1024)
-        const safeCap = Math.floor(totalMemMB * 0.75)
+        const totalMemGB = totalMemMB / 1024
+        let hardMax
+        if (totalMemGB <= 4) {
+            hardMax = 2048
+        } else if (totalMemGB <= 6) {
+            hardMax = 3072
+        } else if (totalMemGB <= 8) {
+            hardMax = 4096
+        } else if (totalMemGB <= 12) {
+            hardMax = 6144
+        } else {
+            hardMax = 8192
+        }
+        const dynamicCap = Math.floor(totalMemMB * 0.6)
+        const safeCap = Math.min(dynamicCap, hardMax)
         const ramToUse = Math.min(ram, safeCap)
         if (ramToUse < ram) {
             syncManager.sendProgress('Adjusting Memory...', 1, 1, `Using ${ramToUse} MB (cap ${safeCap} MB)`)
@@ -541,9 +746,17 @@ export function setupLauncher(ipcMain, mainWindow) {
                              try {
                                await syncManager.downloadLargeFile(installerUrl, installerPath, { signal })
                              } catch (e) {
+                               if (signal.aborted || e.message === 'Download aborted' || e.message === 'Launch aborted') {
+                                   try { if (fs.existsSync(installerPath)) fs.unlinkSync(installerPath) } catch {}
+                                   throw new Error('Download aborted')
+                               }
                                console.warn(`[FORGE] Primary Maven download failed: ${e.message}. Trying mirror...`)
                                const mirror = `https://bmclapi2.bangbang93.com/maven/net/minecraftforge/forge/${forgeFullVersion}/forge-${forgeFullVersion}-installer.jar`
                                await syncManager.downloadLargeFile(mirror, installerPath, { signal })
+                             }
+                             if (signal.aborted) {
+                                 try { if (fs.existsSync(installerPath)) fs.unlinkSync(installerPath) } catch {}
+                                 throw new Error('Download aborted')
                              }
                              syncManager.sendProgress('Downloading Forge Installer...', 1, 1)
                         }
@@ -657,8 +870,12 @@ export function setupLauncher(ipcMain, mainWindow) {
             }
         }
 
+        const forgeOption = (instance.loader === 'forge' && forgeInstallerPath && versionOpts.type !== "custom")
+            ? forgeInstallerPath
+            : null
+
         const opts = {
-            forge: forgeInstallerPath,
+            forge: forgeOption || undefined,
             javaPath,
             clientPackage: null,
             authorization: auth,
@@ -687,10 +904,11 @@ export function setupLauncher(ipcMain, mainWindow) {
 
         // Setup Event Listeners BEFORE launching
         launcher.on('debug', (e) => {
-            // console.log(`[DEBUG] ${e}`) // Too verbose for main console usually, but good for game log
             mainWindow.webContents.send('game-log', `[DEBUG] ${e}`)
         })
         let vlcErrorDetected = false
+        let oomDetected = false
+        let invalidSessionDetected = false
 
         // Log session to file for crash reports
         const logsDir = path.join(rootPath, 'logs')
@@ -702,13 +920,19 @@ export function setupLauncher(ipcMain, mainWindow) {
         launcher.on('data', (e) => {
             console.log(`[DATA] ${e}`)
             mainWindow.webContents.send('game-log', `${e}`)
-            try { sessionStream.write(String(e) + '\n') } catch {}
-            
-            // Auto-detect VLC errors (FancyMenu/Video Mods)
-            if (e.includes('libvlc error') || e.includes('no suitable interface module')) {
-                 vlcErrorDetected = true
+            const text = String(e)
+            try { sessionStream.write(text + '\n') } catch {}
+            if (text.includes('libvlc error') || text.includes('no suitable interface module')) {
+                vlcErrorDetected = true
             }
-            if (String(e).toLowerCase().includes('exception') || String(e).toLowerCase().includes('error')) {
+            const lower = text.toLowerCase()
+            if (lower.includes('insufficient memory for the java runtime environment') || lower.includes('native memory allocation (mmap) failed')) {
+                oomDetected = true
+            }
+            if (lower.includes('failed to login: invalid session')) {
+                invalidSessionDetected = true
+            }
+            if (lower.includes('exception') || lower.includes('error')) {
                 exceptionDetected = true
             }
         })
@@ -742,8 +966,24 @@ export function setupLauncher(ipcMain, mainWindow) {
                      error: 'Video Mod Error (VLC)', 
                      details: 'Mod ที่ใช้วิดีโอ (เช่น FancyMenu) ทำงานผิดพลาด\nโปรดติดตั้ง Visual C++ Redistributable (x64)' 
                  })
+             } else if (oomDetected) {
+                 mainWindow.webContents.send('game-closed', {
+                     code,
+                     error: 'Insufficient Memory (Java)',
+                     details: 'หน่วยความจำในเครื่องไม่เพียงพอสำหรับ Java ในการเปิดเกม\n\nวิธีแก้ที่แนะนำ:\n- ลดค่า RAM ในหน้า Settings ของ StarHub (แท็บ General)\n- ถ้าเครื่องมี RAM น้อยกว่า 8GB แนะนำให้ตั้งไว้ประมาณ 2048-3072 MB\n- ปิดโปรแกรมอื่น ๆ ที่ใช้ RAM เยอะก่อนเปิดเกม\n- รีสตาร์ทเครื่องถ้ายังเป็นอยู่'
+                 })
+             } else if (invalidSessionDetected) {
+                 try {
+                     store.delete('auth')
+                 } catch (e) {
+                     console.error("Failed to clear auth after invalid session:", e)
+                 }
+                 mainWindow.webContents.send('game-closed', {
+                     code,
+                     error: 'Invalid Session',
+                     details: 'ไม่สามารถเข้าสู่เซิร์ฟเวอร์ได้เพราะ Session ของ Minecraft ไม่ถูกต้องหรือหมดอายุ\n\nStarHub ทำการออกจากระบบให้แล้ว\nกรุณาเปิด Settings แล้วล็อกอินบัญชี Minecraft ใหม่อีกครั้ง จากนั้นเปิดเกมใหม่แล้วลองเข้าเซิร์ฟเวอร์อีกครั้ง'
+                 })
              } else {
-                 // If non-zero exit or exceptions detected, create crash bundle
                  if (code !== 0 || exceptionDetected) {
                      try {
                          const crashDir = path.join(rootPath, 'crash-reports')
@@ -804,6 +1044,14 @@ export function setupLauncher(ipcMain, mainWindow) {
 
     } catch (error) {
         console.error("Launch Error:", error)
+        if (
+            error.message === 'Launch aborted' ||
+            error.message === 'Download aborted' ||
+            error.message === 'Unzip aborted' ||
+            error.message === 'Extraction aborted'
+        ) {
+            return { success: false, error: 'Cancelled' }
+        }
         return { success: false, error: error.message }
     }
   })
@@ -862,6 +1110,36 @@ export function setupLauncher(ipcMain, mainWindow) {
       }
       shell.openPath(folder)
       return { success: true }
+  })
+
+  ipcMain.handle('uninstall-instance', async (event, instance) => {
+      try {
+          if (!instance || !instance.id) {
+              return { success: false, error: 'Invalid instance' }
+          }
+
+          if (!/^[a-zA-Z0-9_-]+$/.test(instance.id)) {
+              console.error(`[SECURITY] Invalid instance ID for uninstall: ${instance.id}`)
+              return { success: false, error: 'invalid_id' }
+          }
+
+          const baseDir = app.getPath('userData')
+          const instancePath = path.join(baseDir, 'instances', instance.id)
+
+          if (fs.existsSync(instancePath)) {
+              await fs.promises.rm(instancePath, { recursive: true, force: true })
+          }
+
+          const installed = store.get('installed_versions', {})
+          if (installed && Object.prototype.hasOwnProperty.call(installed, instance.id)) {
+              store.delete(`installed_versions.${instance.id}`)
+          }
+
+          return { success: true }
+      } catch (error) {
+          console.error("[UNINSTALL] Failed:", error)
+          return { success: false, error: error.message }
+      }
   })
 
   ipcMain.handle('repair-game', async (event, instanceId) => {

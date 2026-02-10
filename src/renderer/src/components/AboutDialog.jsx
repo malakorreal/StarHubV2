@@ -1,5 +1,12 @@
 import React from 'react'
 
+const team = [
+  { name: 'Malakor', role: 'ผู้สร้าง', avatar: 'Malakor_Real' },
+  { name: 'ASTRA', role: 'ผู้ให้คําปรึกษา', avatar: 'ASTRAv0' },
+  { name: 'NEW_WEEIX', role: 'คนนั่งชมผลงาน', avatar: 'OOLLOOL' },
+  
+]
+
 function AboutDialog({ onClose }) {
   return (
     <div style={{
@@ -8,8 +15,8 @@ function AboutDialog({ onClose }) {
       left: 0,
       width: '100%',
       height: '100%',
-      background: 'rgba(0, 0, 0, 0.7)',
-      backdropFilter: 'blur(5px)',
+      background: 'rgba(0, 0, 0, 0.85)',
+      backdropFilter: 'blur(8px)',
       display: 'flex',
       justifyContent: 'center',
       alignItems: 'center',
@@ -19,60 +26,115 @@ function AboutDialog({ onClose }) {
       <div 
         onClick={(e) => e.stopPropagation()}
         style={{
-          background: 'var(--sidebar-bg)',
-          width: '400px',
-          borderRadius: '16px',
-          padding: '30px',
+          background: '#121212',
+          width: '900px',
+          maxWidth: '90%',
+          borderRadius: '24px',
+          padding: '60px',
           textAlign: 'center',
-          boxShadow: '0 10px 30px rgba(0,0,0,0.5)',
-          border: '1px solid rgba(255,255,255,0.1)',
-          animation: 'scaleIn 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
+          border: '1px solid rgba(255,255,255,0.08)',
+          animation: 'scaleIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
+          position: 'relative',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center'
         }}
       >
-        <div style={{
-            margin: '0 auto 20px auto',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: '#fff'
-        }}>
-            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="10"></circle>
-                <line x1="12" y1="16" x2="12" y2="12"></line>
-                <line x1="12" y1="8" x2="12.01" y2="8"></line>
-            </svg>
-        </div>
-        
-        <h2 style={{ margin: '0 0 10px 0', color: '#fff' }}>StarHub</h2>
-        <div style={{ color: 'var(--accent)', fontWeight: '600', marginBottom: '20px' }}>Created by Malakor</div>
-        
-        <p style={{ color: '#aaa', lineHeight: '1.6', marginBottom: '30px' }}>
-          
-          <br/>
-          <span style={{ fontSize: '0.9em', opacity: 0.7 }}></span>
-        </p>
-
         <button 
           onClick={onClose}
           style={{
-            background: 'rgba(255,255,255,0.1)',
+            position: 'absolute',
+            top: '20px',
+            right: '20px',
+            background: 'transparent',
             border: 'none',
-            color: 'white',
-            padding: '10px 30px',
-            borderRadius: '8px',
+            color: '#666',
+            fontSize: '24px',
             cursor: 'pointer',
-            fontSize: '1em',
-            transition: 'background 0.2s'
+            padding: '10px',
+            lineHeight: 1,
+            transition: 'color 0.2s'
           }}
-          onMouseOver={e => e.currentTarget.style.background = 'rgba(255,255,255,0.2)'}
-          onMouseOut={e => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
+          onMouseOver={e => e.currentTarget.style.color = '#fff'}
+          onMouseOut={e => e.currentTarget.style.color = '#666'}
         >
-          Close
+          ×
         </button>
+
+        {/* Logo Removed */}
         
-        <div style={{ marginTop: '20px', fontSize: '0.7em', color: '#555' }}>
-            © 2025 All Rights Reserved
+        <h2 style={{ 
+          margin: '0 0 8px 0', 
+          color: '#fff', 
+          fontSize: '32px',
+          fontWeight: '700' 
+        }}>StarHub</h2>
+        
+        <div style={{ 
+          color: '#888', 
+          fontSize: '14px', 
+          fontWeight: '500', 
+          marginBottom: '30px',
+          letterSpacing: '0.5px'
+        }}>
+          
         </div>
+        
+        <p style={{ 
+          color: '#aaa', 
+          lineHeight: '1.6', 
+          marginBottom: '50px',
+          maxWidth: '500px',
+          fontSize: '15px'
+        }}>
+          เป็น Launcher Minecraft ที่จะทําให้คุณเล่นมายคราฟได้สะดวกมากขึ้น โดยคุณไม่ต้องวุ้นวายกับการ Download Mods ใหม่ทุกๆครั้งที่เจ้าของเชิฟ Update Modpack เพราะ StarHub นั้นมีระบบ Auto Update ให้ทุกๆคนใช้งานได้สะดวกสบายขึ้น !
+        </p>
+
+        {/* Divider with Text */}
+        <div style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          width: '100%', 
+          marginBottom: '40px',
+          color: '#444'
+        }}>
+          <div style={{ flex: 1, height: '1px', background: 'rgba(255,255,255,0.1)' }}></div>
+          <span style={{ padding: '0 20px', fontSize: '13px', color: '#888', fontWeight: '500' }}>ทีมพัฒนา</span>
+          <div style={{ flex: 1, height: '1px', background: 'rgba(255,255,255,0.1)' }}></div>
+        </div>
+
+        {/* Team Grid */}
+        <div style={{ 
+          display: 'flex', 
+          justifyContent: 'center', 
+          gap: '40px', 
+          flexWrap: 'wrap',
+          width: '100%'
+        }}>
+          {team.map((member) => (
+            <div key={member.name} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '140px' }}>
+              <div style={{ 
+                width: '64px', 
+                height: '64px', 
+                borderRadius: '16px', 
+                marginBottom: '15px',
+                overflow: 'hidden',
+                background: '#222',
+                border: '1px solid rgba(255,255,255,0.05)'
+              }}>
+                <img 
+                  src={`https://minotar.net/avatar/${member.avatar}/128.png`} 
+                  alt={member.name}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  onError={(e) => { e.target.src = 'https://minotar.net/avatar/Steve/128.png' }}
+                />
+              </div>
+              <div style={{ color: '#fff', fontWeight: '600', fontSize: '14px', marginBottom: '4px' }}>{member.name}</div>
+              <div style={{ color: '#666', fontSize: '12px' }}>{member.role}</div>
+            </div>
+          ))}
+        </div>
+        
       </div>
     </div>
   )

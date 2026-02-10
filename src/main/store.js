@@ -9,6 +9,7 @@ export function setupStore(ipcMain) {
       ram: store.get('ram', 4096),
       systemRam: Math.round(os.totalmem() / 1024 / 1024), // Add system RAM in MB
       closeBehavior: store.get('closeBehavior', 'ask'),
+      bgAnimation: store.get('bgAnimation', false),
       javaPath: store.get('javaPath', ''),
       instances: store.get('instances', []),
       installedVersions: store.get('installed_versions', {}),
@@ -40,12 +41,14 @@ export function setupStore(ipcMain) {
     store.delete('maxConcurrentDownloads')
     store.delete('autoCheckUpdates')
     store.delete('closeBehavior')
+    store.delete('bgAnimation')
     
     // Return default values
     return {
       ram: 4096,
       systemRam: Math.round(os.totalmem() / 1024 / 1024),
       closeBehavior: 'ask',
+      bgAnimation: false,
       javaArgs: '',
       autoJoin: false,
       resolution: { width: 854, height: 480 },

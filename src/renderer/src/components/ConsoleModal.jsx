@@ -36,7 +36,6 @@ function ConsoleModal({ logs = [], onClose, onClear }) {
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
-        boxShadow: '0 10px 30px rgba(0,0,0,0.5)',
         border: '1px solid #333'
       }}>
         {/* Header */}

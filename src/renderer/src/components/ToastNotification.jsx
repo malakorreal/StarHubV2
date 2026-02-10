@@ -22,27 +22,42 @@ const ToastNotification = ({ message, type = 'info', onClose, duration = 3000 })
     }, [duration, onClose])
 
     return (
-        <div style={{
-            position: 'fixed',
-            bottom: '20px',
-            right: '20px',
-            background: 'rgba(30, 30, 40, 0.95)',
-            borderLeft: `4px solid ${color}`,
-            borderRadius: '8px',
-            padding: '16px 24px',
-            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)',
-            backdropFilter: 'blur(8px)',
-            color: 'white',
-            zIndex: 10000,
-            display: 'flex',
-            alignItems: 'center',
-            gap: '12px',
-            transform: isVisible ? 'translateX(0)' : 'translateX(120%)',
-            opacity: isVisible ? 1 : 0,
-            transition: 'all 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55)',
-            maxWidth: '350px'
-        }}>
+        <>
+            <style>
+                {`
+                    @keyframes toast-bounce-in {
+                        0% { transform: translateX(120%) scale(0.8); opacity: 0; }
+                        60% { transform: translateX(-15px) scale(1.05); opacity: 1; }
+                        80% { transform: translateX(5px) scale(0.98); }
+                        100% { transform: translateX(0) scale(1); }
+                    }
+                    @keyframes toast-bounce-out {
+                        0% { transform: translateX(0) scale(1); opacity: 1; }
+                        20% { transform: translateX(-10px) scale(0.95); }
+                        100% { transform: translateX(120%) scale(0.8); opacity: 0; }
+                    }
+                `}
+            </style>
             <div style={{
+                position: 'fixed',
+                bottom: '20px',
+                right: '20px',
+                background: 'rgba(30, 30, 40, 0.95)',
+                borderLeft: `4px solid ${color}`,
+                borderRadius: '12px',
+                padding: '16px 24px',
+                backdropFilter: 'blur(8px)',
+                color: 'white',
+                zIndex: 10000,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                animation: isVisible 
+                    ? 'toast-bounce-in 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards' 
+                    : 'toast-bounce-out 0.4s cubic-bezier(0.25, 1, 0.5, 1) forwards',
+                maxWidth: '350px'
+            }}>
+                <div style={{
                 width: '24px',
                 height: '24px',
                 borderRadius: '50%',
@@ -83,6 +98,7 @@ const ToastNotification = ({ message, type = 'info', onClose, duration = 3000 })
                 {message}
             </div>
         </div>
+        </>
     )
 }
 

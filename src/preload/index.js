@@ -5,6 +5,9 @@ import { electronAPI } from '@electron-toolkit/preload'
 const api = {
   login: () => ipcRenderer.invoke('login'),
   logout: () => ipcRenderer.invoke('logout'),
+  getAccounts: () => ipcRenderer.invoke('get-accounts'),
+  switchAccount: (uuid) => ipcRenderer.invoke('switch-account', uuid),
+  removeAccount: (uuid) => ipcRenderer.invoke('remove-account', uuid),
   refreshToken: () => ipcRenderer.invoke('refresh-token'),
   getInstances: (force = false) => ipcRenderer.invoke('get-instances', force),
   launchGame: (instance, auth) => ipcRenderer.invoke('launch-game', { instance, auth }),
@@ -23,6 +26,7 @@ const api = {
   windowClose: (behavior) => ipcRenderer.invoke('window-close', behavior),
   windowMinimize: () => ipcRenderer.send('window-minimize'),
   windowMaximize: () => ipcRenderer.send('window-maximize'),
+  uninstallInstance: (instance) => ipcRenderer.invoke('uninstall-instance', instance),
   onLaunchProgress: (callback) => {
     ipcRenderer.removeAllListeners('launch-progress')
     const listener = (event, value) => callback(value)
@@ -62,12 +66,19 @@ const api = {
   // Updater
   checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
   installUpdate: () => ipcRenderer.invoke('install-update'),
+  restartLauncher: () => ipcRenderer.invoke('restart-launcher'),
   installVcRedist: () => ipcRenderer.invoke('install-vcredist'),
   onUpdaterEvent: (callback) => {
     ipcRenderer.removeAllListeners('updater-event')
     const listener = (event, value) => callback(value)
     ipcRenderer.on('updater-event', listener)
     return () => ipcRenderer.removeListener('updater-event', listener)
+  },
+  onPatchSummary: (callback) => {
+    ipcRenderer.removeAllListeners('patch-summary')
+    const listener = (event, value) => callback(value)
+    ipcRenderer.on('patch-summary', listener)
+    return () => ipcRenderer.removeListener('patch-summary', listener)
   },
   // Backup
   backupInstanceData: (instance) => ipcRenderer.invoke('backup-instance-data', instance),

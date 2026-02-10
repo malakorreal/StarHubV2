@@ -6,7 +6,7 @@ import icon from '../../resources/icon.ico?asset'
 import { setupAuth } from './auth'
 import { setupLauncher } from './launcher'
 import { setupStatus } from './status'
-import { setupRPC, updateRPCLanguage, setActivity } from './rpc'
+import { setupRPC, updateRPCLanguage, setActivity, shutdownRPC } from './rpc'
 import { setupStore, getStore } from './store'
 import { autoUpdater } from 'electron-updater'
 
@@ -185,7 +185,7 @@ app.whenReady().then(() => {
 
   autoUpdater.on('update-downloaded', () => {
     mainWindow.webContents.send('updater-event', { type: 'downloaded' })
-    autoUpdater.quitAndInstall(true, true)
+    // autoUpdater.quitAndInstall(true, true) // Removed to prevent forced restart loop. Let UI handle it.
   })
 
   // Install Update Handler
@@ -313,11 +313,23 @@ app.whenReady().then(() => {
   })
   
   ipcMain.handle('window-close', async (event, behavior) => {
-    // behavior: 'tray' or 'quit'
     if (behavior === 'tray') {
       mainWindow.hide()
     } else {
       app.quit()
+    }
+  })
+
+  ipcMain.handle('restart-launcher', () => {
+    try {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.reload()
+        return { success: true }
+      }
+      return { success: false, error: 'Main window not available' }
+    } catch (e) {
+      console.error('Failed to restart launcher:', e)
+      return { success: false, error: e.message }
     }
   })
 
@@ -333,4 +345,8 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit()
   }
+})
+
+app.on('before-quit', () => {
+  shutdownRPC()
 })

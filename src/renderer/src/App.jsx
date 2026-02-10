@@ -15,6 +15,8 @@ import RepairConfirmationModal from './components/RepairConfirmationModal'
 import ToastNotification from './components/ToastNotification'
 import { useLanguage } from './contexts/LanguageContext'
 
+import { themes } from './themes'
+
 // Preload Helper
 const preloadImages = (urls) => {
     if (!Array.isArray(urls) || urls.length === 0) return Promise.resolve()
@@ -53,14 +55,19 @@ function App() {
   const [repairTargetInstance, setRepairTargetInstance] = useState(null)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [isLoading, setIsLoading] = useState(true) // Start with loading true
+  const [loadingMessage, setLoadingMessage] = useState('')
   const [isLoggingIn, setIsLoggingIn] = useState(false)
   const [isVisible, setIsVisible] = useState(true)
   
   // Initialize theme from localStorage
   useEffect(() => {
-      const savedTheme = localStorage.getItem('theme')
-      if (savedTheme) {
-          document.documentElement.style.setProperty('--accent', savedTheme)
+      const savedThemeId = localStorage.getItem('theme_id') || 'gold'
+      const theme = themes[savedThemeId] || themes.gold
+      
+      if (theme && theme.colors) {
+          Object.entries(theme.colors).forEach(([key, value]) => {
+              document.documentElement.style.setProperty(key, value)
+          })
       }
   }, [])
 
@@ -78,9 +85,8 @@ function App() {
   const instancesRefreshIntervalRef = React.useRef(null)
   const launchStatusRef = React.useRef('idle')
 
-  // Graphics Settings State
-  const [enableAnimation, setEnableAnimation] = useState(true)
-  const [enableCubes, setEnableCubes] = useState(true)
+  const [enableAnimation, setEnableAnimation] = useState(false)
+  const [enableCubes] = useState(true)
 
   const toggleAnimation = () => {
       const newState = !enableAnimation
@@ -90,6 +96,15 @@ function App() {
 
   const showToast = useCallback((message, type = 'info') => {
       setToast({ message, type, id: Date.now() })
+  }, [])
+
+  useEffect(() => {
+      if (!window.api || !window.api.getSettings) return
+      window.api.getSettings().then(s => {
+          if (s && typeof s.bgAnimation !== 'undefined') {
+              setEnableAnimation(!!s.bgAnimation)
+          }
+      }).catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -201,6 +216,7 @@ function App() {
     // Initial Load
     const init = async () => {
       try {
+        setLoadingMessage(t('main.checkingSession') || 'Checking Session...')
         let currentUser = null
         // Check Auth
         const storedAuth = await window.api.refreshToken()
@@ -209,6 +225,7 @@ function App() {
           setUser(currentUser)
         }
 
+        setLoadingMessage(t('main.loadingInstances') || 'Loading Instances...')
         // Fetch Instances
         // Use force=false to load from cache immediately (Fast Startup)
         // The background sync will update to the latest data automatically
@@ -377,6 +394,28 @@ function App() {
       return () => {}
   }, [launchStatus])
 
+  // Patch Summary Listener (Localized)
+  useEffect(() => {
+      if (window.api && window.api.onPatchSummary) {
+          const unsub = window.api.onPatchSummary((data) => {
+              const { added, deleted, corrupt } = data
+              if (added === 0 && deleted === 0 && corrupt === 0) {
+                   showToast(t('patch.noChanges') || "No file changes detected", 'success')
+              } else {
+                   let parts = []
+                   if (added > 0) parts.push((t('patch.added') || "Added: {count}").replace('{count}', added))
+                   if (deleted > 0) parts.push((t('patch.deleted') || "Deleted: {count}").replace('{count}', deleted))
+                   if (corrupt > 0) parts.push((t('patch.corrupt') || "Corrupt: {count}").replace('{count}', corrupt))
+                   
+                   showToast(`${t('patch.changes') || "Changes"}: ${parts.join(', ')}`, 'info')
+              }
+          })
+          return () => {
+              if (typeof unsub === 'function') unsub()
+          }
+      }
+  }, [t, showToast])
+
   // RPC Status Management
   useEffect(() => {
     if (!window.api || !window.api.updateRPC) return
@@ -477,23 +516,27 @@ function App() {
   }, [filteredInstances, selectedInstance])
 
   const handleLogin = async () => {
-    setIsLoggingIn(true)
-    try {
-        const result = await window.api.login()
-        if (result.success) {
-            // Fetch instances immediately after login to ensure data is ready before showing main screen
-            const insts = await fetchInstances(true)
-            await preloadAssets(insts, result.profile)
-            setUser(result.profile)
-        } else {
-            setErrorMessage("Login Failed: " + (result.error?.message || "Unknown error"))
+        setIsLoggingIn(true)
+        try {
+            const result = await window.api.login()
+            if (result.success) {
+                // Fetch instances immediately after login to ensure data is ready before showing main screen
+                const insts = await fetchInstances(true)
+                await preloadAssets(insts, result.profile)
+                setUser(result.profile)
+            } else {
+                if (result.error && result.error.message === 'NO_MINECRAFT') {
+                    setErrorMessage(t('auth.noMinecraft') || "Minecraft Java Edition not found on this account.")
+                } else {
+                    setErrorMessage("Login Failed: " + (result.error?.message || "Unknown error"))
+                }
+            }
+        } catch (err) {
+            setErrorMessage("Login Error: " + err.message)
+        } finally {
+            setIsLoggingIn(false)
         }
-    } catch (err) {
-        setErrorMessage("Login Error: " + err.message)
-    } finally {
-        setIsLoggingIn(false)
     }
-  }
 
   const handleLaunch = async () => {
     if (!user) return handleLogin()
@@ -505,6 +548,10 @@ function App() {
     const auth = await window.api.refreshToken() // Get fresh token
     if (!auth.success) {
         setLaunchStatus('idle')
+        if (auth.error && auth.error.message === 'NO_MINECRAFT') {
+            setErrorMessage(t('auth.noMinecraft') || "Minecraft Java Edition not found on this account.")
+            return
+        }
         handleLogin() // Re-login needed
         return
     }
@@ -551,6 +598,13 @@ function App() {
       }
   }
 
+  const handleUninstallInstance = () => {
+      if (!selectedInstance) return
+      setRepairTargetInstance(selectedInstance)
+      setRepairActionName('Uninstall')
+      setShowRepairConfirmation(true)
+  }
+
   const handleRepair = async (actionName) => {
     if (!selectedInstance) return
     setRepairTargetInstance(selectedInstance)
@@ -572,7 +626,27 @@ function App() {
     setRepairTargetInstance(null)
 
     const actionName = repairActionName
-    
+    if (actionName === 'Uninstall') {
+        if (!window.api || !window.api.uninstallInstance) return
+        try {
+            const res = await window.api.uninstallInstance(instance)
+            if (res && res.success) {
+                showToast(language === 'th' ? 'ถอดการติดตั้ง Instance แล้ว' : 'Instance uninstalled', 'success')
+                if (window.api && window.api.getInstalledVersions) {
+                    try {
+                        const installed = await window.api.getInstalledVersions()
+                        setInstalledVersions(installed || {})
+                    } catch (e) {}
+                }
+            } else {
+                showToast(res?.error || (language === 'th' ? 'ถอดการติดตั้งไม่สำเร็จ' : 'Uninstall failed'), 'error')
+            }
+        } catch (e) {
+            showToast(e.message || (language === 'th' ? 'ถอดการติดตั้งไม่สำเร็จ' : 'Uninstall failed'), 'error')
+        }
+        return
+    }
+
     setLaunchStatus('repairing')
     try {
         await window.api.repairInstance(instance)
@@ -595,11 +669,20 @@ function App() {
     setShowSettings(false)
   }
 
-  const handleSwitchAccount = async () => {
-      // Force prompt for new login
-      const result = await window.api.login()
+  const handleSwitchAccount = async (uuid) => {
+      let result;
+      if (typeof uuid === 'string') {
+          result = await window.api.switchAccount(uuid)
+      } else {
+          // Add Account / Login
+          result = await window.api.login()
+      }
+
       if (result.success) {
         setUser(result.profile)
+        // Refresh instances and assets
+        const insts = await fetchInstances(true)
+        await preloadAssets(insts, result.profile)
       }
   }
 
@@ -616,7 +699,8 @@ function App() {
                     borderRadius: '50%', 
                     animation: 'spin 1s linear infinite' 
                 }}></div>
-                <h2 style={{ fontWeight: 300, letterSpacing: 2 }}>{t('main.loading').toUpperCase()}</h2>
+                <h2 style={{ fontWeight: 300, letterSpacing: 2, marginBottom: '10px' }}>{t('main.loading').toUpperCase()}</h2>
+                {loadingMessage && <div style={{ color: '#888', fontSize: '0.9em' }}>{loadingMessage}</div>}
             </div>
         </div>
       )
@@ -660,6 +744,7 @@ function App() {
                     onOpenSettings={() => setShowSettings(true)}
                     onOpenFolder={handleOpenFolder}
                     onRepair={handleRepair}
+                    onUninstallInstance={handleUninstallInstance}
                     onOpenConsole={() => setShowConsole(true)}
                     user={user}
                     paused={showSettings}
@@ -679,22 +764,26 @@ function App() {
             </>
         )}
 
-        {showSettings && (
-            <Settings 
-                user={user}
-                selectedInstance={selectedInstance}
-                onClose={() => setShowSettings(false)} 
-                onLogout={handleLogout}
-                onSwitchAccount={handleSwitchAccount}
-                redeemedCodes={redeemedCodes}
-                onAddCode={handleAddCode}
-                onRemoveCode={handleRemoveCode}
-                t={t}
-                changeLanguage={changeLanguage}
-                currentLanguage={language}
-                showToast={showToast}
-            />
-        )}
+      {showSettings && (
+        <Settings 
+            onClose={() => setShowSettings(false)} 
+            onLogout={handleLogout} 
+            onSwitchAccount={handleSwitchAccount} 
+            user={user} 
+            redeemedCodes={redeemedCodes} 
+            onAddCode={handleAddCode}
+            onRemoveCode={handleRemoveCode}
+            t={t}
+            changeLanguage={changeLanguage}
+            currentLanguage={language}
+            showToast={showToast}
+            onInstalledVersionsChange={setInstalledVersions}
+            onUninstallInstance={handleUninstallInstance}
+            selectedInstance={selectedInstance}
+            enableAnimation={enableAnimation}
+            setEnableAnimation={setEnableAnimation}
+        />
+      )}
 
         {toast && (
             <ToastNotification
