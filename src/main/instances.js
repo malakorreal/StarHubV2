@@ -1,7 +1,7 @@
 import axios from 'axios'
 import { getStore } from './store'
 
-const JSON_URL = 'https://api.npoint.io/e941143771dfcea29992'
+const JSON_URL = 'https://api.npoint.io/e941143771dfcea29992' // TODO: Change this to your new API URL (e.g. https://your-app.onrender.com/api/instances)
 
 export async function getInstances(mainWindow = null, force = false) {
   const store = getStore()
@@ -76,7 +76,7 @@ async function fetchAndCache(cacheKey) {
          // Clean strings
          const clean = (s) => s ? s.replace(/`/g, '').trim() : ""
          
-         inst.modpackUrl = clean(inst.modpackUrl) || clean(inst.fileUrl)
+         inst.modpackUrl = clean(inst.modpackUrl) || clean(inst.fileUrl) || clean(inst.modpack_url)
          inst.id = inst.id || (inst.name ? inst.name.toLowerCase().replace(/\s+/g, '-') : 'unknown')
          
          return inst
