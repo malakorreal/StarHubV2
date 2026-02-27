@@ -13,7 +13,7 @@ export const authOptions = {
     async signIn({ user, account, profile }) {
       try {
         // Fetch allowed users from npoint API
-        const response = await fetch('https://api.npoint.io/e941143771dfcea29992') // TODO: Change to your actual user check API if different
+        const response = await fetch('https://api.npoint.io/6d71db871d844b9ec40f') // TODO: Change to your actual user check API if different
         if (!response.ok) return false
         
         const data = await response.json()
