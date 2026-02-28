@@ -109,7 +109,7 @@ export default function InstanceForm({ initialData = null, onClose, onSuccess })
         name={name}
         required={required}
         readOnly={readOnly}
-        value={formData[name]}
+        value={formData[name] || ''}
         onChange={handleChange}
         className={`w-full px-4 py-2.5 bg-black/20 border border-white/10 rounded-xl text-white placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all ${readOnly ? 'opacity-50 cursor-not-allowed' : 'hover:bg-black/30'}`}
         placeholder={placeholder}
@@ -127,8 +127,36 @@ export default function InstanceForm({ initialData = null, onClose, onSuccess })
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        <InputField label="Name" name="name" placeholder="e.g. Lumina Evernight" required />
-        <InputField label="ID (Unique)" name="id" placeholder="lumina-evernight" required readOnly={!!initialData} />
+        <div className="space-y-1.5">
+          <label className="block text-sm font-medium text-zinc-300">
+            Name <span className="text-red-400">*</span>
+          </label>
+          <input
+            type="text"
+            name="name"
+            required
+            value={formData.name || ''}
+            onChange={handleChange}
+            className="w-full px-4 py-2.5 bg-black/20 border border-white/10 rounded-xl text-white placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all hover:bg-black/30"
+            placeholder="e.g. Lumina Evernight"
+          />
+        </div>
+        
+        <div className="space-y-1.5">
+          <label className="block text-sm font-medium text-zinc-300">
+            ID (Unique) <span className="text-red-400">*</span>
+          </label>
+          <input
+            type="text"
+            name="id"
+            required
+            readOnly={!!initialData}
+            value={formData.id || ''}
+            onChange={handleChange}
+            className={`w-full px-4 py-2.5 bg-black/20 border border-white/10 rounded-xl text-white placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all ${!!initialData ? 'opacity-50 cursor-not-allowed' : 'hover:bg-black/30'}`}
+            placeholder="lumina-evernight"
+          />
+        </div>
         
         <div className="space-y-1.5">
           <label className="block text-sm font-medium text-zinc-300">Loader</label>
@@ -151,15 +179,68 @@ export default function InstanceForm({ initialData = null, onClose, onSuccess })
           </div>
         </div>
 
-        <InputField label="Game Version" name="version" placeholder="1.20.1" />
-        <InputField label="Loader Version" name="loader_version" placeholder="e.g. 47.1.0" />
-        <InputField label="Forge Version" name="forge_version" placeholder="e.g. 47.1.0" />
+        <div className="space-y-1.5">
+          <label className="block text-sm font-medium text-zinc-300">Game Version</label>
+          <input
+            type="text"
+            name="version"
+            value={formData.version || ''}
+            onChange={handleChange}
+            className="w-full px-4 py-2.5 bg-black/20 border border-white/10 rounded-xl text-white placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all hover:bg-black/30"
+            placeholder="1.20.1"
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <label className="block text-sm font-medium text-zinc-300">Loader Version</label>
+          <input
+            type="text"
+            name="loader_version"
+            value={formData.loader_version || ''}
+            onChange={handleChange}
+            className="w-full px-4 py-2.5 bg-black/20 border border-white/10 rounded-xl text-white placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all hover:bg-black/30"
+            placeholder="e.g. 47.1.0"
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <label className="block text-sm font-medium text-zinc-300">Forge Version</label>
+          <input
+            type="text"
+            name="forge_version"
+            value={formData.forge_version || ''}
+            onChange={handleChange}
+            className="w-full px-4 py-2.5 bg-black/20 border border-white/10 rounded-xl text-white placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all hover:bg-black/30"
+            placeholder="e.g. 47.1.0"
+          />
+        </div>
       </div>
 
       <div className="space-y-4 pt-4 border-t border-white/5">
         <h3 className="text-lg font-semibold text-white">Files & Network</h3>
-        <InputField label="Modpack URL (Direct Download)" name="modpack_url" type="url" placeholder="https://..." />
-        <InputField label="Server IP" name="server_ip" placeholder="play.example.com" />
+        <div className="space-y-1.5">
+          <label className="block text-sm font-medium text-zinc-300">Modpack URL (Direct Download)</label>
+          <input
+            type="url"
+            name="modpack_url"
+            value={formData.modpack_url || ''}
+            onChange={handleChange}
+            className="w-full px-4 py-2.5 bg-black/20 border border-white/10 rounded-xl text-white placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all hover:bg-black/30"
+            placeholder="https://..."
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <label className="block text-sm font-medium text-zinc-300">Server IP</label>
+          <input
+            type="text"
+            name="server_ip"
+            value={formData.server_ip || ''}
+            onChange={handleChange}
+            className="w-full px-4 py-2.5 bg-black/20 border border-white/10 rounded-xl text-white placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all hover:bg-black/30"
+            placeholder="play.example.com"
+          />
+        </div>
         
         <div className="space-y-1.5">
             <label className="block text-sm font-medium text-zinc-300">Ignore Files (One per line)</label>
@@ -177,12 +258,72 @@ export default function InstanceForm({ initialData = null, onClose, onSuccess })
       <div className="space-y-4 pt-4 border-t border-white/5">
         <h3 className="text-lg font-semibold text-white">Appearance & Links</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            <InputField label="Icon URL" name="icon" type="url" placeholder="https://..." />
-            <InputField label="Logo URL" name="logo" type="url" placeholder="https://..." />
-            <InputField label="Background Image" name="background_image" type="url" placeholder="https://..." />
-            <InputField label="Announcement Image" name="announcement_image" type="url" placeholder="https://..." />
-            <InputField label="Discord Link" name="discord" type="url" placeholder="https://discord.gg/..." />
-            <InputField label="Website Link" name="website" type="url" placeholder="https://..." />
+            <div className="space-y-1.5">
+              <label className="block text-sm font-medium text-zinc-300">Icon URL</label>
+              <input
+                type="url"
+                name="icon"
+                value={formData.icon || ''}
+                onChange={handleChange}
+                className="w-full px-4 py-2.5 bg-black/20 border border-white/10 rounded-xl text-white placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all hover:bg-black/30"
+                placeholder="https://..."
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="block text-sm font-medium text-zinc-300">Logo URL</label>
+              <input
+                type="url"
+                name="logo"
+                value={formData.logo || ''}
+                onChange={handleChange}
+                className="w-full px-4 py-2.5 bg-black/20 border border-white/10 rounded-xl text-white placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all hover:bg-black/30"
+                placeholder="https://..."
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="block text-sm font-medium text-zinc-300">Background Image</label>
+              <input
+                type="url"
+                name="background_image"
+                value={formData.background_image || ''}
+                onChange={handleChange}
+                className="w-full px-4 py-2.5 bg-black/20 border border-white/10 rounded-xl text-white placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all hover:bg-black/30"
+                placeholder="https://..."
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="block text-sm font-medium text-zinc-300">Announcement Image</label>
+              <input
+                type="url"
+                name="announcement_image"
+                value={formData.announcement_image || ''}
+                onChange={handleChange}
+                className="w-full px-4 py-2.5 bg-black/20 border border-white/10 rounded-xl text-white placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all hover:bg-black/30"
+                placeholder="https://..."
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="block text-sm font-medium text-zinc-300">Discord Link</label>
+              <input
+                type="url"
+                name="discord"
+                value={formData.discord || ''}
+                onChange={handleChange}
+                className="w-full px-4 py-2.5 bg-black/20 border border-white/10 rounded-xl text-white placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all hover:bg-black/30"
+                placeholder="https://discord.gg/..."
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="block text-sm font-medium text-zinc-300">Website Link</label>
+              <input
+                type="url"
+                name="website"
+                value={formData.website || ''}
+                onChange={handleChange}
+                className="w-full px-4 py-2.5 bg-black/20 border border-white/10 rounded-xl text-white placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all hover:bg-black/30"
+                placeholder="https://..."
+              />
+            </div>
         </div>
         
         <div className="space-y-1.5">
@@ -219,7 +360,17 @@ export default function InstanceForm({ initialData = null, onClose, onSuccess })
             </label>
         </div>
         {formData.maintenance && (
-            <InputField label="Maintenance Message" name="maintenance_message" placeholder="Server is under maintenance..." />
+            <div className="space-y-1.5">
+              <label className="block text-sm font-medium text-zinc-300">Maintenance Message</label>
+              <input
+                type="text"
+                name="maintenance_message"
+                value={formData.maintenance_message || ''}
+                onChange={handleChange}
+                className="w-full px-4 py-2.5 bg-black/20 border border-white/10 rounded-xl text-white placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all hover:bg-black/30"
+                placeholder="Server is under maintenance..."
+              />
+            </div>
         )}
       </div>
 
