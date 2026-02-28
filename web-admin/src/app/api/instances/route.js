@@ -14,7 +14,20 @@ export async function GET() {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  return NextResponse.json(data)
+  const normalized = (data || []).map(r => ({
+    id: r.id,
+    name: r.name || "",
+    icon: r.icon || "",
+    logo: r.logo || "",
+    loader: r.loader || "",
+    version: r.version || "",
+    modpackUrl: r.modpack_url || r.modpackUrl || r.fileUrl || "",
+    discord: r.discord || "",
+    website: r.website || "",
+    description: r.description || ""
+  }))
+
+  return NextResponse.json(normalized)
 }
 
 export async function POST(request) {
@@ -29,20 +42,43 @@ export async function POST(request) {
   }
 
   const body = await request.json()
+  const payload = {
+    id: (body.id || "").toString(),
+    name: (body.name || "").toString(),
+    icon: body.icon || "",
+    logo: body.logo || "",
+    loader: body.loader || "",
+    version: body.version || "",
+    modpack_url: body.modpack_url || body.modpackUrl || body.fileUrl || "",
+    discord: body.discord || "",
+    website: body.website || "",
+    description: body.description || ""
+  }
   
-  // Basic validation
-  if (!body.id || !body.name) {
+  if (!payload.id || !payload.name) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
   }
 
   const { data, error } = await supabaseAdmin
     .from('instances')
-    .insert([body])
+    .insert([payload])
     .select()
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  return NextResponse.json(data[0])
+  const r = data[0]
+  return NextResponse.json({
+    id: r.id,
+    name: r.name || "",
+    icon: r.icon || "",
+    logo: r.logo || "",
+    loader: r.loader || "",
+    version: r.version || "",
+    modpackUrl: r.modpack_url || r.modpackUrl || r.fileUrl || "",
+    discord: r.discord || "",
+    website: r.website || "",
+    description: r.description || ""
+  })
 }

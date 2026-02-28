@@ -41,6 +41,14 @@ export default function Home() {
     }
   }
 
+  useEffect(() => {
+    if (status !== 'authenticated') return
+    const t = setInterval(() => {
+      fetchInstances()
+    }, 3000)
+    return () => clearInterval(t)
+  }, [status])
+
   const handleDelete = async () => {
     if (!deletingId) return
     try {
