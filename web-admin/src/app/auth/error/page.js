@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic'
+
 export default function ErrorPage({ searchParams }) {
   const error = searchParams?.error || ""
   const message =
