@@ -231,19 +231,19 @@ export default function InstanceForm({ initialData = null, onClose, onSuccess })
         
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="md:col-span-1 space-y-2">
-                <div className="flex gap-2">
+                <div className="flex gap-2 w-full">
                     <input
                         type="text"
                         value={newPlayer}
                         onChange={(e) => setNewPlayer(e.target.value)}
                         onKeyDown={(e) => e.key === 'Enter' && handleAddPlayer(e)}
                         placeholder="Enter player name"
-                        className="flex-1 px-4 py-2.5 bg-black/20 border border-white/10 rounded-xl text-white placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all hover:bg-black/30"
+                        className="flex-1 min-w-0 px-4 py-2.5 bg-black/20 border border-white/10 rounded-xl text-white placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all hover:bg-black/30"
                     />
                     <button
                         type="button"
                         onClick={handleAddPlayer}
-                        className="px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl transition-colors"
+                        className="shrink-0 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl transition-colors flex items-center justify-center"
                     >
                         <Plus size={20} />
                     </button>
