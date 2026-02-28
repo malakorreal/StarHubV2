@@ -1,7 +1,11 @@
-export const dynamic = 'force-dynamic'
+'use client'
 
-export default function ErrorPage({ searchParams }) {
-  const error = searchParams?.error || ""
+import { useSearchParams } from "next/navigation"
+import { Suspense } from 'react'
+
+function ErrorContent() {
+  const searchParams = useSearchParams()
+  const error = searchParams.get('error')
   const message =
     error === "AccessDenied"
       ? "Access denied. You do not have permission to use this dashboard."
@@ -20,6 +24,14 @@ export default function ErrorPage({ searchParams }) {
         </a>
       </div>
     </div>
+  )
+}
+
+export default function ErrorPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <ErrorContent />
+    </Suspense>
   )
 }
 
