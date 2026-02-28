@@ -4,8 +4,10 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Save, AlertCircle, X, Plus } from 'lucide-react'
+import { useTranslations } from 'next-intl'
 
 export default function InstanceForm({ initialData = null, onClose, onSuccess }) {
+  const t = useTranslations('InstanceForm')
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -99,24 +101,6 @@ export default function InstanceForm({ initialData = null, onClose, onSuccess })
     }
   }
 
-  const InputField = ({ label, name, type = "text", placeholder, required = false, readOnly = false }) => (
-    <div className="space-y-1.5">
-      <label className="block text-sm font-medium text-zinc-300">
-        {label} {required && <span className="text-red-400">*</span>}
-      </label>
-      <input
-        type={type}
-        name={name}
-        required={required}
-        readOnly={readOnly}
-        value={formData[name] || ''}
-        onChange={handleChange}
-        className={`w-full px-4 py-2.5 bg-black/20 border border-white/10 rounded-xl text-white placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all ${readOnly ? 'opacity-50 cursor-not-allowed' : 'hover:bg-black/30'}`}
-        placeholder={placeholder}
-      />
-    </div>
-  )
-
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       {error && (
@@ -129,7 +113,7 @@ export default function InstanceForm({ initialData = null, onClose, onSuccess })
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
         <div className="space-y-1.5">
           <label className="block text-sm font-medium text-zinc-300">
-            Name <span className="text-red-400">*</span>
+            {t('name')} <span className="text-red-400">*</span>
           </label>
           <input
             type="text"
@@ -144,7 +128,7 @@ export default function InstanceForm({ initialData = null, onClose, onSuccess })
         
         <div className="space-y-1.5">
           <label className="block text-sm font-medium text-zinc-300">
-            ID (Unique) <span className="text-red-400">*</span>
+            {t('id')} <span className="text-red-400">*</span>
           </label>
           <input
             type="text"
@@ -159,7 +143,7 @@ export default function InstanceForm({ initialData = null, onClose, onSuccess })
         </div>
         
         <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-zinc-300">Loader</label>
+          <label className="block text-sm font-medium text-zinc-300">{t('loader')}</label>
           <div className="relative">
             <select
               name="loader"
@@ -180,7 +164,7 @@ export default function InstanceForm({ initialData = null, onClose, onSuccess })
         </div>
 
         <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-zinc-300">Game Version</label>
+          <label className="block text-sm font-medium text-zinc-300">{t('gameVersion')}</label>
           <input
             type="text"
             name="version"
@@ -192,7 +176,7 @@ export default function InstanceForm({ initialData = null, onClose, onSuccess })
         </div>
 
         <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-zinc-300">Loader Version</label>
+          <label className="block text-sm font-medium text-zinc-300">{t('loaderVersion')}</label>
           <input
             type="text"
             name="loader_version"
@@ -204,7 +188,7 @@ export default function InstanceForm({ initialData = null, onClose, onSuccess })
         </div>
 
         <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-zinc-300">Forge Version</label>
+          <label className="block text-sm font-medium text-zinc-300">{t('forgeVersion')}</label>
           <input
             type="text"
             name="forge_version"
@@ -217,9 +201,9 @@ export default function InstanceForm({ initialData = null, onClose, onSuccess })
       </div>
 
       <div className="space-y-4 pt-4 border-t border-white/5">
-        <h3 className="text-lg font-semibold text-white">Files & Network</h3>
+        <h3 className="text-lg font-semibold text-white">{t('filesNetwork')}</h3>
         <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-zinc-300">Modpack URL (Direct Download)</label>
+          <label className="block text-sm font-medium text-zinc-300">{t('modpackUrl')}</label>
           <input
             type="url"
             name="modpack_url"
@@ -231,7 +215,7 @@ export default function InstanceForm({ initialData = null, onClose, onSuccess })
         </div>
 
         <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-zinc-300">Server IP</label>
+          <label className="block text-sm font-medium text-zinc-300">{t('serverIp')}</label>
           <input
             type="text"
             name="server_ip"
@@ -243,7 +227,7 @@ export default function InstanceForm({ initialData = null, onClose, onSuccess })
         </div>
         
         <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-zinc-300">Ignore Files (One per line)</label>
+            <label className="block text-sm font-medium text-zinc-300">{t('ignoreFiles')}</label>
             <textarea
                 name="ignore_files"
                 rows={3}
@@ -256,10 +240,10 @@ export default function InstanceForm({ initialData = null, onClose, onSuccess })
       </div>
 
       <div className="space-y-4 pt-4 border-t border-white/5">
-        <h3 className="text-lg font-semibold text-white">Appearance & Links</h3>
+        <h3 className="text-lg font-semibold text-white">{t('appearanceLinks')}</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div className="space-y-1.5">
-              <label className="block text-sm font-medium text-zinc-300">Icon URL</label>
+              <label className="block text-sm font-medium text-zinc-300">{t('iconUrl')}</label>
               <input
                 type="url"
                 name="icon"
@@ -270,7 +254,7 @@ export default function InstanceForm({ initialData = null, onClose, onSuccess })
               />
             </div>
             <div className="space-y-1.5">
-              <label className="block text-sm font-medium text-zinc-300">Logo URL</label>
+              <label className="block text-sm font-medium text-zinc-300">{t('logoUrl')}</label>
               <input
                 type="url"
                 name="logo"
@@ -281,7 +265,7 @@ export default function InstanceForm({ initialData = null, onClose, onSuccess })
               />
             </div>
             <div className="space-y-1.5">
-              <label className="block text-sm font-medium text-zinc-300">Background Image</label>
+              <label className="block text-sm font-medium text-zinc-300">{t('backgroundImage')}</label>
               <input
                 type="url"
                 name="background_image"
@@ -292,7 +276,7 @@ export default function InstanceForm({ initialData = null, onClose, onSuccess })
               />
             </div>
             <div className="space-y-1.5">
-              <label className="block text-sm font-medium text-zinc-300">Announcement Image</label>
+              <label className="block text-sm font-medium text-zinc-300">{t('announcementImage')}</label>
               <input
                 type="url"
                 name="announcement_image"
@@ -303,7 +287,7 @@ export default function InstanceForm({ initialData = null, onClose, onSuccess })
               />
             </div>
             <div className="space-y-1.5">
-              <label className="block text-sm font-medium text-zinc-300">Discord Link</label>
+              <label className="block text-sm font-medium text-zinc-300">{t('discordLink')}</label>
               <input
                 type="url"
                 name="discord"
@@ -314,7 +298,7 @@ export default function InstanceForm({ initialData = null, onClose, onSuccess })
               />
             </div>
             <div className="space-y-1.5">
-              <label className="block text-sm font-medium text-zinc-300">Website Link</label>
+              <label className="block text-sm font-medium text-zinc-300">{t('websiteLink')}</label>
               <input
                 type="url"
                 name="website"
@@ -327,7 +311,7 @@ export default function InstanceForm({ initialData = null, onClose, onSuccess })
         </div>
         
         <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-zinc-300">Description</label>
+            <label className="block text-sm font-medium text-zinc-300">{t('description')}</label>
             <textarea
             name="description"
             rows={3}
@@ -339,7 +323,7 @@ export default function InstanceForm({ initialData = null, onClose, onSuccess })
         </div>
         
         <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-zinc-300">Announcement Message</label>
+            <label className="block text-sm font-medium text-zinc-300">{t('announcement')}</label>
             <textarea
             name="announcement"
             rows={2}
@@ -353,7 +337,7 @@ export default function InstanceForm({ initialData = null, onClose, onSuccess })
 
       <div className="space-y-4 pt-4 border-t border-white/5">
         <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-white">Maintenance Mode</h3>
+            <h3 className="text-lg font-semibold text-white">{t('maintenanceMode')}</h3>
             <label className="relative inline-flex items-center cursor-pointer">
                 <input type="checkbox" name="maintenance" checked={formData.maintenance} onChange={handleChange} className="sr-only peer" />
                 <div className="w-11 h-6 bg-zinc-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-800 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
@@ -361,7 +345,7 @@ export default function InstanceForm({ initialData = null, onClose, onSuccess })
         </div>
         {formData.maintenance && (
             <div className="space-y-1.5">
-              <label className="block text-sm font-medium text-zinc-300">Maintenance Message</label>
+              <label className="block text-sm font-medium text-zinc-300">{t('maintenanceMessage')}</label>
               <input
                 type="text"
                 name="maintenance_message"
@@ -376,8 +360,8 @@ export default function InstanceForm({ initialData = null, onClose, onSuccess })
 
       <div className="space-y-1.5">
         <label className="block text-sm font-medium text-zinc-300">
-          Allowed Players (Whitelist)
-          <span className="text-zinc-500 ml-2 font-normal text-xs">(One username per line, leave empty for public)</span>
+          {t('allowedPlayers')}
+          <span className="text-zinc-500 ml-2 font-normal text-xs">{t('onePerLine')}</span>
         </label>
         
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -388,7 +372,7 @@ export default function InstanceForm({ initialData = null, onClose, onSuccess })
                         value={newPlayer}
                         onChange={(e) => setNewPlayer(e.target.value)}
                         onKeyDown={(e) => e.key === 'Enter' && handleAddPlayer(e)}
-                        placeholder="Enter player name"
+                        placeholder={t('enterPlayerName')}
                         className="flex-1 min-w-0 px-4 py-2.5 bg-black/20 border border-white/10 rounded-xl text-white placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all hover:bg-black/30"
                     />
                     <button
@@ -400,14 +384,14 @@ export default function InstanceForm({ initialData = null, onClose, onSuccess })
                     </button>
                 </div>
                 <p className="text-xs text-zinc-500">
-                    Enter a Minecraft username and press Enter or click the + button to add them to the whitelist.
+                    {t('addPlayerDesc')}
                 </p>
             </div>
 
             <div className="md:col-span-2 flex flex-wrap content-start gap-2 p-3 bg-black/20 border border-white/10 rounded-xl min-h-[100px] max-h-[200px] overflow-y-auto custom-scrollbar">
                 {whitelist.length === 0 ? (
                     <div className="w-full h-full flex items-center justify-center text-zinc-500 text-sm italic">
-                        No players added (Public server)
+                        {t('noPlayers')}
                     </div>
                 ) : (
                     whitelist.map((player, index) => (
@@ -440,24 +424,15 @@ export default function InstanceForm({ initialData = null, onClose, onSuccess })
           className="px-5 py-2.5 text-sm font-medium text-zinc-300 bg-white/5 hover:bg-white/10 rounded-xl transition-colors"
           disabled={loading}
         >
-          Cancel
+          {t('cancel')}
         </button>
         <button
           type="submit"
+          className="flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-500 rounded-xl transition-colors shadow-lg shadow-blue-900/20"
           disabled={loading}
-          className="flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-500 rounded-xl transition-all shadow-lg shadow-blue-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {loading ? (
-            <>
-              <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              Saving...
-            </>
-          ) : (
-            <>
-              <Save size={16} />
-              {initialData ? 'Save Changes' : 'Create Instance'}
-            </>
-          )}
+          <Save size={18} />
+          {loading ? 'Saving...' : t('save')}
         </button>
       </div>
     </form>
