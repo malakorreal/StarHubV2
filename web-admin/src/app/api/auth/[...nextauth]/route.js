@@ -15,6 +15,9 @@ export const authOptions = {
         const discordId = String(account?.providerAccountId || profile?.id || user?.id || "")
         const allowedIdsEnv = (process.env.ALLOWED_USER_IDS || "").split(",").map(v => v.trim()).filter(Boolean).map(String)
         if (allowedIdsEnv.length > 0 && allowedIdsEnv.includes(discordId)) return true
+        
+        // NPoint auth removed as per request
+        /*
         const npointUrl = process.env.NPOINT_AUTH_URL || 'https://api.npoint.io/6d71db871d844b9ec40f'
         const authRes = await fetch(npointUrl, { cache: 'no-store' })
         if (!authRes.ok) return false
@@ -32,6 +35,8 @@ export const authOptions = {
           }
         }
         if (allowedIds.includes(discordId)) return true
+        */
+        
         return false
       } catch (_) {
         return false
