@@ -229,41 +229,56 @@ export default function InstanceForm({ initialData = null, onClose, onSuccess })
           <span className="text-zinc-500 ml-2 font-normal text-xs">(One username per line, leave empty for public)</span>
         </label>
         
-        <div className="flex gap-2">
-            <input
-                type="text"
-                value={newPlayer}
-                onChange={(e) => setNewPlayer(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleAddPlayer(e)}
-                placeholder="Enter player name"
-                className="flex-1 px-4 py-2.5 bg-black/20 border border-white/10 rounded-xl text-white placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all hover:bg-black/30"
-            />
-            <button
-                type="button"
-                onClick={handleAddPlayer}
-                className="px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl transition-colors"
-            >
-                <Plus size={20} />
-            </button>
-        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="md:col-span-1 space-y-2">
+                <div className="flex gap-2">
+                    <input
+                        type="text"
+                        value={newPlayer}
+                        onChange={(e) => setNewPlayer(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && handleAddPlayer(e)}
+                        placeholder="Enter player name"
+                        className="flex-1 px-4 py-2.5 bg-black/20 border border-white/10 rounded-xl text-white placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all hover:bg-black/30"
+                    />
+                    <button
+                        type="button"
+                        onClick={handleAddPlayer}
+                        className="px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl transition-colors"
+                    >
+                        <Plus size={20} />
+                    </button>
+                </div>
+                <p className="text-xs text-zinc-500">
+                    Enter a Minecraft username and press Enter or click the + button to add them to the whitelist.
+                </p>
+            </div>
 
-        <div className="flex flex-wrap gap-2 mt-2 p-3 bg-black/20 border border-white/10 rounded-xl min-h-[100px] max-h-[200px] overflow-y-auto">
-            {whitelist.length === 0 ? (
-                <span className="text-zinc-500 text-sm">No players added (Public server)</span>
-            ) : (
-                whitelist.map((player, index) => (
-                    <div key={index} className="flex items-center gap-2 px-3 py-1 bg-white/10 rounded-lg text-sm text-white group hover:bg-white/20 transition-colors">
-                        <span>{player}</span>
-                        <button
-                            type="button"
-                            onClick={() => handleRemovePlayer(player)}
-                            className="text-zinc-400 hover:text-red-400 transition-colors"
-                        >
-                            <X size={14} />
-                        </button>
+            <div className="md:col-span-2 flex flex-wrap content-start gap-2 p-3 bg-black/20 border border-white/10 rounded-xl min-h-[100px] max-h-[200px] overflow-y-auto custom-scrollbar">
+                {whitelist.length === 0 ? (
+                    <div className="w-full h-full flex items-center justify-center text-zinc-500 text-sm italic">
+                        No players added (Public server)
                     </div>
-                ))
-            )}
+                ) : (
+                    whitelist.map((player, index) => (
+                        <div key={index} className="flex items-center gap-2 px-3 py-1.5 bg-white/10 border border-white/5 rounded-lg text-sm text-white group hover:bg-white/20 transition-colors animate-in fade-in zoom-in duration-200">
+                            <img 
+                                src={`https://mc-heads.net/avatar/${player}/24`} 
+                                alt={player} 
+                                className="w-6 h-6 rounded-md bg-black/20"
+                                onError={(e) => { e.target.src = 'https://mc-heads.net/avatar/Steve/24' }} 
+                            />
+                            <span className="font-medium">{player}</span>
+                            <button
+                                type="button"
+                                onClick={() => handleRemovePlayer(player)}
+                                className="text-zinc-400 hover:text-red-400 transition-colors ml-1 p-0.5 rounded hover:bg-white/10"
+                            >
+                                <X size={14} />
+                            </button>
+                        </div>
+                    ))
+                )}
+            </div>
         </div>
       </div>
 
