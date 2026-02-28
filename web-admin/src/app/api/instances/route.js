@@ -25,7 +25,8 @@ export async function GET(request) {
     modpackUrl: r.modpack_url || r.modpackUrl || r.fileUrl || "",
     discord: r.discord || "",
     website: r.website || "",
-    description: r.description || ""
+    description: r.description || "",
+    allowed_players: r.allowed_players || []
   }))
 
   // Caching strategy
@@ -93,7 +94,8 @@ export async function POST(request) {
     modpack_url: body.modpack_url || body.modpackUrl || body.fileUrl || "",
     discord: body.discord || "",
     website: body.website || "",
-    description: body.description || ""
+    description: body.description || "",
+    allowed_players: body.allowed_players || null
   }
   
   if (!payload.id || !payload.name) {
@@ -120,6 +122,7 @@ export async function POST(request) {
     modpackUrl: r.modpack_url || r.modpackUrl || r.fileUrl || "",
     discord: r.discord || "",
     website: r.website || "",
-    description: r.description || ""
+    description: r.description || "",
+    allowed_players: r.allowed_players || []
   })
 }

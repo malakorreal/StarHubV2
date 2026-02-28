@@ -26,7 +26,8 @@ export async function PUT(request, { params }) {
     modpack_url: body.modpack_url || body.modpackUrl || body.fileUrl,
     discord: body.discord,
     website: body.website,
-    description: body.description
+    description: body.description,
+    allowed_players: body.allowed_players || null
   }
 
   const { data, error } = await supabaseAdmin
@@ -50,7 +51,8 @@ export async function PUT(request, { params }) {
     modpackUrl: r.modpack_url || r.modpackUrl || r.fileUrl || "",
     discord: r.discord || "",
     website: r.website || "",
-    description: r.description || ""
+    description: r.description || "",
+    allowed_players: r.allowed_players || []
   })
 }
 
