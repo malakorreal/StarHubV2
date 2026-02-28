@@ -3,12 +3,14 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Save, AlertCircle } from 'lucide-react'
+import { Save, AlertCircle, X, Plus } from 'lucide-react'
 
 export default function InstanceForm({ initialData = null, onClose, onSuccess }) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [newPlayer, setNewPlayer] = useState('')
+  const [whitelist, setWhitelist] = useState(initialData?.allowed_players || [])
   const [formData, setFormData] = useState({
     id: initialData?.id || '',
     name: initialData?.name || '',
@@ -20,7 +22,16 @@ export default function InstanceForm({ initialData = null, onClose, onSuccess })
     discord: initialData?.discord || '',
     website: initialData?.website || '',
     description: initialData?.description || '',
-    allowed_players: initialData?.allowed_players?.join('\n') || ''
+    maintenance: initialData?.maintenance || false,
+    maintenance_message: initialData?.maintenance_message || '',
+    modpack_version: initialData?.modpackVersion || '',
+    ignore_files: initialData?.ignoreFiles?.join('\n') || '',
+    forge_version: initialData?.forgeVersion || '',
+    server_ip: initialData?.serverIp || '',
+    loader_version: initialData?.loaderVersion || '',
+    announcement: initialData?.announcement || '',
+    announcement_image: initialData?.announcementImage || '',
+    background_image: initialData?.backgroundImage || ''
   })
 
   useEffect(() => {
@@ -33,8 +44,20 @@ export default function InstanceForm({ initialData = null, onClose, onSuccess })
   }, [formData.name, formData.id, initialData])
 
   const handleChange = (e) => {
-    const { name, value } = e.target
-    setFormData(prev => ({ ...prev, [name]: value }))
+    const { name, value, type, checked } = e.target
+    setFormData(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value }))
+  }
+
+  const handleAddPlayer = (e) => {
+    e.preventDefault()
+    if (newPlayer.trim() && !whitelist.includes(newPlayer.trim())) {
+      setWhitelist([...whitelist, newPlayer.trim()])
+      setNewPlayer('')
+    }
+  }
+
+  const handleRemovePlayer = (player) => {
+    setWhitelist(whitelist.filter(p => p !== player))
   }
 
   const handleSubmit = async (e) => {
@@ -51,7 +74,8 @@ export default function InstanceForm({ initialData = null, onClose, onSuccess })
 
       const payload = {
         ...formData,
-        allowed_players: formData.allowed_players.split('\n').map(p => p.trim()).filter(Boolean)
+        allowed_players: whitelist,
+        ignore_files: formData.ignore_files.split('\n').map(f => f.trim()).filter(Boolean)
       }
 
       const res = await fetch(url, {
@@ -127,28 +151,76 @@ export default function InstanceForm({ initialData = null, onClose, onSuccess })
           </div>
         </div>
 
-        <InputField label="Version" name="version" placeholder="1.20.1" />
+        <InputField label="Game Version" name="version" placeholder="1.20.1" />
+        <InputField label="Loader Version" name="loader_version" placeholder="e.g. 47.1.0" />
+        <InputField label="Forge Version" name="forge_version" placeholder="e.g. 47.1.0" />
       </div>
 
-      <InputField label="Modpack URL (Direct Download)" name="modpack_url" type="url" placeholder="https://..." />
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        <InputField label="Icon URL" name="icon" type="url" placeholder="https://..." />
-        <InputField label="Logo URL" name="logo" type="url" placeholder="https://..." />
-        <InputField label="Discord Link" name="discord" type="url" placeholder="https://discord.gg/..." />
-        <InputField label="Website Link" name="website" type="url" placeholder="https://..." />
+      <div className="space-y-4 pt-4 border-t border-white/5">
+        <h3 className="text-lg font-semibold text-white">Files & Network</h3>
+        <InputField label="Modpack URL (Direct Download)" name="modpack_url" type="url" placeholder="https://..." />
+        <InputField label="Server IP" name="server_ip" placeholder="play.example.com" />
+        
+        <div className="space-y-1.5">
+            <label className="block text-sm font-medium text-zinc-300">Ignore Files (One per line)</label>
+            <textarea
+                name="ignore_files"
+                rows={3}
+                value={formData.ignore_files}
+                onChange={handleChange}
+                className="w-full px-4 py-2.5 bg-black/20 border border-white/10 rounded-xl text-white placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all hover:bg-black/30 resize-none font-mono text-sm"
+                placeholder="options.txt&#10;servers.dat"
+            />
+        </div>
       </div>
-      
-      <div className="space-y-1.5">
-        <label className="block text-sm font-medium text-zinc-300">Description</label>
-        <textarea
-          name="description"
-          rows={3}
-          value={formData.description}
-          onChange={handleChange}
-          className="w-full px-4 py-2.5 bg-black/20 border border-white/10 rounded-xl text-white placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all hover:bg-black/30 resize-none"
-          placeholder="Brief description of the instance..."
-        />
+
+      <div className="space-y-4 pt-4 border-t border-white/5">
+        <h3 className="text-lg font-semibold text-white">Appearance & Links</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <InputField label="Icon URL" name="icon" type="url" placeholder="https://..." />
+            <InputField label="Logo URL" name="logo" type="url" placeholder="https://..." />
+            <InputField label="Background Image" name="background_image" type="url" placeholder="https://..." />
+            <InputField label="Announcement Image" name="announcement_image" type="url" placeholder="https://..." />
+            <InputField label="Discord Link" name="discord" type="url" placeholder="https://discord.gg/..." />
+            <InputField label="Website Link" name="website" type="url" placeholder="https://..." />
+        </div>
+        
+        <div className="space-y-1.5">
+            <label className="block text-sm font-medium text-zinc-300">Description</label>
+            <textarea
+            name="description"
+            rows={3}
+            value={formData.description}
+            onChange={handleChange}
+            className="w-full px-4 py-2.5 bg-black/20 border border-white/10 rounded-xl text-white placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all hover:bg-black/30 resize-none"
+            placeholder="Brief description of the instance..."
+            />
+        </div>
+        
+        <div className="space-y-1.5">
+            <label className="block text-sm font-medium text-zinc-300">Announcement Message</label>
+            <textarea
+            name="announcement"
+            rows={2}
+            value={formData.announcement}
+            onChange={handleChange}
+            className="w-full px-4 py-2.5 bg-black/20 border border-white/10 rounded-xl text-white placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all hover:bg-black/30 resize-none"
+            placeholder="Important news for players..."
+            />
+        </div>
+      </div>
+
+      <div className="space-y-4 pt-4 border-t border-white/5">
+        <div className="flex items-center justify-between">
+            <h3 className="text-lg font-semibold text-white">Maintenance Mode</h3>
+            <label className="relative inline-flex items-center cursor-pointer">
+                <input type="checkbox" name="maintenance" checked={formData.maintenance} onChange={handleChange} className="sr-only peer" />
+                <div className="w-11 h-6 bg-zinc-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-800 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+            </label>
+        </div>
+        {formData.maintenance && (
+            <InputField label="Maintenance Message" name="maintenance_message" placeholder="Server is under maintenance..." />
+        )}
       </div>
 
       <div className="space-y-1.5">
@@ -156,14 +228,43 @@ export default function InstanceForm({ initialData = null, onClose, onSuccess })
           Allowed Players (Whitelist)
           <span className="text-zinc-500 ml-2 font-normal text-xs">(One username per line, leave empty for public)</span>
         </label>
-        <textarea
-          name="allowed_players"
-          rows={4}
-          value={formData.allowed_players}
-          onChange={handleChange}
-          className="w-full px-4 py-2.5 bg-black/20 border border-white/10 rounded-xl text-white placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all hover:bg-black/30 resize-none font-mono text-sm"
-          placeholder="Player1&#10;Player2&#10;Player3"
-        />
+        
+        <div className="flex gap-2">
+            <input
+                type="text"
+                value={newPlayer}
+                onChange={(e) => setNewPlayer(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleAddPlayer(e)}
+                placeholder="Enter player name"
+                className="flex-1 px-4 py-2.5 bg-black/20 border border-white/10 rounded-xl text-white placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all hover:bg-black/30"
+            />
+            <button
+                type="button"
+                onClick={handleAddPlayer}
+                className="px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl transition-colors"
+            >
+                <Plus size={20} />
+            </button>
+        </div>
+
+        <div className="flex flex-wrap gap-2 mt-2 p-3 bg-black/20 border border-white/10 rounded-xl min-h-[100px] max-h-[200px] overflow-y-auto">
+            {whitelist.length === 0 ? (
+                <span className="text-zinc-500 text-sm">No players added (Public server)</span>
+            ) : (
+                whitelist.map((player, index) => (
+                    <div key={index} className="flex items-center gap-2 px-3 py-1 bg-white/10 rounded-lg text-sm text-white group hover:bg-white/20 transition-colors">
+                        <span>{player}</span>
+                        <button
+                            type="button"
+                            onClick={() => handleRemovePlayer(player)}
+                            className="text-zinc-400 hover:text-red-400 transition-colors"
+                        >
+                            <X size={14} />
+                        </button>
+                    </div>
+                ))
+            )}
+        </div>
       </div>
 
       <div className="flex justify-end pt-4 gap-3 border-t border-white/5">

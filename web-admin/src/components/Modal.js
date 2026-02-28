@@ -9,20 +9,22 @@ export default function Modal({ isOpen, onClose, title, children }) {
   const [animate, setAnimate] = useState(false)
 
   useEffect(() => {
-    let timer;
+    let timeoutId;
+    let rafId;
+
     if (isOpen) {
       setShow(true)
-      // Use requestAnimationFrame or a small timeout to ensure the DOM has updated
-      timer = requestAnimationFrame(() => setAnimate(true))
+      rafId = requestAnimationFrame(() => setAnimate(true))
       document.body.style.overflow = 'hidden'
     } else {
       setAnimate(false)
-      timer = setTimeout(() => setShow(false), 300)
+      timeoutId = setTimeout(() => setShow(false), 300)
       document.body.style.overflow = 'unset'
     }
+
     return () => {
-        clearTimeout(timer)
-        cancelAnimationFrame(timer)
+      clearTimeout(timeoutId)
+      cancelAnimationFrame(rafId)
     }
   }, [isOpen])
 

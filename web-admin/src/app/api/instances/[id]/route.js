@@ -27,7 +27,17 @@ export async function PUT(request, { params }) {
     discord: body.discord,
     website: body.website,
     description: body.description,
-    allowed_players: body.allowed_players || null
+    allowed_players: body.allowed_players || null,
+    maintenance: body.maintenance,
+    maintenance_message: body.maintenance_message || body.maintenanceMessage,
+    modpack_version: body.modpack_version || body.modpackVersion,
+    ignore_files: body.ignore_files || body.ignoreFiles,
+    forge_version: body.forge_version || body.forgeVersion,
+    server_ip: body.server_ip || body.serverIp,
+    loader_version: body.loader_version || body.loaderVersion,
+    announcement: body.announcement,
+    announcement_image: body.announcement_image || body.announcementImage,
+    background_image: body.background_image || body.backgroundImage
   }
 
   const { data, error } = await supabaseAdmin
@@ -52,7 +62,17 @@ export async function PUT(request, { params }) {
     discord: r.discord || "",
     website: r.website || "",
     description: r.description || "",
-    allowed_players: r.allowed_players || []
+    allowed_players: r.allowed_players || [],
+    maintenance: r.maintenance || false,
+    maintenance_message: r.maintenance_message || "",
+    modpackVersion: r.modpack_version || "",
+    ignoreFiles: r.ignore_files || [],
+    forgeVersion: r.forge_version || "",
+    serverIp: r.server_ip || "",
+    loaderVersion: r.loader_version || "",
+    announcement: r.announcement || "",
+    announcementImage: r.announcement_image || "",
+    backgroundImage: r.background_image || ""
   })
 }
 
