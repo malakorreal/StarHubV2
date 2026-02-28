@@ -3,8 +3,9 @@ import { getServerSession } from "next-auth/next"
 import { authOptions } from "../auth/[...nextauth]/route"
 import { supabase, supabaseAdmin } from "@/lib/supabase"
 import { NextResponse } from "next/server"
+import crypto from "node:crypto"
 
-export async function GET() {
+export async function GET(request) {
   const { data, error } = await supabase
     .from('instances')
     .select('*')
@@ -27,7 +28,47 @@ export async function GET() {
     description: r.description || ""
   }))
 
-  return NextResponse.json(normalized)
+  // Caching strategy
+  const strategy = (process.env.API_CACHE_STRATEGY || 'etag').toLowerCase()
+  const body = JSON.stringify(normalized)
+  const commonHeaders = {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Vary': 'Accept, If-None-Match',
+    'Last-Modified': new Date().toUTCString(),
+  }
+
+  if (strategy === 'no-store') {
+    return new NextResponse(body, {
+      status: 200,
+      headers: {
+        ...commonHeaders,
+        'Cache-Control': 'no-store, no-cache, must-revalidate',
+      }
+    })
+  }
+
+  // ETag / If-None-Match
+  const etag = `"${crypto.createHash('sha1').update(body).digest('hex')}"`
+  const ifNoneMatch = request.headers.get('if-none-match')
+  if (ifNoneMatch && ifNoneMatch === etag) {
+    return new NextResponse(null, {
+      status: 304,
+      headers: {
+        ...commonHeaders,
+        ETag: etag,
+        'Cache-Control': 'public, max-age=0, must-revalidate',
+      }
+    })
+  }
+
+  return new NextResponse(body, {
+    status: 200,
+    headers: {
+      ...commonHeaders,
+      ETag: etag,
+      'Cache-Control': 'public, max-age=0, must-revalidate',
+    }
+  })
 }
 
 export async function POST(request) {
