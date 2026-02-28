@@ -14,7 +14,7 @@ export async function PUT(request, { params }) {
      return NextResponse.json({ error: 'Server misconfiguration: Missing Service Role Key' }, { status: 500 })
   }
 
-  const { id } = params
+  const { id } = await params
   const body = await request.json()
   const payload = {
     name: body.name,
@@ -86,7 +86,7 @@ export async function DELETE(request, { params }) {
      return NextResponse.json({ error: 'Server misconfiguration: Missing Service Role Key' }, { status: 500 })
   }
 
-  const { id } = params
+  const { id } = await params
 
   const { error } = await supabaseAdmin
     .from('instances')
