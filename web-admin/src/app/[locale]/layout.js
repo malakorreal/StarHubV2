@@ -15,7 +15,8 @@ export const metadata = {
   description: "Manage instances for StarHub Launcher",
 };
 
-export default async function LocaleLayout({ children, params: { locale } }) {
+export default async function LocaleLayout({ children, params }) {
+  const { locale } = await params;
   const messages = await getMessages();
 
   return (
