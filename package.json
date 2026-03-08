@@ -57,6 +57,12 @@
       ],
       "icon": "resources/icon.ico"
     },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ]
+    },
     "nsis": {
       "oneClick": false,
       "perMachine": false,
