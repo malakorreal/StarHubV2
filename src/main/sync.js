@@ -73,6 +73,33 @@ export class SyncManager {
   }
 
   /**
+   * Helper to safely open a file with retry logic for EPERM errors (Common on Windows)
+   */
+  async safeOpen(dest, mode, retries = 10, delay = 1000) {
+      for (let i = 0; i < retries; i++) {
+          try {
+              // On Windows, sometimes just trying to delete/unlink before opening helps
+              if (mode === 'w' && i === 0) {
+                  try {
+                      if (fs.existsSync(dest)) {
+                          fs.chmodSync(dest, 0o666) // Ensure it's writable
+                      }
+                  } catch (e) {}
+              }
+
+              return await fs.promises.open(dest, mode)
+          } catch (e) {
+              if ((e.code === 'EPERM' || e.code === 'EBUSY' || e.code === 'EACCES') && i < retries - 1) {
+                  this.log(`[FILE-LOCKED] ${dest} is locked (${e.code}), retrying in ${delay}ms... (${i+1}/${retries})`)
+                  await this.sleep(delay)
+                  continue
+              }
+              throw e
+          }
+      }
+  }
+
+  /**
    * Download a file with retry logic and progress tracking
    */
   async downloadFile(url, dest, options = {}) {
@@ -83,13 +110,22 @@ export class SyncManager {
         signal = null
     } = options
 
+    this.log(`[DOWNLOAD] Starting download for ${path.basename(dest)} from ${url}`)
+    
+    // 🚨 Use a temporary file to avoid locking issues during write
+    const tempDest = `${dest}.tmp`
+    if (fs.existsSync(tempDest)) {
+        try { fs.unlinkSync(tempDest) } catch(e) {}
+    }
+
     let attempt = 0
     while (attempt <= retries) {
         if (signal?.aborted) throw new Error('Download aborted')
+        
+        let fd = null
         try {
             // Check if file exists and has correct size (if possible)
             try {
-                // Use async fs.stat
                 const stats = await fs.promises.stat(dest)
                 if (checkSize) {
                     const head = await axios.head(url, {
@@ -100,22 +136,13 @@ export class SyncManager {
                     })
                     const remoteSize = parseInt(head.headers['content-length'], 10)
                     if (remoteSize && remoteSize === stats.size) {
-                        this.log(`File already exists and matches size: ${path.basename(dest)}`)
+                        this.log(`[DOWNLOAD] File already exists and matches size: ${path.basename(dest)}`)
                         return true // Skip download
                     }
-                } else {
-                    // If we don't check size, existence is enough? 
-                    // Usually we want to verify, but for speed, maybe existence is okay.
-                    // Let's stick to size check if requested.
                 }
             } catch (e) {
                 // File doesn't exist or error checking, proceed to download
             }
-            
-            // If we are here, we need to download.
-            // Check if we should use chunked download for large files?
-            // For individual mods (usually small), stream is fine.
-            // For modpacks (large), chunked is better.
             
             const response = await axios({
                 method: 'get',
@@ -130,15 +157,15 @@ export class SyncManager {
             const totalLength = response.headers['content-length']
             let downloaded = 0
             
-            const writer = fs.createWriteStream(dest)
+            // Use safeOpen for downloadFile as well to prevent EPERM
+            fd = await this.safeOpen(tempDest, 'w')
+            const writer = fs.createWriteStream(null, { fd: fd.fd, autoClose: false })
             
-            // Throttle onProgress callback inside downloadFile too
             let lastOnProgress = 0
             
             response.data.on('data', (chunk) => {
                 downloaded += chunk.length
                 const now = Date.now()
-                // Only fire callback every 100ms
                 if (totalLength && (now - lastOnProgress > 100 || downloaded === parseInt(totalLength, 10))) {
                     onProgress(downloaded, parseInt(totalLength, 10))
                     lastOnProgress = now
@@ -156,16 +183,47 @@ export class SyncManager {
 
             await new Promise((resolve, reject) => {
                 writer.on('finish', resolve)
-                writer.on('error', reject)
+                writer.on('error', (err) => {
+                    writer.destroy()
+                    reject(err)
+                })
             })
 
+            // Close file properly before rename
+            await fd.close()
+            fd = null
+
+            // 🔄 RENAME (Atomic Move)
+            if (fs.existsSync(dest)) {
+                 try { fs.chmodSync(dest, 0o666); fs.unlinkSync(dest) } catch(e) {}
+            }
+            
+            // Safe Rename with Retry
+            for (let i = 0; i < 5; i++) {
+                try {
+                    fs.renameSync(tempDest, dest)
+                    break
+                } catch(e) {
+                    if (i === 4) throw e
+                    await this.sleep(500)
+                }
+            }
+
+            this.log(`[DOWNLOAD] Successfully downloaded and moved: ${path.basename(dest)}`)
             return true
 
         } catch (error) {
+            if (fd) {
+                try { await fd.close() } catch(e) {}
+                fd = null
+            }
             attempt++
-            this.log(`Download failed (Attempt ${attempt}/${retries}): ${path.basename(dest)} - ${error.message}`)
-            if (attempt > retries) throw error
-            await this.sleep(1000 * attempt) // Exponential backoffish
+            this.log(`[DOWNLOAD] Failed (Attempt ${attempt}/${retries}): ${path.basename(dest)} - ${error.message}`)
+            if (attempt > retries) {
+                try { if (fs.existsSync(tempDest)) fs.unlinkSync(tempDest) } catch(e) {}
+                throw error
+            }
+            await this.sleep(1000 * attempt)
         }
     }
   }
@@ -175,7 +233,21 @@ export class SyncManager {
    */
   async downloadLargeFile(url, dest, options = {}) {
      const { signal = null } = options
+     this.log(`[LARGE-DOWNLOAD] Starting chunked download for ${path.basename(dest)} from ${url}`)
      
+     // 🚨 Use a temporary file
+     const tempDest = `${dest}.tmp`
+
+     // 🚨 Pre-emptive check: If temp file exists, try to make it writable and delete it
+     if (fs.existsSync(tempDest)) {
+         try {
+             fs.chmodSync(tempDest, 0o666)
+             fs.unlinkSync(tempDest)
+         } catch (e) {
+             this.log(`[LARGE-DOWNLOAD] Temp cleanup warning: ${e.message}`)
+         }
+     }
+
      // 1. Get file size
      let totalSize = 0
      try {
@@ -187,9 +259,17 @@ export class SyncManager {
              timeout: 15000
          })
          totalSize = parseInt(head.headers['content-length'], 10)
+         
+         // Check if server supports Range requests
+         const acceptRanges = head.headers['accept-ranges']
+         if (acceptRanges !== 'bytes' && !head.headers['content-range']) {
+             this.log("[LARGE-DOWNLOAD] Server does not explicitly support Range requests, falling back to stream.")
+             return this.downloadFile(url, dest, options)
+         }
+
      } catch (e) {
          if (signal?.aborted || e.message === 'Download aborted') throw new Error('Download aborted')
-         this.log("Could not determine file size for chunked download, falling back to stream.")
+         this.log(`[LARGE-DOWNLOAD] Could not determine file size or server capabilities: ${e.message}. Falling back to stream.`)
          return this.downloadFile(url, dest, options)
      }
 
@@ -199,7 +279,7 @@ export class SyncManager {
      const chunks = Math.ceil(totalSize / CHUNK_SIZE)
      this.log(`Downloading ${path.basename(dest)} in ${chunks} chunks (Total: ${(totalSize/1024/1024).toFixed(2)} MB)`)
 
-     const fd = await fs.promises.open(dest, 'w')
+     const fd = await this.safeOpen(tempDest, 'w')
      let downloadedTotal = 0
      
      const downloadChunk = async (i) => {
@@ -225,14 +305,15 @@ export class SyncManager {
                  
                  if (signal?.aborted) throw new Error('Download aborted')
 
+                 const buffer = Buffer.from(response.data)
                  // Write at specific position (safe for concurrency)
-                 await fd.write(response.data, 0, response.data.length, start)
+                 await fd.write(buffer, 0, buffer.length, start)
                  
                  // Throttling
                  const maxSpeed = getStore().get('maxDownloadSpeed', 0)
                  if (maxSpeed > 0) {
                      const bps = maxSpeed * 1024 * 1024
-                     const expectedTime = (response.data.length / bps) * 1000
+                     const expectedTime = (buffer.length / bps) * 1000
                      const actualTime = Date.now() - startTime
                      if (actualTime < expectedTime) {
                          await this.sleep(expectedTime - actualTime)
@@ -240,7 +321,7 @@ export class SyncManager {
                  }
 
                  // Update progress
-                 downloadedTotal += response.data.length
+                 downloadedTotal += buffer.length
                  // Explicitly free buffer memory
                  response.data = null 
                  
@@ -288,10 +369,29 @@ export class SyncManager {
         if (signal?.aborted) throw new Error('Download aborted')
      } catch (e) {
         await fd.close()
+        try { if (fs.existsSync(tempDest)) fs.unlinkSync(tempDest) } catch(err) {}
         throw e
      }
      
      await fd.close()
+
+     // 🔄 RENAME (Atomic Move)
+     if (fs.existsSync(dest)) {
+          try { fs.chmodSync(dest, 0o666); fs.unlinkSync(dest) } catch(e) {}
+     }
+     
+     // Safe Rename with Retry
+     for (let i = 0; i < 5; i++) {
+         try {
+             fs.renameSync(tempDest, dest)
+             break
+         } catch(e) {
+             if (i === 4) throw e
+             await this.sleep(500)
+         }
+     }
+
+     this.log(`[LARGE-DOWNLOAD] Successfully downloaded and moved: ${path.basename(dest)}`)
      return true
   }
 
@@ -599,6 +699,20 @@ export class SyncManager {
 
       this.log(`Extracting ${path.basename(zipPath)}...`)
       
+      // 🚨 Retry logic for opening the Zip file (Common EPERM on Windows after download)
+      let zip = null
+      for (let i = 0; i < 10; i++) {
+          try {
+              zip = new AdmZip(zipPath)
+              zip.getEntries() // Integrity check
+              break
+          } catch (e) {
+              if (i === 9) throw new Error(`Failed to open zip for extraction: ${e.message}`)
+              this.log(`[ZIP-LOCKED] Zip file is busy, retrying in 1s... (${i+1}/10)`)
+              await this.sleep(1000)
+          }
+      }
+      
       // Use a temp directory to handle nested folder structures correctly
       const tempDir = path.join(path.dirname(targetDir), `temp_${Date.now()}`)
       if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true })
@@ -607,8 +721,6 @@ export class SyncManager {
           // ----------------------------------------------------------------
           // 1. UNZIP with Progress (Using AdmZip entry-by-entry)
           // ----------------------------------------------------------------
-          // Replaced nativeUnzip to provide progress updates
-          const zip = new AdmZip(zipPath)
           const entries = zip.getEntries()
           const totalEntries = entries.length
           let extractedCount = 0
@@ -634,155 +746,155 @@ export class SyncManager {
 
           this.log("Extraction complete. Analyzing structure...")
           
-          try {
-              const files = fs.readdirSync(tempDir)
-              // Filter out system files
-              const visibleFiles = files.filter(f => !f.startsWith('.'))
-              
-              let sourceDir = tempDir
-              
-              // Check for GitHub-style nested folder (single directory containing files)
-              if (visibleFiles.length === 1) {
-                  const nestedPath = path.join(tempDir, visibleFiles[0])
-                  if (fs.statSync(nestedPath).isDirectory()) {
-                      // Don't flatten if it's a standard Minecraft folder (e.g. "mods", "config")
-                      // This prevents issues where a zip just contains "mods/" at root from being flattened into the instance root
-                      const standardFolders = ['mods', 'config', 'versions', 'saves', 'resourcepacks', 'shaderpacks', 'screenshots', 'logs']
-                      if (!standardFolders.includes(visibleFiles[0].toLowerCase())) {
-                          this.log(`Detected nested root folder: ${visibleFiles[0]}. Flattening...`)
-                          sourceDir = nestedPath
+          const files = fs.readdirSync(tempDir)
+          // Filter out system files
+          const visibleFiles = files.filter(f => !f.startsWith('.'))
+          
+          let sourceDir = tempDir
+          
+          // Check for GitHub-style nested folder (single directory containing files)
+          if (visibleFiles.length === 1) {
+              const nestedPath = path.join(tempDir, visibleFiles[0])
+              if (fs.statSync(nestedPath).isDirectory()) {
+                  // Don't flatten if it's a standard Minecraft folder (e.g. "mods", "config")
+                  // This prevents issues where a zip just contains "mods/" at root from being flattened into the instance root
+                  const standardFolders = ['mods', 'config', 'versions', 'saves', 'resourcepacks', 'shaderpacks', 'screenshots', 'logs']
+                  if (!standardFolders.includes(visibleFiles[0].toLowerCase())) {
+                      this.log(`Detected nested root folder: ${visibleFiles[0]}. Flattening...`)
+                      sourceDir = nestedPath
+                  } else {
+                      this.log(`Detected standard folder '${visibleFiles[0]}' at root. Preserving structure.`)
+                  }
+              }
+          }
+          
+          // ----------------------------------------------------------------
+          // 🔄 SMART SYNC (Copy + Cleanup)
+          // ----------------------------------------------------------------
+          
+          if (signal?.aborted) throw new Error('Extraction aborted')
+
+          // Helper for recursive file listing (Async)
+          const getAllFiles = async (dir, fileList = []) => {
+              if (signal?.aborted) throw new Error('Extraction aborted')
+              try {
+                  const files = await fs.promises.readdir(dir)
+                  for (const file of files) {
+                      const filePath = path.join(dir, file)
+                      const stat = await fs.promises.stat(filePath)
+                      if (stat.isDirectory()) {
+                          await getAllFiles(filePath, fileList)
                       } else {
-                          this.log(`Detected standard folder '${visibleFiles[0]}' at root. Preserving structure.`)
+                          fileList.push(filePath)
+                      }
+                  }
+              } catch (e) { }
+              return fileList
+          }
+
+          if (!fs.existsSync(targetDir)) await fs.promises.mkdir(targetDir, { recursive: true })
+
+          // 1. Get all source files (Relative paths)
+          const sourceFiles = await getAllFiles(sourceDir)
+          const sourceRelativePaths = sourceFiles.map(f => path.relative(sourceDir, f))
+          
+          // 2. Copy/Update Files (Source -> Target)
+          let processedFiles = 0
+          const totalFiles = sourceRelativePaths.length
+          
+          for (const relPath of sourceRelativePaths) {
+              if (signal?.aborted) throw new Error('Extraction aborted')
+
+              const srcFile = path.join(sourceDir, relPath)
+              const destFile = path.join(targetDir, relPath)
+              
+              // Rule: Don't overwrite User Settings (options.txt, etc)
+              const isSettings = relPath.toLowerCase() === 'options.txt' || 
+                               (relPath.toLowerCase().startsWith('options') && relPath.endsWith('.txt'))
+                               
+              if (isSettings && fs.existsSync(destFile)) {
+                  this.log(`Skipping settings file: ${relPath}`)
+                  processedFiles++
+                  continue
+              }
+
+              // Ensure dest dir exists
+              const destDir = path.dirname(destFile)
+              if (!fs.existsSync(destDir)) await fs.promises.mkdir(destDir, { recursive: true })
+
+              // Overwrite
+              if (fs.existsSync(destFile)) {
+                  await fs.promises.rm(destFile, { recursive: true, force: true })
+              }
+              
+              // Rename is faster
+              await fs.promises.rename(srcFile, destFile)
+              
+              processedFiles++
+              // Update progress for installation phase
+              if (processedFiles % 10 === 0 || processedFiles === totalFiles) {
+                  this.sendProgress('Installing Files...', processedFiles, totalFiles)
+                  await new Promise(resolve => setTimeout(resolve, 1))
+              }
+          }
+          
+          // 3. Cleanup Extra Files (Target -> Delete)
+          // User request: "Check Config and Mods" -> Remove extras in these folders
+          const foldersToCheck = ['mods', 'config']
+          let dynamicWhitelist = []
+          if (Array.isArray(ignoreFiles)) {
+              dynamicWhitelist = ignoreFiles
+          } else if (typeof ignoreFiles === 'string' && ignoreFiles.trim()) {
+              dynamicWhitelist = [ignoreFiles]
+          }
+          const whitelist = ['figura', 'fragmentskin', 'emotes', 'options', ...dynamicWhitelist]
+          
+          for (const folder of foldersToCheck) {
+              if (signal?.aborted) throw new Error('Extraction aborted')
+              const targetFolder = path.join(targetDir, folder)
+              if (!fs.existsSync(targetFolder)) continue
+
+              const targetFiles = await getAllFiles(targetFolder)
+              
+              for (const absPath of targetFiles) {
+                  const relPath = path.relative(targetDir, absPath)
+                  
+                  // Normalize paths for comparison (Windows backslashes)
+                  const normRelPath = relPath.split(path.sep).join('/')
+                  
+                  // Check if file existed in source
+                  const inSource = sourceRelativePaths.some(p => p.split(path.sep).join('/') === normRelPath)
+                  
+                  if (!inSource) {
+                      // File is extra. Check Whitelist.
+                      const isWhitelisted = whitelist.some(w => normRelPath.toLowerCase().includes(w.toLowerCase()))
+                      
+                      if (!isWhitelisted) {
+                          this.log(`Removing extra file: ${relPath}`)
+                          try { await fs.promises.rm(absPath, { force: true }) } catch(e) {}
+                      } else {
+                          this.log(`Preserving whitelisted file: ${relPath}`)
                       }
                   }
               }
-              
-              // ----------------------------------------------------------------
-              // 🔄 SMART SYNC (Copy + Cleanup)
-              // ----------------------------------------------------------------
-              
-              if (signal?.aborted) throw new Error('Extraction aborted')
-
-                          
-                          // Helper for recursive file listing (Async)
-                          const getAllFiles = async (dir, fileList = []) => {
-                              if (signal?.aborted) throw new Error('Extraction aborted')
-                              try {
-                                  const files = await fs.promises.readdir(dir)
-                                  for (const file of files) {
-                                      const filePath = path.join(dir, file)
-                                      const stat = await fs.promises.stat(filePath)
-                                      if (stat.isDirectory()) {
-                                          await getAllFiles(filePath, fileList)
-                                      } else {
-                                          fileList.push(filePath)
-                                      }
-                                  }
-                              } catch (e) { }
-                              return fileList
-                          }
-
-                          if (!fs.existsSync(targetDir)) await fs.promises.mkdir(targetDir, { recursive: true })
-
-                          // 1. Get all source files (Relative paths)
-                          const sourceFiles = await getAllFiles(sourceDir)
-                          const sourceRelativePaths = sourceFiles.map(f => path.relative(sourceDir, f))
-                          
-                          // 2. Copy/Update Files (Source -> Target)
-                          let processedFiles = 0
-                          const totalFiles = sourceRelativePaths.length
-                          
-                          for (const relPath of sourceRelativePaths) {
-                              if (signal?.aborted) throw new Error('Extraction aborted')
-
-                              const srcFile = path.join(sourceDir, relPath)
-                              const destFile = path.join(targetDir, relPath)
-                              
-                              // Rule: Don't overwrite User Settings (options.txt, etc)
-                              const isSettings = relPath.toLowerCase() === 'options.txt' || 
-                                               (relPath.toLowerCase().startsWith('options') && relPath.endsWith('.txt'))
-                                               
-                              if (isSettings && fs.existsSync(destFile)) {
-                                  this.log(`Skipping settings file: ${relPath}`)
-                                  processedFiles++
-                                  continue
-                              }
-
-                              // Ensure dest dir exists
-                              const destDir = path.dirname(destFile)
-                              if (!fs.existsSync(destDir)) await fs.promises.mkdir(destDir, { recursive: true })
-
-                              // Overwrite
-                              if (fs.existsSync(destFile)) {
-                                  await fs.promises.rm(destFile, { recursive: true, force: true })
-                              }
-                              
-                              // Rename is faster
-                              await fs.promises.rename(srcFile, destFile)
-                              
-                              processedFiles++
-                              // Update progress for installation phase
-                              if (processedFiles % 10 === 0 || processedFiles === totalFiles) {
-                                  this.sendProgress('Installing Files...', processedFiles, totalFiles)
-                                  await new Promise(resolve => setTimeout(resolve, 1))
-                              }
-                          }
-                          
-                          // 3. Cleanup Extra Files (Target -> Delete)
-                          // User request: "Check Config and Mods" -> Remove extras in these folders
-                          const foldersToCheck = ['mods', 'config']
-                          let dynamicWhitelist = []
-                          if (Array.isArray(ignoreFiles)) {
-                              dynamicWhitelist = ignoreFiles
-                          } else if (typeof ignoreFiles === 'string' && ignoreFiles.trim()) {
-                              dynamicWhitelist = [ignoreFiles]
-                          }
-                          const whitelist = ['figura', 'fragmentskin', 'emotes', 'options', ...dynamicWhitelist]
-                          
-                          for (const folder of foldersToCheck) {
-                              if (signal?.aborted) throw new Error('Extraction aborted')
-                              const targetFolder = path.join(targetDir, folder)
-                              if (!fs.existsSync(targetFolder)) continue
-
-                              const targetFiles = await getAllFiles(targetFolder)
-                              
-                              for (const absPath of targetFiles) {
-                                  const relPath = path.relative(targetDir, absPath)
-                                  
-                                  // Normalize paths for comparison (Windows backslashes)
-                                  const normRelPath = relPath.split(path.sep).join('/')
-                                  
-                                  // Check if file existed in source
-                                  const inSource = sourceRelativePaths.some(p => p.split(path.sep).join('/') === normRelPath)
-                                  
-                                  if (!inSource) {
-                                      // File is extra. Check Whitelist.
-                                      const isWhitelisted = whitelist.some(w => normRelPath.toLowerCase().includes(w.toLowerCase()))
-                                      
-                                      if (!isWhitelisted) {
-                                          this.log(`Removing extra file: ${relPath}`)
-                                          try { await fs.promises.rm(absPath, { force: true }) } catch(e) {}
-                                      } else {
-                                          this.log(`Preserving whitelisted file: ${relPath}`)
-                                      }
-                                  }
-                              }
-                          }
-                          
-                          // Cleanup temp directory
-                          try { await fs.promises.rm(tempDir, { recursive: true, force: true }) } catch (e) {}
-                          
-                          this.log("Files installed successfully.")
-                          return true
-                      } catch (err) {
-                          console.error("Error handling nested folder:", err)
-                          // Try to cleanup
-                          try { fs.rmSync(tempDir, { recursive: true, force: true }) } catch (e) {}
-                          throw err
-                      }
-          } catch (e) {
-              try { fs.rmSync(tempDir, { recursive: true, force: true }) } catch (err) {}
-              throw new Error(`Failed to load zip: ${e.message}`)
           }
+          
+          this.log("Files installed successfully.")
+          return true
+
+      } catch (e) {
+          this.log(`Extraction/Sync failed: ${e.message}`)
+          throw e
+      } finally {
+          // Cleanup temp directory
+          if (fs.existsSync(tempDir)) {
+              try {
+                  fs.rmSync(tempDir, { recursive: true, force: true })
+                  this.log(`Cleaned up temp directory: ${tempDir}`)
+              } catch (e) {
+                  this.log(`Failed to cleanup temp directory: ${e.message}`)
+              }
+          }
+      }
   }
 }

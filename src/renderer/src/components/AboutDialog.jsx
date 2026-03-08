@@ -1,10 +1,7 @@
 import React from 'react'
 
 const team = [
-  { name: 'Malakor', role: 'ผู้สร้าง', avatar: 'Malakor_Real' },
-  { name: 'ASTRA', role: 'ผู้ให้คําปรึกษา', avatar: 'ASTRAv0' },
-  { name: 'NEW_WEEIX', role: 'คนนั่งชมผลงาน', avatar: 'OOLLOOL' },
-  
+  { name: 'Malakor', role: 'ผู้สร้าง', avatar: 'Malakor_Real', link: 'https://malakor.online' },
 ]
 
 function AboutDialog({ onClose }) {
@@ -112,7 +109,7 @@ function AboutDialog({ onClose }) {
           width: '100%'
         }}>
           {team.map((member) => (
-            <div key={member.name} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '140px' }}>
+            <a key={member.name} href={member.link} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', width: '140px' }}>
               <div style={{ 
                 width: '64px', 
                 height: '64px', 
@@ -131,7 +128,7 @@ function AboutDialog({ onClose }) {
               </div>
               <div style={{ color: '#fff', fontWeight: '600', fontSize: '14px', marginBottom: '4px' }}>{member.name}</div>
               <div style={{ color: '#666', fontSize: '12px' }}>{member.role}</div>
-            </div>
+            </a>
           ))}
         </div>
         

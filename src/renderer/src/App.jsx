@@ -649,7 +649,15 @@ function App() {
 
     setLaunchStatus('repairing')
     try {
-        await window.api.repairInstance(instance)
+        const result = await window.api.repairInstance(instance)
+        
+        if (!result.success) {
+            if (result.error !== 'Cancelled') {
+                setErrorMessage(`${actionName} Failed: ` + (result.error || "Unknown Error"))
+            }
+            setLaunchStatus('idle')
+            return
+        }
         
         // Refresh installed versions to update UI state
         if (window.api && window.api.getInstalledVersions) {

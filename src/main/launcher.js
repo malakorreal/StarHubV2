@@ -20,15 +20,24 @@ export function setupLauncher(ipcMain, mainWindow) {
   const javaManager = new JavaManager(mainWindow, syncManager)
 
   let currentLaunchController = null
+  let currentLaunchPromise = null
   let activeLauncherProcess = null
   const getFreeSpaceGB = (targetPath) => {
     try {
-      const root = path.parse(targetPath).root // e.g., C:\\
-      const drive = root ? root.replace(':\\', '') : 'C'
-      const cmd = `powershell -NoProfile -NonInteractive -Command "(Get-PSDrive -Name '${drive}').Free/1GB"`
-      const out = execSync(cmd, { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim()
-      const val = parseFloat(out)
-      return isNaN(val) ? 0 : val
+      if (process.platform === 'win32') {
+        const root = path.parse(targetPath).root // e.g., C:\\
+        const drive = root ? root.replace(':\\', '') : 'C'
+        const cmd = `powershell -NoProfile -NonInteractive -Command "(Get-PSDrive -Name '${drive}').Free/1GB"`
+        const out = execSync(cmd, { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim()
+        const val = parseFloat(out)
+        return isNaN(val) ? 0 : val
+      } else {
+        // Linux/Mac: use df -BG (Free space in GB)
+        const cmd = `df -BG "${targetPath}" | tail -1 | awk '{print $4}' | sed 's/G//'`
+        const out = execSync(cmd, { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim()
+        const val = parseFloat(out)
+        return isNaN(val) ? 0 : val
+      }
     } catch {
       return 0
     }
@@ -36,21 +45,81 @@ export function setupLauncher(ipcMain, mainWindow) {
 
   // Helper to prepare files (Download/Extract)
   const prepareGameFiles = async (instance, forceRepair = false, signal = null) => {
+    // ---------------------------------------------------------
+    // 🌐 URL NORMALIZATION (Dropbox & etc)
+    // ---------------------------------------------------------
+    const normalizeUrl = (url) => {
+        if (!url) return url
+        let finalUrl = url.trim()
+        
+        // Handle Dropbox specific logic
+        if (finalUrl.includes('dropbox.com')) {
+            if (finalUrl.includes('?dl=0')) {
+                finalUrl = finalUrl.replace('?dl=0', '?dl=1')
+            } else if (!finalUrl.includes('?dl=1')) {
+                finalUrl = finalUrl.includes('?') ? `${finalUrl}&dl=1` : `${finalUrl}?dl=1`
+            }
+        }
+        
+        // 🚨 IMPORTANT: Encode URL to handle spaces/Thai characters in filename
+        // We only encode if it's not already encoded (simple check for %)
+        // But better is to use encodeURI on the full path after stripping protocol
+        try {
+            const parts = finalUrl.split('://')
+            if (parts.length === 2) {
+                const protocol = parts[0]
+                const rest = parts[1]
+                // encodeURI is safe for already encoded chars like %20
+                finalUrl = `${protocol}://${encodeURI(decodeURI(rest))}`
+            }
+        } catch (e) {
+            console.warn(`[URL] Failed to encode URL: ${finalUrl}`, e)
+        }
+        
+        return finalUrl
+    }
+
+    if (instance.modpackUrl) {
+        const oldUrl = instance.modpackUrl
+        instance.modpackUrl = normalizeUrl(instance.modpackUrl)
+        if (oldUrl !== instance.modpackUrl) console.log(`[ZIP] Normalized URL: ${instance.modpackUrl}`)
+    }
+    if (instance.modpackMirrorUrl) {
+        instance.modpackMirrorUrl = normalizeUrl(instance.modpackMirrorUrl)
+    }
+
     // Use AppData to avoid non-ASCII path issues
     const baseDir = app.getPath('userData')
     const rootPath = path.join(baseDir, 'instances', instance.id)
     const modsFolder = path.join(rootPath, 'mods')
-    const zipPath = path.join(rootPath, 'modpack.zip')
+
+    // 🚨 DYNAMIC FILENAME: Use filename from URL if possible, otherwise fallback to modpack.zip
+    let modpackFileName = 'modpack.zip'
+    if (instance.modpackUrl) {
+        try {
+            // Get path from URL (e.g. /scl/fi/xxx/MyModpack.zip)
+            const urlPath = new URL(instance.modpackUrl).pathname
+            const extracted = path.basename(decodeURIComponent(urlPath))
+            if (extracted && extracted.toLowerCase().endsWith('.zip')) {
+                modpackFileName = extracted
+            }
+        } catch (e) {
+            console.warn("[ZIP] Failed to extract filename from URL, using default.")
+        }
+    }
+    const zipPath = path.join(rootPath, modpackFileName)
+    console.log(`[ZIP] Resolved modpack file: ${modpackFileName}`)
 
     // ---------------------------------------------------------
     // 🔄 CHECK FOR VERSION UPDATE
     // ---------------------------------------------------------
-    const installedVersion = store.get(`installed_versions.${instance.id}`)
+    const installedVersions = store.get('installed_versions', {})
+    const installedVersion = installedVersions[instance.id]
     const currentVersion = instance.modpackVersion || instance.version
     
     // If versions mismatch, force an update (re-download/re-extract)
     if (installedVersion && installedVersion !== currentVersion) {
-         console.log(`[UPDATE] Version mismatch detected! Installed: ${installedVersion}, New: ${currentVersion}`)
+         console.log(`[UPDATE] Version mismatch detected for ${instance.id}! Installed: ${installedVersion}, New: ${currentVersion}`)
          forceRepair = true
     }
 
@@ -59,9 +128,23 @@ export function setupLauncher(ipcMain, mainWindow) {
     if (signal?.aborted) throw new Error('Launch aborted')
 
     if (forceRepair) {
-        // Remove zip to force re-download
-        if (fs.existsSync(zipPath)) {
-            fs.rmSync(zipPath, { force: true })
+        // 🚨 CLEANUP: Remove any .zip files in root to avoid disk space issues
+        if (fs.existsSync(rootPath)) {
+            try {
+                const existingFiles = fs.readdirSync(rootPath)
+                for (const file of existingFiles) {
+                    if (file.toLowerCase().endsWith('.zip')) {
+                        const fullPath = path.join(rootPath, file)
+                        try {
+                            fs.chmodSync(fullPath, 0o666)
+                            fs.rmSync(fullPath, { force: true })
+                            console.log(`[CLEANUP] Deleted old zip: ${file}`)
+                        } catch (e) {
+                            console.warn(`[CLEANUP] Failed to delete ${file}: ${e.message}`)
+                        }
+                    }
+                }
+            } catch (e) {}
         }
         
         // 🚨 FORCE CLEAN MODS FOLDER ON UPDATE/REPAIR
@@ -104,6 +187,9 @@ export function setupLauncher(ipcMain, mainWindow) {
 
     // 1. Handle Modpack Zip
     if (instance.modpackUrl) {
+        console.log(`[ZIP] Processing modpack for instance ${instance.id}: ${instance.modpackUrl}`)
+        console.log(`[ZIP] Zip path: ${zipPath}`)
+        
         // 🚨 Validate File Extension (Must be .zip)
         try {
             const urlPath = new URL(instance.modpackUrl).pathname.toLowerCase()
@@ -117,31 +203,92 @@ export function setupLauncher(ipcMain, mainWindow) {
 
         // Check if we need to download
         let needsDownload = forceRepair || !fs.existsSync(zipPath)
+        console.log(`[ZIP] needsDownload: ${needsDownload} (forceRepair: ${forceRepair}, zipExists: ${fs.existsSync(zipPath)})`)
         
         if (needsDownload) {
-             console.log(`Downloading Modpack: ${instance.modpackUrl}`)
-             await syncManager.downloadLargeFile(instance.modpackUrl, zipPath, { signal })
+             console.log(`[ZIP] Downloading Modpack: ${instance.modpackUrl}`)
+             
+             // 🚨 Ensure we start with a clean file for new download
+             // We don't delete here anymore because downloadLargeFile with 'w' mode will handle it via safeOpen
+             // which has better EPERM/Retry logic.
+
+             try {
+                await syncManager.downloadLargeFile(instance.modpackUrl, zipPath, { signal })
+             } catch (e) {
+                // If failed or aborted, delete partial zip so it doesn't block next attempt
+                if (fs.existsSync(zipPath)) {
+                    try { 
+                        // Retry logic for EPERM deletion
+                        for (let i = 0; i < 5; i++) {
+                            try {
+                                fs.rmSync(zipPath, { force: true })
+                                break
+                            } catch(err) {
+                                if (i === 4) break
+                                await new Promise(r => setTimeout(r, 500))
+                            }
+                        }
+                    } catch(err) {}
+                }
+
+                if (instance.modpackMirrorUrl && !signal?.aborted) {
+                    console.warn(`[ZIP] Primary modpack download failed: ${e.message}. Trying mirror...`)
+                    await syncManager.downloadLargeFile(instance.modpackMirrorUrl, zipPath, { signal })
+                } else {
+                    console.error(`[ZIP] Download failed: ${e.message}`)
+                    throw e // Re-throw if no mirror is available or if aborted
+                }
+             }
+             console.log(`[ZIP] Extraction starting: ${zipPath} -> ${rootPath}`)
              await syncManager.extractZip(zipPath, rootPath, { signal, ignoreFiles: instance.ignoreFiles })
         } else {
-             // Zip exists. Check if mods folder is empty?
-             // Or if we just want to ensure everything is synced
-             // For "prepare", we might want to re-extract to be safe if it's quick?
-             // But re-extracting takes time.
-             // Let's check if mods folder is empty.
-             const files = fs.readdirSync(modsFolder)
-             if (files.length === 0) {
-                 console.log("Mods folder empty. Extracting existing zip...")
+             // Zip exists. Verify it's not corrupt before skipping download
+             let isCorrupt = false
+             try {
+                 // 🚨 Retry logic for integrity check (Common EPERM)
+                 let zip = null
+                 for (let i = 0; i < 5; i++) {
+                     try {
+                         zip = new AdmZip(zipPath)
+                         zip.getEntries()
+                         break
+                     } catch(e) {
+                         if (i === 4) throw e
+                         await new Promise(r => setTimeout(r, 500))
+                     }
+                 }
+                 console.log(`[ZIP] Existing zip verified: ${zipPath}`)
+             } catch (e) {
+                 console.warn("[ZIP] Existing modpack.zip is corrupt, redownloading...")
+                 isCorrupt = true
+                 try { 
+                    // Retry logic for EPERM
+                    for (let i = 0; i < 5; i++) {
+                        try {
+                            fs.rmSync(zipPath, { force: true })
+                            break
+                        } catch(err) {
+                            if (i === 4) break
+                            await new Promise(r => setTimeout(r, 500))
+                        }
+                    }
+                 } catch(err) {}
+                 await syncManager.downloadLargeFile(instance.modpackUrl, zipPath, { signal })
+                 // Need to extract after redownloading!
                  await syncManager.extractZip(zipPath, rootPath, { signal, ignoreFiles: instance.ignoreFiles })
-             } else {
-                 // Optional: We could run extraction again for "Smart Sync" even if files exist,
-                 // because extractZip now has the Smart Sync logic.
-                 // Let's do it if it's not too slow. It compares files.
-                 // But for large packs, it might be slow to read all files.
-                 // Let's skip if not forceRepair and mods exist.
-                 // However, user requirement says "When loading... is finished".
-                 // If we skip everything, it finishes instantly.
+             }
+
+             // If not corrupt, check if we need to extract anyway (e.g. mods folder empty)
+             if (!isCorrupt) {
+                 const files = fs.readdirSync(modsFolder)
+                 if (files.length === 0) {
+                     console.log("[ZIP] Mods folder empty. Extracting existing zip...")
+                     await syncManager.extractZip(zipPath, rootPath, { signal, ignoreFiles: instance.ignoreFiles })
+                 }
              }
         }
+    } else {
+        console.log(`[ZIP] No modpackUrl for instance ${instance.id}`)
     }
 
     if (signal?.aborted) throw new Error('Launch aborted')
@@ -250,6 +397,11 @@ export function setupLauncher(ipcMain, mainWindow) {
              } else {
                  console.log(`[PATCH COMPARE] No file changes detected. System healthy.`)
              }
+
+             // Stable Cleanup: Only run cleanup if patch comparison was successful
+             console.log("[CLEANUP] Running stable cleanup...")
+             await syncManager.cleanupFolder(modsFolder, Array.from(validFilenames), instance.ignoreFiles || [])
+
         } catch (err) {
             console.error("[PATCH COMPARE] Error analyzing changes:", err)
         }
@@ -344,93 +496,15 @@ export function setupLauncher(ipcMain, mainWindow) {
         }
     }
 
-        // 2.6 Cleanup Old Mods
-        // We consolidate cleanup logic to handle both Modpack and Individual Mods.
-        try {
-             // We can reuse the validFilenames logic if we scope it out, but for now, since we did the Comparison Block *before* syncMods,
-             // we technically already calculated validFilenames there.
-             // However, that block was inside a try-catch and scoped.
-             // To avoid duplication, we should have scoped validFilenames outside.
-             // But wait, I just inserted the "PATCH COMPARISON" block *before* step 2.
-             // And I duplicated the logic.
-             // That's okay for now, but better to reuse if possible.
-             // Actually, step 2.6 (cleanup) still needs validFilenames.
-             // Let's recalculate it to be safe (idempotent), or we can rely on the previous block if I move the declaration up.
-             
-             // I'll leave the recalculation here as it ensures this block is self-contained for cleanup,
-             // matching the original structure.
-            
-            const validFilenames = new Set()
-            
-            // Helper to get filename from URL
-            const getFileName = (url) => {
-                try {
-                    return decodeURIComponent(url.split('/').pop().split('?')[0])
-                } catch (e) { return null }
-            }
-
-            // 1. From mods array
-            if (instance.mods && Array.isArray(instance.mods)) {
-                instance.mods.forEach(modUrl => {
-                     const name = getFileName(modUrl)
-                     if (name) validFilenames.add(name)
-                })
-            }
-            
-            // 2. From preloadMods
-            if (instance.preloadMods && Array.isArray(instance.preloadMods)) {
-                instance.preloadMods.forEach(mod => {
-                    let name = null
-                    if (typeof mod === 'string') {
-                        name = getFileName(mod)
-                    } else if (typeof mod === 'object' && mod.url) {
-                        name = mod.name || getFileName(mod.url)
-                    }
-                    if (name) validFilenames.add(name)
-                })
-            }
-            
-            // 3. From Modpack Zip (if exists)
-            // If modpackUrl is used, we must whitelist files inside the zip to avoid deleting them.
-            if (instance.modpackUrl) {
-                 if (fs.existsSync(zipPath)) {
-                    try {
-                        const zip = new AdmZip(zipPath)
-                        const entries = zip.getEntries()
-                        entries.forEach(entry => {
-                            if (entry.isDirectory) return
-                            // Normalize slashes
-                            const entryPath = entry.entryName.replace(/\\/g, '/')
-                            const parts = entryPath.split('/')
-                            const modsIndex = parts.indexOf('mods')
-                            // If file is inside a "mods" folder, whitelist the immediate child of "mods"
-                            if (modsIndex !== -1 && modsIndex < parts.length - 1) {
-                                validFilenames.add(parts[modsIndex + 1])
-                            }
-                        })
-                    } catch (e) {
-                        console.warn("[CLEANUP] Failed to read modpack zip, skipping cleanup to be safe:", e)
-                        throw new Error('Zip read failed') 
-                    }
-                 } else {
-                     // Zip missing but url defined? Skip cleanup.
-                     throw new Error('Modpack zip missing')
-                 }
-            }
-            
-            // Run cleanup
-            // Note: We already did patch comparison earlier. This is the final cleanup.
-            await syncManager.cleanupFolder(modsFolder, Array.from(validFilenames))
-    
-        } catch (e) {
-            // console.error("[CLEANUP] Skipped:", e)
-        }
+        // Cleanup logic is being moved to the patch comparison block for stability.
 
     // 3. Save Installed Version
     // Prioritize modpackVersion if available, otherwise use Minecraft version
     const versionToSave = instance.modpackVersion || instance.version
     if (versionToSave) {
-        store.set(`installed_versions.${instance.id}`, versionToSave)
+        const installed = store.get('installed_versions', {})
+        installed[instance.id] = versionToSave
+        store.set('installed_versions', installed)
     }
 
     return rootPath
@@ -450,16 +524,22 @@ export function setupLauncher(ipcMain, mainWindow) {
     try {
         if (currentLaunchController) {
             currentLaunchController.abort() // Cancel any previous
+            if (currentLaunchPromise) {
+                try { await currentLaunchPromise } catch(e) {} // Wait for previous to stop
+            }
         }
         currentLaunchController = new AbortController()
         const signal = currentLaunchController.signal
 
-        await prepareGameFiles(instance, true, signal)
+        currentLaunchPromise = prepareGameFiles(instance, true, signal)
+        await currentLaunchPromise
         
         currentLaunchController = null
+        currentLaunchPromise = null
         return { success: true }
     } catch (e) {
         currentLaunchController = null
+        currentLaunchPromise = null
         console.error("Repair Error:", e)
         if (e.message === 'Launch aborted' || e.message === 'Download aborted' || e.message === 'Unzip aborted' || e.message === 'Extraction aborted') {
              return { success: false, error: 'Cancelled' }
@@ -472,16 +552,22 @@ export function setupLauncher(ipcMain, mainWindow) {
     try {
         if (currentLaunchController) {
             currentLaunchController.abort()
+            if (currentLaunchPromise) {
+                try { await currentLaunchPromise } catch(e) {}
+            }
         }
         currentLaunchController = new AbortController()
         const signal = currentLaunchController.signal
 
-        await prepareGameFiles(instance, false, signal)
+        currentLaunchPromise = prepareGameFiles(instance, false, signal)
+        await currentLaunchPromise
         
         currentLaunchController = null
+        currentLaunchPromise = null
         return { success: true }
     } catch (e) {
         currentLaunchController = null
+        currentLaunchPromise = null
         console.error("Prepare Error:", e)
         if (e.message === 'Launch aborted' || e.message === 'Download aborted') {
              return { success: false, error: 'Cancelled' }
@@ -501,21 +587,17 @@ export function setupLauncher(ipcMain, mainWindow) {
     
     try {
         if (currentLaunchController) {
-            // Check if it's the SAME instance? 
-            // If user clicks play twice quickly?
-            // Usually UI prevents this.
-            // If we are already launching, maybe we should abort the previous one or block?
-            // Let's abort previous.
             currentLaunchController.abort()
+            if (currentLaunchPromise) {
+                try { await currentLaunchPromise } catch(e) {}
+            }
         }
         currentLaunchController = new AbortController()
         const signal = currentLaunchController.signal
 
         // PREPARE FIRST (Ensure files are ready)
-        // Note: The UI might call prepare-launch separately, but for safety launch-game should also ensure readiness
-        // especially if we merge logic.
-        // If we call prepareGameFiles here, it uses the signal.
-        await prepareGameFiles(instance, false, signal)
+        currentLaunchPromise = prepareGameFiles(instance, false, signal)
+        await currentLaunchPromise
 
         if (signal.aborted) throw new Error('Launch aborted')
 
@@ -695,7 +777,16 @@ export function setupLauncher(ipcMain, mainWindow) {
                                 forgeVersion = promo.promos[`${instance.version}-recommended`] || promo.promos[`${instance.version}-latest`]
                             }
                         } catch (e) {
-                            console.error(`[FORGE] Failed to fetch promotions: ${e.message}`)
+                            console.warn(`[FORGE] Failed to fetch promotions from primary URL: ${e.message}. Trying mirror...`)
+                            const mirrorUrl = `https://bmclapi2.bangbang93.com/forge/promotions_slim.json`
+                            try {
+                                const { data: promo } = await axios.get(mirrorUrl, { timeout: 15000 })
+                                if (promo && promo.promos) {
+                                    forgeVersion = promo.promos[`${instance.version}-recommended`] || promo.promos[`${instance.version}-latest`]
+                                }
+                            } catch (e2) {
+                                console.error(`[FORGE] Failed to fetch promotions from mirror: ${e2.message}`)
+                            }
                         }
 
                         // Fallback for common versions if fetch failed
@@ -751,8 +842,14 @@ export function setupLauncher(ipcMain, mainWindow) {
                                    throw new Error('Download aborted')
                                }
                                console.warn(`[FORGE] Primary Maven download failed: ${e.message}. Trying mirror...`)
-                               const mirror = `https://bmclapi2.bangbang93.com/maven/net/minecraftforge/forge/${forgeFullVersion}/forge-${forgeFullVersion}-installer.jar`
-                               await syncManager.downloadLargeFile(mirror, installerPath, { signal })
+                               try {
+                                   const mirror = `https://bmclapi2.bangbang93.com/maven/net/minecraftforge/forge/${forgeFullVersion}/forge-${forgeFullVersion}-installer.jar`
+                                   await syncManager.downloadLargeFile(mirror, installerPath, { signal })
+                               } catch (e2) {
+                                   console.warn(`[FORGE] BMCLAPI mirror failed: ${e2.message}. Trying official files mirror...`)
+                                   const officialMirror = `https://files.minecraftforge.net/net/minecraftforge/forge/${forgeFullVersion}/forge-${forgeFullVersion}-installer.jar`
+                                   await syncManager.downloadLargeFile(officialMirror, installerPath, { signal })
+                               }
                              }
                              if (signal.aborted) {
                                  try { if (fs.existsSync(installerPath)) fs.unlinkSync(installerPath) } catch {}
@@ -1096,8 +1193,8 @@ export function setupLauncher(ipcMain, mainWindow) {
   ipcMain.handle('open-instance-folder', async (event, instance) => {
       if (!instance) return { success: false, reason: 'no_instance' }
       
-      // Security: Validate instance ID to prevent path traversal
-      if (!/^[a-zA-Z0-9_-]+$/.test(instance.id)) {
+      // Security: Validate instance ID to prevent path traversal (allow dots, underscores, dashes)
+      if (!/^[a-zA-Z0-9_.-]+$/.test(instance.id)) {
           console.error(`[SECURITY] Invalid instance ID attempted: ${instance.id}`)
           return { success: false, reason: 'invalid_id' }
       }
@@ -1118,7 +1215,7 @@ export function setupLauncher(ipcMain, mainWindow) {
               return { success: false, error: 'Invalid instance' }
           }
 
-          if (!/^[a-zA-Z0-9_-]+$/.test(instance.id)) {
+          if (!/^[a-zA-Z0-9_.-]+$/.test(instance.id)) {
               console.error(`[SECURITY] Invalid instance ID for uninstall: ${instance.id}`)
               return { success: false, error: 'invalid_id' }
           }
@@ -1132,7 +1229,8 @@ export function setupLauncher(ipcMain, mainWindow) {
 
           const installed = store.get('installed_versions', {})
           if (installed && Object.prototype.hasOwnProperty.call(installed, instance.id)) {
-              store.delete(`installed_versions.${instance.id}`)
+              delete installed[instance.id]
+              store.set('installed_versions', installed)
           }
 
           return { success: true }

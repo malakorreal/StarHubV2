@@ -44,8 +44,11 @@ export class JavaManager {
         }
         fs.mkdirSync(javaTargetDir, { recursive: true })
 
-        const downloadUrl = `https://api.adoptium.net/v3/binary/latest/${javaVer}/ga/windows/x64/jre/hotspot/normal/eclipse`
-        const zipPath = path.join(this.baseDir, `jre-${javaVer}.zip`)
+        const platform = process.platform === 'win32' ? 'windows' : process.platform === 'darwin' ? 'mac' : 'linux'
+        const arch = process.arch === 'x64' ? 'x64' : process.arch === 'arm64' ? 'aarch64' : 'x64'
+        const downloadUrl = `https://api.adoptium.net/v3/binary/latest/${javaVer}/ga/${platform}/${arch}/jre/hotspot/normal/eclipse`
+        const zipExtension = process.platform === 'win32' ? 'zip' : 'tar.gz'
+        const zipPath = path.join(this.baseDir, `jre-${javaVer}.${zipExtension}`)
 
         try {
             this.sendProgress(`Downloading Java ${javaVer}...`, 0)
@@ -68,11 +71,16 @@ export class JavaManager {
             
             // Use SyncManager for robust extraction
             if (this.syncManager) {
-                 // Check if SyncManager has extractZip (it should based on previous analysis assumption, 
-                 // wait, I didn't verify extractZip exists in SyncManager in the previous read!
-                 // I need to be careful. The launcher used syncManager.extractZip, so it MUST exist.
-                 // But I should verify.)
-                 await this.syncManager.extractZip(zipPath, javaTargetDir, { signal })
+                 if (zipExtension === 'tar.gz') {
+                    // tar.gz extraction logic (if SyncManager doesn't have it, we might need to add it or use child_process)
+                    // Let's check if syncManager has extractTarGz or similar.
+                    // Based on previous analysis, it only had extractZip.
+                    // I'll use child_process for tar.gz if needed.
+                    const { execSync } = require('child_process')
+                    execSync(`tar -xzf "${zipPath}" -C "${javaTargetDir}"`)
+                 } else {
+                    await this.syncManager.extractZip(zipPath, javaTargetDir, { signal })
+                 }
             }
 
             // Clean zip
@@ -100,14 +108,16 @@ export class JavaManager {
 
         const items = fs.readdirSync(dir, { withFileTypes: true })
         
-        // Check for bin/java.exe in current dir
-        const binPath = path.join(dir, 'bin', 'java.exe')
+        const javaBin = process.platform === 'win32' ? 'java.exe' : 'java'
+
+        // Check for bin/java in current dir
+        const binPath = path.join(dir, 'bin', javaBin)
         if (fs.existsSync(binPath)) return binPath
 
-        // Check immediate subdirectories (e.g. jre-17.0.x/bin/java.exe)
+        // Check immediate subdirectories (e.g. jre-17.0.x/bin/java)
         for (const item of items) {
             if (item.isDirectory()) {
-                const subBinPath = path.join(dir, item.name, 'bin', 'java.exe')
+                const subBinPath = path.join(dir, item.name, 'bin', javaBin)
                 if (fs.existsSync(subBinPath)) return subBinPath
             }
         }

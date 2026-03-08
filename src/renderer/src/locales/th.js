@@ -21,7 +21,7 @@ export default {
     version: "เวอร์ชัน",
     play: "เล่นเกม",
     loadingInstances: "กำลังโหลด Instance...",
-    checkSession: "กำลังตรวจสอบเซสชัน...",
+    checkingSession: "กำลังตรวจสอบเซสชัน...",
     launching: "กำลังเริ่ม...",
     repairing: "กำลังซ่อมแซม...",
     running: "กำลังเล่น",
