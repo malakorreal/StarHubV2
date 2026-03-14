@@ -60,13 +60,19 @@ function RepairConfirmationModal({ onConfirm, onCancel, instanceName, actionName
         zIndex: 3000,
         backdropFilter: 'blur(5px)' // Modern touch without shadow
     }}>
+       <div style={{
+           background: `linear-gradient(135deg, rgba(255,255,255,0.16), rgba(255,255,255,0.06))`,
+           padding: '1px',
+           borderRadius: '22px',
+           width: '420px',
+           maxWidth: '92vw'
+       }}>
        <div style={{ 
-           background: '#1e1e1e', 
-           padding: '40px', 
-           borderRadius: '0px', // Flat corners or slight radius
-           width: '400px', 
-           textAlign: 'center',
-           border: '1px solid #333',
+           background: 'rgba(24, 24, 28, 0.92)', 
+           padding: '34px 32px', 
+           borderRadius: '21px',
+           width: '100%', 
+           textAlign: 'center'
        }}>
           <h3 style={{ 
               color: '#fff', 
@@ -78,28 +84,28 @@ function RepairConfirmationModal({ onConfirm, onCancel, instanceName, actionName
           </h3>
           
           <p style={{ 
-              color: '#bbb', 
-              marginBottom: '30px', 
-              lineHeight: '1.6',
-              fontSize: '1em',
+              color: 'rgba(255,255,255,0.72)', 
+              marginBottom: '26px', 
+              lineHeight: '1.55',
+              fontSize: '0.95em',
           }} dangerouslySetInnerHTML={{ __html: messageHtml }} />
           
           <div style={{ display: 'flex', gap: '15px', justifyContent: 'center' }}>
               <button 
                 onClick={onCancel} 
                 style={{ 
-                    padding: '12px 24px', 
-                    background: '#333', 
+                    padding: '12px 22px', 
+                    background: 'rgba(255,255,255,0.08)', 
                     border: 'none', 
-                    color: '#ddd', 
-                    borderRadius: '4px', 
+                    color: 'rgba(255,255,255,0.9)', 
+                    borderRadius: '12px', 
                     cursor: 'pointer',
                     fontSize: '1em',
                     transition: 'background 0.2s',
                     fontWeight: '500'
                 }}
-                onMouseOver={(e) => e.target.style.background = '#444'}
-                onMouseOut={(e) => e.target.style.background = '#333'}
+                onMouseOver={(e) => e.target.style.background = 'rgba(255,255,255,0.12)'}
+                onMouseOut={(e) => e.target.style.background = 'rgba(255,255,255,0.08)'}
               >
                   {finalCancelText}
               </button>
@@ -107,11 +113,11 @@ function RepairConfirmationModal({ onConfirm, onCancel, instanceName, actionName
               <button 
                 onClick={onConfirm} 
                 style={{ 
-                    padding: '12px 24px', 
+                    padding: '12px 22px', 
                     background: 'var(--accent)', // Use theme accent
                     border: 'none', 
                     color: '#000', 
-                    borderRadius: '4px', 
+                    borderRadius: '12px', 
                     cursor: 'pointer',
                     fontSize: '1em',
                     fontWeight: 'bold',
@@ -123,6 +129,7 @@ function RepairConfirmationModal({ onConfirm, onCancel, instanceName, actionName
                   {confirmText}
               </button>
           </div>
+       </div>
        </div>
     </div>
   )

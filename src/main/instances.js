@@ -77,6 +77,11 @@ async function fetchAndCache(cacheKey) {
          const clean = (s) => s ? s.replace(/`/g, '').trim() : ""
          
          inst.modpackUrl = clean(inst.modpackUrl) || clean(inst.fileUrl) || clean(inst.modpack_url)
+         inst.loader = clean(inst.loader) || clean(inst.modLoader) || clean(inst.mod_loader) || clean(inst.loader_type) || clean(inst.loaderType)
+         if (inst.loader) inst.loader = String(inst.loader).toLowerCase()
+         inst.forgeVersion = clean(inst.forgeVersion) || clean(inst.forge_version)
+         inst.customVersionId = clean(inst.customVersionId) || clean(inst.custom_version_id) || clean(inst.custom_version)
+         inst.loaderVersion = clean(inst.loaderVersion) || clean(inst.loader_version)
          inst.id = inst.id || (inst.name ? inst.name.toLowerCase().replace(/\s+/g, '-') : 'unknown')
          
          return inst

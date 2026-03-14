@@ -253,22 +253,27 @@ export function setupAuth(ipcMain, mainWindow) {
       return accounts.map(a => ({
           uuid: a.uuid,
           name: a.name,
-          active: a.uuid === selectedId
+          active: a.uuid === selectedId,
+          lastUsed: a.lastUsed || 0
       }))
   })
   
   ipcMain.handle('switch-account', (event, uuid) => {
       const accounts = store.get('accounts', [])
-      const target = accounts.find(a => a.uuid === uuid)
+      const idx = accounts.findIndex(a => a.uuid === uuid)
+      const target = idx >= 0 ? accounts[idx] : null
       
       if (target) {
+          const updated = { ...target, lastUsed: Date.now() }
+          accounts[idx] = updated
+          store.set('accounts', accounts)
           store.set('selectedAccountId', uuid)
-          store.set('auth', target.mclc)
+          store.set('auth', updated.mclc)
           try {
-             store.set('msmc_raw', target.msmc)
+             store.set('msmc_raw', updated.msmc)
           } catch(e) {}
           
-          return { success: true, profile: { name: target.name, id: target.uuid } }
+          return { success: true, profile: { name: updated.name, id: updated.uuid }, lastUsed: updated.lastUsed }
       }
       return { success: false, error: 'Account not found' }
   })

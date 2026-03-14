@@ -1,6 +1,6 @@
 import React from 'react'
 
-function NotificationModal({ title, message, type = 'info', action, onClose }) {
+function NotificationModal({ title, message, type = 'info', action, onClose, closeLabel = 'Close' }) {
   // Types: info, success, warning, error
   const colors = {
     info: '#4a90e2',
@@ -39,24 +39,51 @@ function NotificationModal({ title, message, type = 'info', action, onClose }) {
     <div style={{
       position: 'fixed',
       inset: 0,
-      background: 'rgba(0, 0, 0, 0.6)',
+      background: 'rgba(0, 0, 0, 0.55)',
       backdropFilter: 'blur(5px)',
       display: 'flex',
       justifyContent: 'center',
       alignItems: 'center',
       zIndex: 5000,
-      animation: 'fadeIn 0.2s ease-out'
+      animation: 'fadeIn 0.18s ease-out'
     }}>
       <div style={{
-        background: 'rgba(30, 30, 40, 0.95)',
-        borderRadius: '16px',
-        padding: '30px',
-        width: '400px',
+        background: 'rgba(24, 24, 28, 0.92)',
+        borderRadius: '22px',
+        padding: '26px',
+        width: '420px',
         maxWidth: '90%',
         textAlign: 'center',
         transform: 'scale(1)',
-        animation: 'scaleUp 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
+        animation: 'scaleUp 0.22s cubic-bezier(0.2, 0.9, 0.2, 1)',
+        position: 'relative'
       }}>
+        <button
+          onClick={onClose}
+          style={{
+            position: 'absolute',
+            top: 12,
+            right: 12,
+            width: 34,
+            height: 34,
+            borderRadius: 999,
+            border: 'none',
+            background: 'rgba(255,255,255,0.08)',
+            color: 'rgba(255,255,255,0.9)',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: 18,
+            lineHeight: 1
+          }}
+          onMouseOver={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.14)' }}
+          onMouseOut={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.08)' }}
+          aria-label="Close"
+        >
+          ×
+        </button>
+
         <div style={{
           width: '60px',
           height: '60px',
@@ -71,8 +98,8 @@ function NotificationModal({ title, message, type = 'info', action, onClose }) {
           {icons[type] || icons.info}
         </div>
         
-        <h3 style={{ margin: '0 0 10px 0', fontSize: '20px', fontWeight: '600', color: 'white' }}>{title}</h3>
-        <p style={{ margin: '0 0 25px 0', color: '#aaa', lineHeight: '1.5' }}>{message}</p>
+        <h3 style={{ margin: '0 0 10px 0', fontSize: '20px', fontWeight: '650', color: 'white', letterSpacing: '0.2px' }}>{title}</h3>
+        <p style={{ margin: '0 0 22px 0', color: 'rgba(255,255,255,0.72)', lineHeight: '1.55', fontSize: 14 }}>{message}</p>
         
         <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
           {action && (
@@ -80,17 +107,17 @@ function NotificationModal({ title, message, type = 'info', action, onClose }) {
               onClick={action.onClick}
               style={{
                 background: color,
-                color: '#fff',
+                color: '#111',
                 border: 'none',
-                padding: '12px 24px',
-                borderRadius: '8px',
+                padding: '12px 22px',
+                borderRadius: '12px',
                 fontSize: '14px',
-                fontWeight: '600',
+                fontWeight: '700',
                 cursor: 'pointer',
                 transition: 'all 0.2s'
               }}
-              onMouseOver={(e) => { e.currentTarget.style.filter = 'brightness(1.1)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
-              onMouseOut={(e) => { e.currentTarget.style.filter = 'brightness(1)'; e.currentTarget.style.transform = 'translateY(0)'; }}
+              onMouseOver={(e) => { e.currentTarget.style.filter = 'brightness(1.05)'; }}
+              onMouseOut={(e) => { e.currentTarget.style.filter = 'brightness(1)'; }}
             >
               {action.label}
             </button>
@@ -99,20 +126,20 @@ function NotificationModal({ title, message, type = 'info', action, onClose }) {
           <button 
             onClick={onClose}
             style={{
-              background: action ? 'rgba(255,255,255,0.1)' : color,
-              color: '#fff',
+              background: action ? 'rgba(255,255,255,0.08)' : color,
+              color: action ? 'rgba(255,255,255,0.92)' : '#111',
               border: 'none',
-              padding: '12px 30px',
-              borderRadius: '8px',
+              padding: '12px 22px',
+              borderRadius: '12px',
               fontSize: '14px',
-              fontWeight: '600',
+              fontWeight: '700',
               cursor: 'pointer',
               transition: 'all 0.2s'
             }}
-            onMouseOver={(e) => { e.currentTarget.style.filter = 'brightness(1.1)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
-            onMouseOut={(e) => { e.currentTarget.style.filter = 'brightness(1)'; e.currentTarget.style.transform = 'translateY(0)'; }}
+            onMouseOver={(e) => { e.currentTarget.style.background = action ? 'rgba(255,255,255,0.12)' : color }}
+            onMouseOut={(e) => { e.currentTarget.style.background = action ? 'rgba(255,255,255,0.08)' : color }}
           >
-            {action ? 'Close' : 'Got it'}
+            {closeLabel}
           </button>
         </div>
       </div>
@@ -124,7 +151,7 @@ function NotificationModal({ title, message, type = 'info', action, onClose }) {
             to { opacity: 1; }
           }
           @keyframes scaleUp {
-            from { transform: scale(0.9); opacity: 0; }
+            from { transform: scale(0.96); opacity: 0; }
             to { transform: scale(1); opacity: 1; }
           }
         `}

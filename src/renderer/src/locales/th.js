@@ -83,7 +83,7 @@ export default {
     width: "กว้าง",
     height: "สูง",
     uninstallInstance: "ลบ Instance",
-    launcherGraphics: "ธีม",
+    launcherGraphics: "แอป",
     theme: "ธีมสี",
     themeDesc: "เลือกสีหลักของ Launcher",
     closeBehavior: "ตั้งค่าการปิด Launcher",

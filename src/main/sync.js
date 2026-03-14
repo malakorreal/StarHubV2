@@ -531,75 +531,84 @@ export class SyncManager {
       }
 
       try {
-          const files = await fs.promises.readdir(folder)
-          
-          // Hardcoded whitelist for specific mods/folders that should never be deleted
-          // Merge with user-provided ignoreList
+          const normalizeRel = (rel) => rel.split(path.sep).join('/')
+          const validSet = new Set(validFilenames)
+          const lowerValidBasenames = new Set(validFilenames.map(v => path.basename(v).toLowerCase()))
           const systemWhitelist = ['figura', 'fragmentskin', 'cache', 'shaderpacks', 'screenshots', ...ignoreList]
 
-          // Check for deleted files (Files in folder but not in whitelist)
-          for (const file of files) {
-              const filePath = path.join(folder, file)
-              
-              // Check system whitelist first - If ignored, skip all verification
-              if (systemWhitelist.some(w => file.toLowerCase().includes(w.toLowerCase()))) {
-                   result.kept.push(file)
-                   continue
+          const localFiles = []
+          const listFilesRecursive = async (dir, prefix = "") => {
+              const entries = await fs.promises.readdir(dir, { withFileTypes: true })
+              for (const ent of entries) {
+                  const rel = prefix ? `${prefix}/${ent.name}` : ent.name
+                  const abs = path.join(dir, ent.name)
+                  const relLower = rel.toLowerCase()
+                  const isWhitelisted = systemWhitelist.some(w => relLower.includes(String(w).toLowerCase()))
+                  if (ent.isDirectory()) {
+                      if (isWhitelisted) {
+                          result.kept.push(rel)
+                          continue
+                      }
+                      await listFilesRecursive(abs, rel)
+                  } else {
+                      localFiles.push({ rel: normalizeRel(rel), abs, name: ent.name, whitelisted: isWhitelisted })
+                  }
+              }
+          }
+
+          await listFilesRecursive(folder)
+
+          const localRelSet = new Set(localFiles.map(f => f.rel))
+
+          for (const f of localFiles) {
+              if (f.whitelisted) {
+                  result.kept.push(f.rel)
+                  continue
               }
 
               let isCorrupt = false
-
-              // Check corruption
               try {
-                  const stats = await fs.promises.stat(filePath)
+                  const stats = await fs.promises.stat(f.abs)
                   if (stats.isFile()) {
                       if (stats.size === 0) {
                           isCorrupt = true
-                      } else if (file.endsWith('.jar')) {
-                          // Check Zip Header
-                          const handle = await fs.promises.open(filePath, 'r')
+                      } else if (f.name.toLowerCase().endsWith('.jar')) {
+                          const handle = await fs.promises.open(f.abs, 'r')
                           const buffer = Buffer.alloc(4)
                           await handle.read(buffer, 0, 4, 0)
                           await handle.close()
-                          // PK.. (0x50 0x4B 0x03 0x04)
                           if (buffer[0] !== 0x50 || buffer[1] !== 0x4B) {
                               isCorrupt = true
                           }
                       }
                   }
-              } catch (e) {
-                  // If verify fails, assume corrupt?
-                  // console.warn(`Verify failed for ${file}`, e)
-              }
+              } catch (e) {}
 
               if (isCorrupt) {
-                  result.corrupt.push(file)
-                  // If it's also a valid filename, it effectively needs to be 'added' (redownloaded)
-                  // But we list it as corrupt. The caller should delete corrupt files.
+                  result.corrupt.push(f.rel)
               }
 
-              // Check if file is in validFilenames
-              if (validFilenames.includes(file)) {
-                  if (!isCorrupt) result.kept.push(file)
+              const isValidExact = validSet.has(f.rel)
+              const isValidByName = lowerValidBasenames.has(f.name.toLowerCase())
+
+              if (isValidExact || isValidByName) {
+                  if (!isCorrupt) result.kept.push(f.rel)
                   continue
               }
 
-              // Only mark as deleted if NOT corrupt (corrupt takes precedence for logging)
-              // Actually, if it's corrupt and also not in whitelist, it's doubly bad.
-              // Let's just put it in corrupt if corrupt.
               if (!isCorrupt) {
-                  result.deleted.push(file)
+                  result.deleted.push(f.rel)
               }
           }
 
-          // Check for added files (Files in whitelist but not in folder OR are corrupt)
-          // If a file is corrupt, it's effectively "missing" a valid version.
           for (const valid of validFilenames) {
-              if (!files.includes(valid) || result.corrupt.includes(valid)) {
-                  // Avoid duplicates if logic overlaps
-                  if (!result.added.includes(valid)) {
-                       result.added.push(valid)
-                  }
+              const normValid = normalizeRel(valid)
+              const existsExact = localRelSet.has(normValid)
+              const existsByName = localFiles.some(f => f.name.toLowerCase() === path.basename(valid).toLowerCase())
+              if (!existsExact && !existsByName) {
+                  if (!result.added.includes(valid)) result.added.push(valid)
+              } else if (result.corrupt.includes(normValid)) {
+                  if (!result.added.includes(valid)) result.added.push(valid)
               }
           }
       } catch (e) {
@@ -612,20 +621,41 @@ export class SyncManager {
   /**
    * Cleanup folder by removing files not in the whitelist
    */
-  async cleanupFolder(folder, validFilenames = []) {
+  async cleanupFolder(folder, validFilenames = [], ignoreList = []) {
       try {
           if (!fs.existsSync(folder)) return
 
           this.log(`[CLEANUP] Checking folder: ${folder}`)
           
           // Use comparePatches logic to identify files to delete
-          const { deleted } = await this.comparePatches(folder, validFilenames)
+          const { deleted } = await this.comparePatches(folder, validFilenames, ignoreList)
 
           for (const file of deleted) {
               const filePath = path.join(folder, file)
               this.log(`[CLEANUP] Removing old/extra file: ${file}`)
               await fs.promises.rm(filePath, { recursive: true, force: true })
           }
+
+          const systemWhitelist = ['figura', 'fragmentskin', 'cache', 'shaderpacks', 'screenshots', ...ignoreList]
+          const pruneEmptyDirs = async (dir, prefix = "") => {
+              const entries = await fs.promises.readdir(dir, { withFileTypes: true })
+              for (const ent of entries) {
+                  if (!ent.isDirectory()) continue
+                  const rel = prefix ? `${prefix}/${ent.name}` : ent.name
+                  const abs = path.join(dir, ent.name)
+                  const relLower = rel.toLowerCase()
+                  const isWhitelisted = systemWhitelist.some(w => relLower.includes(String(w).toLowerCase()))
+                  if (isWhitelisted) continue
+                  await pruneEmptyDirs(abs, rel)
+                  try {
+                      const after = await fs.promises.readdir(abs)
+                      if (after.length === 0) {
+                          await fs.promises.rm(abs, { recursive: true, force: true })
+                      }
+                  } catch (e) {}
+              }
+          }
+          await pruneEmptyDirs(folder)
       } catch (e) {
           console.error(`[CLEANUP] Error cleaning folder ${folder}:`, e)
       }

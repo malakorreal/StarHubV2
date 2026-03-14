@@ -88,7 +88,7 @@ export default {
     width: "Width",
     noAccount: "Not found Account",
     height: "Height",
-    launcherGraphics: "Launcher Interface",
+    launcherGraphics: "Launcher",
     theme: "Theme Color",
     themeDesc: "Choose the main accent color",
     closeBehavior: "Launcher Close Behavior",

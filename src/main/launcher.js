@@ -297,7 +297,7 @@ export function setupLauncher(ipcMain, mainWindow) {
     // 🔍 PATCH COMPARISON & CLEANUP PREPARATION
     // ---------------------------------------------------------
     // We calculate valid filenames BEFORE syncing mods to compare "Old vs New".
-    const validFilenames = new Set()
+    const validModRelPaths = new Set()
     
     try {
         // Helper to get filename from URL
@@ -307,11 +307,19 @@ export function setupLauncher(ipcMain, mainWindow) {
             } catch (e) { return null }
         }
 
+        const patchStatePath = path.join(rootPath, 'patch_state.json')
+        let previousManagedMods = []
+        try {
+            const raw = await fs.promises.readFile(patchStatePath, 'utf-8')
+            const parsed = JSON.parse(raw)
+            if (parsed && Array.isArray(parsed.managedMods)) previousManagedMods = parsed.managedMods
+        } catch (e) {}
+
         // 1. From mods array
         if (instance.mods && Array.isArray(instance.mods)) {
             instance.mods.forEach(modUrl => {
                  const name = getFileName(modUrl)
-                 if (name) validFilenames.add(name)
+                 if (name) validModRelPaths.add(name)
             })
         }
         
@@ -324,7 +332,7 @@ export function setupLauncher(ipcMain, mainWindow) {
                 } else if (typeof mod === 'object' && mod.url) {
                     name = mod.name || getFileName(mod.url)
                 }
-                if (name) validFilenames.add(name)
+                if (name) validModRelPaths.add(name)
             })
         }
         
@@ -334,17 +342,24 @@ export function setupLauncher(ipcMain, mainWindow) {
                 try {
                     const zip = new AdmZip(zipPath)
                     const entries = zip.getEntries()
-                    entries.forEach(entry => {
-                        if (entry.isDirectory) return
-                        // Normalize slashes
-                        const entryPath = entry.entryName.replace(/\\/g, '/')
-                        const parts = entryPath.split('/')
-                        const modsIndex = parts.indexOf('mods')
-                        // If file is inside a "mods" folder, whitelist the immediate child of "mods"
-                        if (modsIndex !== -1 && modsIndex < parts.length - 1) {
-                            validFilenames.add(parts[modsIndex + 1])
+                    const normalizeEntry = (p) => (p || '').replace(/\\/g, '/').replace(/^\/+/, '')
+                    const fileEntries = entries.filter(e => !e.isDirectory).map(e => normalizeEntry(e.entryName)).filter(Boolean)
+                    const visible = fileEntries.filter(p => !p.startsWith('__MACOSX/') && !p.split('/')[0].startsWith('.'))
+                    const topLevels = new Set(visible.map(p => p.split('/')[0]).filter(Boolean))
+                    const standardFolders = new Set(['mods', 'config', 'versions', 'saves', 'resourcepacks', 'shaderpacks', 'screenshots', 'logs'])
+                    let stripPrefix = ''
+                    if (topLevels.size === 1) {
+                        const only = Array.from(topLevels)[0]
+                        if (only && !standardFolders.has(only.toLowerCase())) stripPrefix = `${only}/`
+                    }
+                    for (const entryPathRaw of visible) {
+                        const entryPath = stripPrefix && entryPathRaw.startsWith(stripPrefix) ? entryPathRaw.slice(stripPrefix.length) : entryPathRaw
+                        const lower = entryPath.toLowerCase()
+                        if (lower.startsWith('mods/')) {
+                            const rel = entryPath.slice('mods/'.length)
+                            if (rel) validModRelPaths.add(rel)
                         }
-                    })
+                    }
                 } catch (e) {
                     console.warn("[CLEANUP] Failed to read modpack zip, skipping cleanup to be safe:", e)
                     // If zip fails, we might still want to proceed with what we have? 
@@ -357,11 +372,21 @@ export function setupLauncher(ipcMain, mainWindow) {
              }
         }
         
+        if (forceRepair && previousManagedMods.length > 0) {
+            const removedManaged = previousManagedMods.filter(p => !validModRelPaths.has(p))
+            for (const rel of removedManaged) {
+                try {
+                    await fs.promises.rm(path.join(modsFolder, rel), { recursive: true, force: true })
+                } catch (e) {}
+            }
+        }
+
         // 🚨 PATCH COMPARISON (Requested Feature)
         // Compare old vs new files to detect additions, deletions, and corruption.
         // We do this BEFORE syncMods to accurately show what WILL happen.
         try {
-             const { added, deleted, corrupt } = await syncManager.comparePatches(modsFolder, Array.from(validFilenames), instance.ignoreFiles || [])
+             const desired = Array.from(validModRelPaths)
+             const { added, deleted, corrupt } = await syncManager.comparePatches(modsFolder, desired, instance.ignoreFiles || [])
              
              // Notify UI about patch summary
              if (mainWindow && !mainWindow.isDestroyed()) {
@@ -390,7 +415,7 @@ export function setupLauncher(ipcMain, mainWindow) {
                      console.log(`[AUTO-FIX] Removing ${corrupt.length} corrupt files...`)
                      for (const file of corrupt) {
                          try {
-                             await fs.promises.unlink(path.join(modsFolder, file))
+                             await fs.promises.rm(path.join(modsFolder, file), { recursive: true, force: true })
                          } catch(e) { console.error(`Failed to delete corrupt file ${file}`, e)}
                      }
                  }
@@ -400,7 +425,7 @@ export function setupLauncher(ipcMain, mainWindow) {
 
              // Stable Cleanup: Only run cleanup if patch comparison was successful
              console.log("[CLEANUP] Running stable cleanup...")
-             await syncManager.cleanupFolder(modsFolder, Array.from(validFilenames), instance.ignoreFiles || [])
+             await syncManager.cleanupFolder(modsFolder, desired, instance.ignoreFiles || [])
 
         } catch (err) {
             console.error("[PATCH COMPARE] Error analyzing changes:", err)
@@ -495,6 +520,13 @@ export function setupLauncher(ipcMain, mainWindow) {
             }
         }
     }
+
+    try {
+        const patchStatePath = path.join(rootPath, 'patch_state.json')
+        const currentVersionForState = instance.modpackVersion || instance.version || null
+        const managedMods = Array.from(validModRelPaths)
+        await fs.promises.writeFile(patchStatePath, JSON.stringify({ version: currentVersionForState, managedMods, updatedAt: Date.now() }, null, 2), 'utf-8')
+    } catch (e) {}
 
         // Cleanup logic is being moved to the patch comparison block for stability.
 
@@ -653,6 +685,7 @@ export function setupLauncher(ipcMain, mainWindow) {
         }
         
         // Basic Loader Handling
+        instance.loader = (instance.loader || 'vanilla').toLowerCase()
         let forgeInstallerPath = null
         const versionOpts = {
             number: instance.version,
@@ -678,21 +711,74 @@ export function setupLauncher(ipcMain, mainWindow) {
                         return fs.statSync(path.join(versionsPath, f)).isDirectory()
                     })
                     
-                    // Logic: Find a directory that contains "Forge", "Fabric", "Quilt", or "NeoForge"
-                    // AND matches the base game version partially if possible
-                    const customDir = dirs.find(d => {
-                        const dl = d.toLowerCase()
-                        const matchLoader = dl.includes(instance.loader.toLowerCase()) || dl.includes('forge') || dl.includes('fabric')
-                        const matchMc = dl.includes(instance.version.toLowerCase())
-                        if (matchLoader && dl.includes('forge')) {
-                            detectedForgeForThisMc = d
+                    const getVersionJson = (versionId) => {
+                        try {
+                            const jsonPath = path.join(versionsPath, versionId, `${versionId}.json`)
+                            if (!fs.existsSync(jsonPath)) return null
+                            const stat = fs.statSync(jsonPath)
+                            if (!stat.isFile() || stat.size < 16) return null
+                            const raw = fs.readFileSync(jsonPath, 'utf-8')
+                            const parsed = JSON.parse(raw)
+                            if (!parsed || typeof parsed !== 'object') return null
+                            if (!parsed.id || typeof parsed.id !== 'string') return null
+                            return parsed
+                        } catch (e) {
+                            return null
                         }
+                    }
+
+                    const isForgeProfile = (json, versionId) => {
+                        if (!json) return false
+                        const id = String(versionId || json.id || '').toLowerCase()
+                        const mainClass = String(json.mainClass || '').toLowerCase()
+                        const hasForgeMain = mainClass.includes('cpw.mods') || mainClass.includes('modlauncher') || mainClass.includes('forge')
+                        const libs = Array.isArray(json.libraries) ? json.libraries : []
+                        const hasForgeLib = libs.some(l => String(l?.name || '').toLowerCase().includes('net.minecraftforge') || String(l?.name || '').toLowerCase().includes('minecraftforge'))
+                        return id.includes('forge') || hasForgeMain || hasForgeLib
+                    }
+
+                    const isFabricProfile = (json, versionId) => {
+                        if (!json) return false
+                        const id = String(versionId || json.id || '').toLowerCase()
+                        const libs = Array.isArray(json.libraries) ? json.libraries : []
+                        const hasFabricLib = libs.some(l => String(l?.name || '').toLowerCase().includes('net.fabricmc'))
+                        return id.includes('fabric') || hasFabricLib
+                    }
+
+                    const isValidForLoader = (versionId, loader) => {
+                        const json = getVersionJson(versionId)
+                        if (!json) return false
+                        const inherits = String(json.inheritsFrom || '').toLowerCase()
+                        const mc = String(instance.version || '').toLowerCase()
+                        const inheritsOk = !inherits || inherits.includes(mc)
+                        if (!inheritsOk) return false
+                        if (loader === 'forge') return isForgeProfile(json, versionId)
+                        if (loader === 'fabric') return isFabricProfile(json, versionId)
+                        return true
+                    }
+
+                    const loaderKey = instance.loader === 'forge' ? 'forge' : instance.loader
+                    const candidates = dirs.filter(d => {
+                        const dl = d.toLowerCase()
+                        const matchLoader = loaderKey ? dl.includes(loaderKey) : false
+                        const matchMc = dl.includes(instance.version.toLowerCase())
                         return matchLoader && matchMc
                     })
-                    
-                    if (customDir) {
-                        console.log(`[AUTO-DETECT] Found custom version folder: ${customDir}`)
-                        detectedVersionId = customDir
+
+                    let chosen = null
+                    for (const d of candidates) {
+                        if (instance.loader === 'forge' && d.toLowerCase().includes('forge')) {
+                            detectedForgeForThisMc = d
+                        }
+                        if (isValidForLoader(d, instance.loader)) {
+                            chosen = d
+                            break
+                        }
+                    }
+
+                    if (chosen) {
+                        console.log(`[AUTO-DETECT] Found custom version folder: ${chosen}`)
+                        detectedVersionId = chosen
                     }
                 } catch (e) {
                     console.error("Error scanning versions folder:", e)
@@ -871,14 +957,58 @@ export function setupLauncher(ipcMain, mainWindow) {
             // Decide version selection strategy:
             // - If we already have a custom version folder (detectedVersionId or explicit), use custom.
             // - Else, rely on MCLC + forge installer to create the profile from the base MC version.
-            if (instance.customVersionId) {
+            const validateCustomId = (customId) => {
+                try {
+                    const jsonPath = path.join(rootPath, 'versions', customId, `${customId}.json`)
+                    if (!fs.existsSync(jsonPath)) return false
+                    const stat = fs.statSync(jsonPath)
+                    if (!stat.isFile() || stat.size < 16) return false
+                    const raw = fs.readFileSync(jsonPath, 'utf-8')
+                    const parsed = JSON.parse(raw)
+                    if (!parsed || typeof parsed !== 'object') return false
+                    if (!parsed.id || typeof parsed.id !== 'string') return false
+                    const inherits = String(parsed.inheritsFrom || '').toLowerCase()
+                    const mc = String(instance.version || '').toLowerCase()
+                    if (inherits && !inherits.includes(mc)) return false
+                    if (instance.loader === 'forge') {
+                        const mainClass = String(parsed.mainClass || '').toLowerCase()
+                        const libs = Array.isArray(parsed.libraries) ? parsed.libraries : []
+                        const hasForgeLib = libs.some(l => String(l?.name || '').toLowerCase().includes('net.minecraftforge') || String(l?.name || '').toLowerCase().includes('minecraftforge'))
+                        const hasForgeMain = mainClass.includes('cpw.mods') || mainClass.includes('modlauncher') || mainClass.includes('forge')
+                        if (!(String(customId).toLowerCase().includes('forge') || hasForgeMain || hasForgeLib)) return false
+                    }
+                    if (instance.loader === 'fabric') {
+                        const libs = Array.isArray(parsed.libraries) ? parsed.libraries : []
+                        const hasFabricLib = libs.some(l => String(l?.name || '').toLowerCase().includes('net.fabricmc'))
+                        if (!(String(customId).toLowerCase().includes('fabric') || hasFabricLib)) return false
+                    }
+                    return true
+                } catch (e) {
+                    return false
+                }
+            }
+
+            let selectedCustomId = null
+            const explicitCustomValid = instance.customVersionId ? validateCustomId(instance.customVersionId) : false
+            const detectedCustomValid = detectedVersionId ? validateCustomId(detectedVersionId) : false
+            if (instance.customVersionId && !explicitCustomValid) {
+                console.warn(`[VERSION] Invalid custom profile '${instance.customVersionId}'. Falling back to installer/base version.`)
+            }
+            if (!instance.customVersionId && detectedVersionId && !detectedCustomValid) {
+                console.warn(`[VERSION] Detected profile '${detectedVersionId}' is not valid for loader '${instance.loader}'. Falling back to installer/base version.`)
+            }
+
+            if (instance.customVersionId && explicitCustomValid) {
+                selectedCustomId = instance.customVersionId
+                console.log(`[VERSION] Using explicit custom version: ${selectedCustomId}`)
+            } else if (detectedVersionId && detectedCustomValid) {
+                selectedCustomId = detectedVersionId
+                console.log(`[VERSION] Using detected custom version: ${selectedCustomId}`)
+            }
+
+            if (selectedCustomId) {
                 versionOpts.type = "custom"
-                versionOpts.custom = instance.customVersionId
-                console.log(`[VERSION] Using explicit custom version: ${versionOpts.custom}`)
-            } else if (detectedVersionId) {
-                versionOpts.type = "custom"
-                versionOpts.custom = detectedVersionId
-                console.log(`[VERSION] Using detected custom version: ${versionOpts.custom}`)
+                versionOpts.custom = selectedCustomId
             } else if (instance.loader === 'fabric') {
                 // Fabric JSON may have been generated above
                 if (fs.existsSync(path.join(rootPath, 'versions'))) {
@@ -1116,7 +1246,7 @@ export function setupLauncher(ipcMain, mainWindow) {
             await launcher.launch(opts)
         } catch (primaryErr) {
             // Retry strategy for Forge: if installer exists and no custom profile selected, try once more after cleaning the versions folder
-            if (instance.loader === 'forge' && forgeInstallerPath) {
+            if (instance.loader === 'forge' && forgeOption) {
                 try {
                     console.warn("[FORGE][RETRY] Primary launch failed. Cleaning Forge versions and retrying once...")
                     const versionsPath = path.join(rootPath, 'versions')

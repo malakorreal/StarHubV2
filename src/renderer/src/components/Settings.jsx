@@ -25,15 +25,32 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
   const [accounts, setAccounts] = useState([])
   const [loadingAccounts, setLoadingAccounts] = useState(false)
 
+  const formatLastUsed = (ts) => {
+      if (!ts) return ''
+      try {
+          const d = new Date(ts)
+          return d.toLocaleString(currentLanguage === 'th' ? 'th-TH' : undefined)
+      } catch (e) {
+          return ''
+      }
+  }
+
+  const reloadAccounts = async () => {
+      if (!(window.api && window.api.getAccounts)) return
+      setLoadingAccounts(true)
+      try {
+          const accs = await window.api.getAccounts()
+          setAccounts(accs || [])
+      } catch (e) {
+          console.error(e)
+      } finally {
+          setLoadingAccounts(false)
+      }
+  }
+
   useEffect(() => {
       if (activeTab === 'account' && window.api && window.api.getAccounts) {
-          setLoadingAccounts(true)
-          window.api.getAccounts()
-            .then(accs => {
-                setAccounts(accs)
-            })
-            .catch(console.error)
-            .finally(() => setLoadingAccounts(false))
+          reloadAccounts()
       }
   }, [activeTab, user])
 
@@ -833,10 +850,21 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
                                        displayAccounts.unshift({
                                            uuid: user.id,
                                            name: user.name,
-                                           active: true
+                                           active: true,
+                                           lastUsed: Date.now()
                                        });
                                    }
                                }
+
+                               displayAccounts.sort((a, b) => {
+                                   const aActive = !!(a.active || (user && user.id === a.uuid))
+                                   const bActive = !!(b.active || (user && user.id === b.uuid))
+                                   if (aActive !== bActive) return aActive ? -1 : 1
+                                   const aLast = typeof a.lastUsed === 'number' ? a.lastUsed : 0
+                                   const bLast = typeof b.lastUsed === 'number' ? b.lastUsed : 0
+                                   if (bLast !== aLast) return bLast - aLast
+                                   return String(a.name || '').localeCompare(String(b.name || ''))
+                               })
 
                                if (!loadingAccounts && displayAccounts.length === 0 && user) {
                                    // Should not happen due to above logic, but fallback
@@ -856,7 +884,7 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
                                }
 
                                return !loadingAccounts && displayAccounts.map(acc => {
-                                   const isActive = user && user.id === acc.uuid;
+                                   const isActive = !!(acc.active || (user && user.id === acc.uuid))
                                    return (
                                        <div key={acc.uuid} style={{ 
                         display: 'flex', alignItems: 'center', gap: '15px', 
@@ -877,12 +905,51 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
                                                <div style={{ fontSize: '0.8em', color: isActive ? 'var(--success)' : 'var(--text-secondary)' }}>
                                                    {isActive ? '● ' + (t('settings.active') || 'Active') : (t('settings.inactive') || 'Inactive')}
                                                </div>
+                                               <div style={{ fontSize: '0.75em', color: 'var(--text-secondary)', marginTop: '4px', display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                                                   <span style={{ opacity: 0.9 }}>UUID: {acc.uuid}</span>
+                                                   <button
+                                                       onClick={async (e) => {
+                                                           e.stopPropagation()
+                                                           try {
+                                                               if (navigator.clipboard && navigator.clipboard.writeText) {
+                                                                   await navigator.clipboard.writeText(acc.uuid)
+                                                                   if (showToast) showToast(currentLanguage === 'th' ? 'คัดลอก UUID แล้ว' : 'UUID copied', 'success', 1500)
+                                                               }
+                                                           } catch (err) {
+                                                               if (showToast) showToast(currentLanguage === 'th' ? 'คัดลอกไม่สำเร็จ' : 'Copy failed', 'error', 2000)
+                                                           }
+                                                       }}
+                                                       style={{
+                                                           padding: '2px 8px',
+                                                           borderRadius: '999px',
+                                                           border: '1px solid var(--border-color)',
+                                                           background: 'transparent',
+                                                           color: 'var(--text-secondary)',
+                                                           cursor: 'pointer',
+                                                           fontSize: '0.75em',
+                                                           opacity: 0.9
+                                                       }}
+                                                   >
+                                                       {currentLanguage === 'th' ? 'คัดลอก' : 'Copy'}
+                                                   </button>
+                                                   {acc.lastUsed ? (
+                                                       <span style={{ opacity: 0.75 }}>
+                                                           {(currentLanguage === 'th' ? 'ใช้งานล่าสุด: ' : 'Last used: ') + formatLastUsed(acc.lastUsed)}
+                                                       </span>
+                                                   ) : null}
+                                               </div>
                                            </div>
                                            
                                            {/* Actions */}
                                            {!isActive && (
                                                <button 
-                                                   onClick={() => { onSwitchAccount(acc.uuid); onClose(); }}
+                                                   onClick={async () => {
+                                                       try {
+                                                           await onSwitchAccount(acc.uuid)
+                                                       } finally {
+                                                           await reloadAccounts()
+                                                       }
+                                                   }}
                                                    style={{ 
                                                        padding: '6px 12px', background: 'var(--accent)', color: 'var(--main-bg)', 
                                                        border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.9em', fontWeight: 'bold' 

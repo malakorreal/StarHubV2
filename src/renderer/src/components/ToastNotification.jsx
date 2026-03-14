@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 
-const ToastNotification = ({ message, type = 'info', onClose, duration = 3000 }) => {
+const ToastNotification = ({ message, type = 'info', onClose, duration = 2000 }) => {
     const [isVisible, setIsVisible] = useState(true)
+    const timerRef = useRef(null)
 
     const colors = {
         info: '#4a90e2',
@@ -13,13 +14,22 @@ const ToastNotification = ({ message, type = 'info', onClose, duration = 3000 })
     const color = colors[type] || colors.info
 
     useEffect(() => {
-        const timer = setTimeout(() => {
+        if (timerRef.current) clearTimeout(timerRef.current)
+        timerRef.current = setTimeout(() => {
             setIsVisible(false)
             setTimeout(onClose, 300) // Wait for animation
         }, duration)
 
-        return () => clearTimeout(timer)
+        return () => {
+            if (timerRef.current) clearTimeout(timerRef.current)
+        }
     }, [duration, onClose])
+
+    const closeNow = () => {
+        if (timerRef.current) clearTimeout(timerRef.current)
+        setIsVisible(false)
+        setTimeout(onClose, 250)
+    }
 
     return (
         <>
@@ -55,8 +65,35 @@ const ToastNotification = ({ message, type = 'info', onClose, duration = 3000 })
                 animation: isVisible 
                     ? 'toast-bounce-in 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards' 
                     : 'toast-bounce-out 0.4s cubic-bezier(0.25, 1, 0.5, 1) forwards',
-                maxWidth: '350px'
+                maxWidth: '350px',
+                paddingRight: '44px'
             }}>
+                <button
+                    onClick={closeNow}
+                    style={{
+                        position: 'absolute',
+                        top: '10px',
+                        right: '10px',
+                        width: '26px',
+                        height: '26px',
+                        borderRadius: '999px',
+                        border: '1px solid rgba(255,255,255,0.14)',
+                        background: 'rgba(255,255,255,0.06)',
+                        color: 'rgba(255,255,255,0.85)',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        lineHeight: 1,
+                        fontSize: '16px',
+                        padding: 0
+                    }}
+                    onMouseOver={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.12)' }}
+                    onMouseOut={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.06)' }}
+                    aria-label="Close"
+                >
+                    ×
+                </button>
                 <div style={{
                 width: '24px',
                 height: '24px',

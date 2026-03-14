@@ -51,6 +51,7 @@ function App() {
   const [showLaunchConfirmation, setShowLaunchConfirmation] = useState(false)
   const [errorMessage, setErrorMessage] = useState(null)
   const [notification, setNotification] = useState(null)
+  const notificationQueueRef = React.useRef([])
   const [showRepairConfirmation, setShowRepairConfirmation] = useState(false)
   const [repairTargetInstance, setRepairTargetInstance] = useState(null)
   const [isRefreshing, setIsRefreshing] = useState(false)
@@ -94,9 +95,36 @@ function App() {
       // setEnableCubes(newState) // User requested to keep Cubes always on (or independent)
   }
 
-  const showToast = useCallback((message, type = 'info') => {
-      setToast({ message, type, id: Date.now() })
+  const showToast = useCallback((message, type = 'info', duration) => {
+      setToast({ message, type, duration, id: Date.now() })
   }, [])
+
+  const enqueueNotification = useCallback((next) => {
+      if (!next) return
+      if (!notification) {
+          setNotification(next)
+          return
+      }
+      notificationQueueRef.current.push(next)
+  }, [notification])
+
+  const closeNotification = useCallback(() => {
+      const next = notificationQueueRef.current.shift()
+      if (next) {
+          setNotification(next)
+      } else {
+          setNotification(null)
+      }
+  }, [])
+
+  const openUpdateForInstance = useCallback((inst) => {
+      if (!inst) return
+      setSelectedInstance(inst)
+      setRepairTargetInstance(inst)
+      setRepairActionName('Update')
+      setShowRepairConfirmation(true)
+      closeNotification()
+  }, [closeNotification])
 
   useEffect(() => {
       if (!window.api || !window.api.getSettings) return
@@ -122,13 +150,24 @@ function App() {
                   const notificationKey = `${inst.id}-${remote}`
                   // Check if already notified for this specific version
                   if (!notifiedUpdatesRef.current.has(notificationKey)) {
-                      showToast(`${t('main.updateAvailable') || 'Update Available'}: ${inst.name}`, 'info')
+                      enqueueNotification({
+                          title: t('main.update') || (language === 'th' ? 'มีอัปเดตใหม่' : 'Update Available'),
+                          message: (language === 'th'
+                              ? `มีอัปเดตใหม่สำหรับ ${inst.name}\nเวอร์ชันใหม่: ${remote} (ของเดิม: ${installed})`
+                              : `An update is available for ${inst.name}\nNew: ${remote} (Installed: ${installed})`),
+                          type: 'info',
+                          action: {
+                              label: t('main.update') || (language === 'th' ? 'อัปเดต' : 'Update'),
+                              onClick: () => openUpdateForInstance(inst)
+                          },
+                          closeLabel: language === 'th' ? 'ไว้ทีหลัง' : 'Later'
+                      })
                       notifiedUpdatesRef.current.add(notificationKey)
                   }
               }
           })
       }
-  }, [instances, installedVersions])
+  }, [instances, installedVersions, enqueueNotification, language, openUpdateForInstance, t])
 
   const [redeemedCodes, setRedeemedCodes] = useState(() => {
       const saved = localStorage.getItem('redeemedCodes')
@@ -589,10 +628,13 @@ function App() {
       if (selectedInstance) {
           const result = await window.api.openInstanceFolder(selectedInstance)
           if (result && !result.success && result.reason === 'not_found') {
-             setNotification({
-                 title: 'Folder Not Found',
-                 message: `The instance folder for "${selectedInstance.name}" does not exist on this machine yet. Try launching the game first.`,
-                 type: 'warning'
+             enqueueNotification({
+                 title: language === 'th' ? 'ไม่พบโฟลเดอร์' : 'Folder Not Found',
+                 message: language === 'th'
+                     ? `โฟลเดอร์ของ "${selectedInstance.name}" ยังไม่มีในเครื่องนี้\nลองกดเล่นเกม/ติดตั้งก่อน แล้วค่อยเปิดใหม่อีกครั้ง`
+                     : `The instance folder for "${selectedInstance.name}" does not exist on this machine yet.\nTry launching/installing first, then open it again.`,
+                 type: 'warning',
+                 closeLabel: language === 'th' ? 'ปิด' : 'Close'
              })
           }
       }
@@ -687,10 +729,25 @@ function App() {
       }
 
       if (result.success) {
+        if (typeof uuid === 'string' && window.api && window.api.refreshToken) {
+            try {
+                const refreshed = await window.api.refreshToken()
+                if (refreshed && refreshed.success) {
+                    setUser(refreshed.profile)
+                    showToast(language === 'th' ? `สลับบัญชีเป็น ${refreshed.profile?.name || ''}`.trim() : `Switched to ${refreshed.profile?.name || ''}`.trim(), 'success', 1800)
+                    const insts = await fetchInstances(true)
+                    await preloadAssets(insts, refreshed.profile)
+                    return
+                }
+            } catch (e) {}
+        }
+
         setUser(result.profile)
-        // Refresh instances and assets
+        showToast(language === 'th' ? `สลับบัญชีเป็น ${result.profile?.name || ''}`.trim() : `Switched to ${result.profile?.name || ''}`.trim(), 'success', 1800)
         const insts = await fetchInstances(true)
         await preloadAssets(insts, result.profile)
+      } else {
+        showToast((language === 'th' ? 'สลับบัญชีไม่สำเร็จ' : 'Switch account failed') + (result?.error ? `: ${typeof result.error === 'string' ? result.error : (result.error.message || '')}` : ''), 'error', 3500)
       }
   }
 
@@ -798,6 +855,7 @@ function App() {
                 key={toast.id}
                 message={toast.message}
                 type={toast.type}
+                duration={typeof toast.duration === 'number' ? toast.duration : undefined}
                 onClose={() => setToast(null)}
             />
         )}
@@ -864,7 +922,9 @@ function App() {
                 title={notification.title} 
                 message={notification.message} 
                 type={notification.type} 
-                onClose={() => setNotification(null)} 
+                action={notification.action}
+                closeLabel={notification.closeLabel || (language === 'th' ? 'ปิด' : 'Close')}
+                onClose={closeNotification} 
             />
         )}
 
