@@ -1,12 +1,12 @@
-import { resolve } from 'path'
-import { defineConfig, externalizeDeps } from 'electron-vite'
-import react from '@vitejs/plugin-react'
-import dotenv from 'dotenv'
+const { resolve } = require('path')
+const { defineConfig, externalizeDeps } = require('electron-vite')
+const react = require('@vitejs/plugin-react')
+const dotenv = require('dotenv')
 
 // Load env variables from .env
 dotenv.config()
 
-export default defineConfig({
+module.exports = defineConfig({
   main: {
     plugins: [externalizeDeps()],
     // Inject environment variables into the main process
@@ -25,10 +25,5 @@ export default defineConfig({
       },
     },
     plugins: [react()],
-    // Inject environment variables into the renderer process
-    define: {
-      'process.env.SUPABASE_URL': JSON.stringify(process.env.SUPABASE_URL),
-      'process.env.SUPABASE_KEY': JSON.stringify(process.env.SUPABASE_KEY),
-    },
   },
 })
