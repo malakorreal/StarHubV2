@@ -1,5 +1,5 @@
 import { resolve } from 'path'
-import { defineConfig, externalizeDeps } from 'electron-vite'
+import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 import react from '@vitejs/plugin-react'
 import dotenv from 'dotenv'
 
@@ -8,7 +8,7 @@ dotenv.config()
 
 export default defineConfig({
   main: {
-    plugins: [externalizeDeps()],
+    plugins: [externalizeDepsPlugin()],
     // Inject environment variables into the main process
     define: {
       'process.env.SUPABASE_URL': JSON.stringify(process.env.SUPABASE_URL),
@@ -16,7 +16,7 @@ export default defineConfig({
     },
   },
   preload: {
-    plugins: [externalizeDeps()],
+    plugins: [externalizeDepsPlugin()],
   },
   renderer: {
     resolve: {
