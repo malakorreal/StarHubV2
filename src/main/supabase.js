@@ -131,7 +131,9 @@ export async function getAllAchievements() {
             return ACHIEVEMENTS
         }
         
-        return (data && data.length > 0) ? data : ACHIEVEMENTS
+        // If the query is successful, return the data from DB, even if it's an empty array.
+        // The UI is responsible for handling the empty state.
+        return data || []
     } catch (e) {
         console.error('[SUPABASE] Fetch achievements exception:', e.message)
         return ACHIEVEMENTS
