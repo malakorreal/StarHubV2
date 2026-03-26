@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { themes as availableThemes } from '../themes'
 import RepairConfirmationModal from './RepairConfirmationModal'
+import AchievementsView from './AchievementsView'
 
 function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = [], onAddCode, onRemoveCode, t, changeLanguage, currentLanguage, showToast, onInstalledVersionsChange, onUninstallInstance, selectedInstance, enableAnimation, setEnableAnimation }) {
   const [activeTab, setActiveTab] = useState('general')
@@ -271,6 +272,23 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
               </button>
 
               <button 
+                onClick={() => setActiveTab('achievements')}
+                style={{ 
+                    textAlign: 'left', 
+                    padding: '10px 15px', 
+                    background: activeTab === 'achievements' ? 'var(--accent)' : 'transparent', 
+                    color: activeTab === 'achievements' ? '#000' : 'var(--text-secondary)', 
+                    border: 'none', 
+                    borderRadius: '6px', 
+                    cursor: 'pointer',
+                    fontWeight: activeTab === 'achievements' ? 'bold' : 'normal',
+                    transition: 'all 0.2s'
+                }}
+              >
+                {t('settings.achievements') || 'Achievements'}
+              </button>
+
+              {/* <button 
                 onClick={() => setActiveTab('redeem')}
                 style={{ 
                     textAlign: 'left', 
@@ -285,7 +303,7 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
                 }}
               >
                 {t('settings.redeemCode')}
-              </button>
+              </button> */}
           </div>
 
           {/* Content */}
@@ -1025,8 +1043,13 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
                   </div>
               )}
 
+              {/* Achievements Tab */}
+              {activeTab === 'achievements' && (
+                  <AchievementsView />
+              )}
+
               {/* Redeem Tab */}
-              {activeTab === 'redeem' && (
+              {/* {activeTab === 'redeem' && (
                   <div style={{ animation: 'fadeIn 0.3s' }}>
                       <h3 style={{ marginTop: 0, marginBottom: '20px', borderBottom: '1px solid var(--border-color)', paddingBottom: '10px' }}>{t('settings.redeemCode')}</h3>
                       
@@ -1119,7 +1142,7 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
                           )}
                       </div>
                   </div>
-              )}
+              )} */}
 
 
 

@@ -27,6 +27,8 @@ const api = {
   windowMinimize: () => ipcRenderer.send('window-minimize'),
   windowMaximize: () => ipcRenderer.send('window-maximize'),
   uninstallInstance: (instance) => ipcRenderer.invoke('uninstall-instance', instance),
+  getUserAchievements: () => ipcRenderer.invoke('get-user-achievements'),
+  getAllAchievements: () => ipcRenderer.invoke('get-all-achievements'),
   onLaunchProgress: (callback) => {
     ipcRenderer.removeAllListeners('launch-progress')
     const listener = (event, value) => callback(value)
@@ -79,6 +81,12 @@ const api = {
     const listener = (event, value) => callback(value)
     ipcRenderer.on('patch-summary', listener)
     return () => ipcRenderer.removeListener('patch-summary', listener)
+  },
+  onAchievementUnlocked: (callback) => {
+    ipcRenderer.removeAllListeners('achievement-unlocked')
+    const listener = (event, value) => callback(value)
+    ipcRenderer.on('achievement-unlocked', listener)
+    return () => ipcRenderer.removeListener('achievement-unlocked', listener)
   },
   // Backup
   backupInstanceData: (instance) => ipcRenderer.invoke('backup-instance-data', instance),

@@ -16,6 +16,8 @@ import { autoUpdater } from 'electron-updater'
 let mainWindow
 let tray = null
 
+import { getUserAchievements, getAllAchievements, checkAndGrantLaunchAchievements } from './supabase'
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1280,
@@ -202,6 +204,17 @@ app.whenReady().then(() => {
       return { success: false, error: 'Dev mode' }
   })
 
+  ipcMain.handle('get-all-achievements', async () => {
+      return await getAllAchievements()
+  })
+
+  ipcMain.handle('get-user-achievements', async () => {
+      const store = getStore()
+      const auth = store.get('auth')
+      if (!auth || !auth.uuid) return []
+      return await getUserAchievements(auth.uuid)
+  })
+
   // Backup Instance Data Handler
   ipcMain.handle('backup-instance-data', async (event, instance) => {
     if (!instance || (!instance.path && !instance.id)) return { success: false, error: 'Invalid instance' }
@@ -336,7 +349,6 @@ app.whenReady().then(() => {
   app.on('activate', function () {
     if (BrowserWindow.getAllWindows().length === 0) {
         createWindow()
-        loadMainWindow()
     }
   })
 })

@@ -4,6 +4,7 @@ export default {
     loginFailed: "Login Failed",
     loginError: "Login Error",
     noMinecraft: "Minecraft Java Edition not found on this account.",
+    userBanned: "Your account is banned.",
     loginFailedPrefix: "Login Failed: ",
     loginErrorPrefix: "Login Error: ",
     launchFailedPrefix: "Launch Failed: ",
@@ -45,6 +46,7 @@ export default {
     addAccount: "Add Account",
     general: "General",
     account: "Account",
+    achievements: "Achievements",
     noAccounts: "No accounts found.",
     active: "Using Account",
     inactive: "Inactive",
@@ -145,6 +147,11 @@ export default {
     title: "So Quiet T_T",
     message: "Hmm, it seems you don't have access to any instances yet. Please contact an dev (MALAKOR) to get whitelisted / or try switching to a different account.",
     settings: "Account Settings"
+  },
+  noInternet: {
+    title: "No Internet Connection",
+    message: "It seems you are not connected to the internet. Please check your connection and try again.",
+    retry: "Retry"
   },
   update: {
     checking: "Checking for updates...",

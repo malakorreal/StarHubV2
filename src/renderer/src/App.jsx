@@ -8,6 +8,7 @@ import AboutDialog from './components/AboutDialog'
 import NotificationModal from './components/NotificationModal'
 import LoginScreen from './components/LoginScreen'
 import NoInstancesView from './components/NoInstancesView'
+import NoInternetView from './components/NoInternetView'
 import LaunchConfirmationModal from './components/LaunchConfirmationModal'
 import UpdateModal from './components/UpdateModal'
 import ConsoleModal from './components/ConsoleModal'
@@ -59,6 +60,21 @@ function App() {
   const [loadingMessage, setLoadingMessage] = useState('')
   const [isLoggingIn, setIsLoggingIn] = useState(false)
   const [isVisible, setIsVisible] = useState(true)
+  const [isOffline, setIsOffline] = useState(!navigator.onLine)
+  
+  // Track online/offline status
+  useEffect(() => {
+    const handleOnline = () => setIsOffline(false)
+    const handleOffline = () => setIsOffline(true)
+
+    window.addEventListener('online', handleOnline)
+    window.addEventListener('offline', handleOffline)
+
+    return () => {
+      window.removeEventListener('online', handleOnline)
+      window.removeEventListener('offline', handleOffline)
+    }
+  }, [])
   
   // Initialize theme from localStorage
   useEffect(() => {
@@ -95,8 +111,8 @@ function App() {
       // setEnableCubes(newState) // User requested to keep Cubes always on (or independent)
   }
 
-  const showToast = useCallback((message, type = 'info', duration) => {
-      setToast({ message, type, duration, id: Date.now() })
+  const showToast = useCallback((message, type = 'info', duration, icon) => {
+      setToast({ message, type, duration, icon, id: Date.now() })
   }, [])
 
   const enqueueNotification = useCallback((next) => {
@@ -401,6 +417,13 @@ function App() {
         if (typeof unsub === 'function') unsubs.push(unsub)
     }
 
+    if (window.api.onAchievementUnlocked) {
+        const unsub = window.api.onAchievementUnlocked((ach) => {
+            showToast(ach.title, 'achievement', 10000, ach.icon)
+        })
+        if (typeof unsub === 'function') unsubs.push(unsub)
+    }
+
     return () => {
         if (instancesRefreshIntervalRef.current) {
             clearInterval(instancesRefreshIntervalRef.current)
@@ -481,8 +504,8 @@ function App() {
       if (isDev) console.log(`Filter: User=${user.name}, Total Instances=${instances.length}`)
 
       return instances.filter(inst => {
-          // Check Access Code
-          if (inst.requiredCode) {
+          // Temporarily bypass Access Code check
+          /* if (inst.requiredCode) {
               // Support both string "CODE" and array ["CODE1", "CODE2"]
               const validCodes = Array.isArray(inst.requiredCode) 
                   ? inst.requiredCode 
@@ -507,7 +530,7 @@ function App() {
                   if (isDev) console.log(`Instance ${inst.id} hidden (required code missing)`)
                   return false 
               }
-          }
+          } */
 
           // If whitelist exists
           if (inst.whitelist) {
@@ -566,6 +589,8 @@ function App() {
             } else {
                 if (result.error && result.error.message === 'NO_MINECRAFT') {
                     setErrorMessage(t('auth.noMinecraft') || "Minecraft Java Edition not found on this account.")
+                } else if (result.error && result.error.message === 'USER_BANNED') {
+                    setErrorMessage(t('auth.userBanned') || "Your account is banned.")
                 } else {
                     setErrorMessage("Login Failed: " + (result.error?.message || "Unknown error"))
                 }
@@ -589,6 +614,10 @@ function App() {
         setLaunchStatus('idle')
         if (auth.error && auth.error.message === 'NO_MINECRAFT') {
             setErrorMessage(t('auth.noMinecraft') || "Minecraft Java Edition not found on this account.")
+            return
+        }
+        if (auth.error && auth.error.message === 'USER_BANNED') {
+            setErrorMessage(t('auth.userBanned') || "Your account is banned.")
             return
         }
         handleLogin() // Re-login needed
@@ -751,6 +780,29 @@ function App() {
       }
   }
 
+  if (isOffline) {
+      return (
+        <div style={{ 
+            height: '100vh', 
+            width: '100vw', 
+            display: 'flex', 
+            background: 'var(--main-bg)', 
+            color: 'var(--text-primary)', 
+            overflow: 'hidden', 
+            userSelect: 'none',
+            position: 'relative'
+        }}>
+            <NoInternetView 
+                onRetry={() => {
+                    const online = navigator.onLine
+                    setIsOffline(!online)
+                    if (online) fetchInstances(true)
+                }} 
+            />
+        </div>
+      )
+  }
+
   if (isLoading) {
       return (
         <div className={`app-container ${!isVisible ? 'animations-paused' : ''}`} style={{ display: 'flex', height: '100vh', width: '100vw', overflow: 'hidden', justifyContent: 'center', alignItems: 'center', background: '#121212' }}>
@@ -779,7 +831,7 @@ function App() {
         <div className="titlebar-button close" onClick={handleClose}>X</div>
       </div>
 
-      {!user ? (
+        {!user ? (
             <LoginScreen 
                 onLogin={handleLogin} 
                 isLoggingIn={isLoggingIn} 

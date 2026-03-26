@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 
-const ToastNotification = ({ message, type = 'info', onClose, duration = 2000 }) => {
+const ToastNotification = ({ message, type = 'info', onClose, duration = 2000, icon = null }) => {
     const [isVisible, setIsVisible] = useState(true)
     const timerRef = useRef(null)
 
@@ -8,7 +8,8 @@ const ToastNotification = ({ message, type = 'info', onClose, duration = 2000 })
         info: '#4a90e2',
         success: '#7ed321',
         warning: '#f5a623',
-        error: '#e81123'
+        error: '#e81123',
+        achievement: '#FFD700'
     }
 
     const color = colors[type] || colors.info
@@ -109,6 +110,9 @@ const ToastNotification = ({ message, type = 'info', onClose, duration = 2000 })
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                         <polyline points="20 6 9 17 4 12"></polyline>
                     </svg>
+                )}
+                {type === 'achievement' && (
+                    <div style={{ fontSize: '1.2em' }}>{icon}</div>
                 )}
                 {type === 'info' && (
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">

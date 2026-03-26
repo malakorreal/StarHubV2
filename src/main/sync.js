@@ -189,6 +189,14 @@ export class SyncManager {
                 })
             })
 
+            // 🚨 FINAL VERIFICATION: Check file size against content-length if available
+            if (totalLength) {
+                const stat = await fd.stat()
+                if (stat.size !== parseInt(totalLength, 10)) {
+                    throw new Error(`Download incomplete: expected ${totalLength} bytes but got ${stat.size} bytes.`)
+                }
+            }
+
             // Close file properly before rename
             await fd.close()
             fd = null
@@ -367,6 +375,13 @@ export class SyncManager {
         await Promise.all(workers)
         if (abortError) throw abortError
         if (signal?.aborted) throw new Error('Download aborted')
+
+        // 🚨 FINAL VERIFICATION: Ensure we actually downloaded all bytes
+        const stat = await fd.stat()
+        if (stat.size !== totalSize) {
+            throw new Error(`Download incomplete: expected ${totalSize} bytes but got ${stat.size} bytes. Please check your internet.`)
+        }
+
      } catch (e) {
         await fd.close()
         try { if (fs.existsSync(tempDest)) fs.unlinkSync(tempDest) } catch(err) {}
@@ -412,6 +427,10 @@ export class SyncManager {
       
       let completed = 0
       const total = mods.length
+      const store = getStore()
+      const modCache = store.get('modSizeCache', {})
+      const CACHE_EXPIRATION_MS = 7 * 24 * 60 * 60 * 1000 // 7 days
+      const nowTime = Date.now()
       
       // Store progress of each running download (key: modUrl, value: percentage 0-1)
       const currentProgress = new Map()
@@ -449,19 +468,63 @@ export class SyncManager {
           try {
             if (signal?.aborted) throw new Error('Download aborted')
 
-            // Infer filename
-            const fileName = decodeURIComponent(modUrl.split('/').pop().split('?')[0])
+            // Fix 3: Robust Filename Parsing with Fallback
+            let fileName
+            try {
+                fileName = decodeURIComponent(new URL(modUrl).pathname.split('/').pop())
+            } catch (e) {
+                // Fallback for malformed URLs
+                fileName = decodeURIComponent(modUrl.split('/').pop().split('?')[0])
+            }
+
+            if (!fileName) {
+                abortError = new Error(`Invalid mod URL: ${modUrl}`)
+                return
+            }
+
             const dest = path.join(modsFolder, fileName)
 
-            // Check existence (simple cache) - Use async stat to avoid blocking loop
+            // Fix 1: Cache Check with Expiration & Cleanup logic
+            let shouldDownload = false
             try {
-                await fs.promises.stat(dest)
-                // Exists, skip
-                // Mark as 100% immediately for calculation
-                currentProgress.set(modUrl, 100)
-                updateGlobalProgress()
-            } catch (e) {
-                // Not exist, download
+                const stat = await fs.promises.stat(dest)
+                const cached = modCache[fileName]
+                
+                // Validate cache entry: must exist, have size, and be less than 7 days old
+                const isCacheValid = cached && 
+                                   typeof cached === 'object' && 
+                                   cached.size === stat.size && 
+                                   (nowTime - (cached.timestamp || 0) < CACHE_EXPIRATION_MS)
+
+                if (isCacheValid) {
+                    // Trust cache, avoid HEAD request
+                    shouldDownload = false
+                } else {
+                    try {
+                        const head = await axios.head(modUrl, { timeout: 10000 })
+                        const remoteSize = parseInt(head.headers['content-length'], 10)
+                        
+                        if (remoteSize > 0 && stat.size !== remoteSize) {
+                            shouldDownload = true
+                        } else {
+                            shouldDownload = false
+                            // Update cache with fresh timestamp even if size matched
+                            if (remoteSize > 0) {
+                                modCache[fileName] = { size: remoteSize, timestamp: nowTime }
+                            }
+                        }
+                    } catch (headErr) {
+                        // Network error during HEAD -> trust local file to avoid redundant re-downloads
+                        this.log(`[CACHE] HEAD check failed for ${fileName}, trusting local file.`)
+                        shouldDownload = false
+                    }
+                }
+            } catch (stateErr) {
+                // File doesn't exist
+                shouldDownload = true
+            }
+
+            if (shouldDownload) {
                 await this.downloadFile(modUrl, dest, {
                     signal,
                     onProgress: (loaded, full) => {
@@ -472,44 +535,73 @@ export class SyncManager {
                         }
                     }
                 })
+
+                // Fix 1: Only save to cache AFTER successful download
+                try {
+                    const finalStat = await fs.promises.stat(dest)
+                    modCache[fileName] = { size: finalStat.size, timestamp: nowTime }
+                } catch (e) {}
             }
+
+            // Success path
+            completed++
+            currentProgress.delete(modUrl)
+            updateGlobalProgress()
+
           } catch (e) {
+              currentProgress.delete(modUrl)
               if (e.message === 'Download aborted') {
                   abortError = e
                   return
               }
               console.error(`Failed to sync mod: ${modUrl}`, e)
-              // We don't stop everything for one failed mod, but we log it
-          } finally {
-              if (!abortError && !signal?.aborted) {
-                  completed++
-                  currentProgress.delete(modUrl) // Remove from partial list
-                  // No need to sendProgress here if we rely on updateGlobalProgress inside loop,
-                  // BUT we need to ensure the "completed" count is reflected if we switch logic.
-                  // Actually, updateGlobalProgress uses `completed`.
-                  // So when we finish, we increment `completed` and remove from `currentProgress`.
-                  // Then update again.
-                  updateGlobalProgress()
-                  
-                  // Process next item
-                  await next()
-              }
+              abortError = new Error(`Failed to download mod: ${path.basename(modUrl)}`)
+              return
+          }
+
+          // Fix 2: Check abortError before next() to avoid race condition
+          if (!abortError && !signal?.aborted) {
+              await next()
           }
       }
 
       // Start initial batch
       const workers = []
-      const concurrency = getStore().get('maxConcurrentDownloads', 5)
+      const concurrency = store.get('maxConcurrentDownloads', 5)
       for (let i = 0; i < Math.min(concurrency, mods.length); i++) {
           workers.push(next())
       }
       
       await Promise.all(workers)
       
-      if (signal?.aborted || abortError?.message === 'Download aborted') {
+      // Fix 2: Only save cache if there were no errors in the entire session
+      if (abortError) {
+          throw abortError
+      }
+
+      if (signal?.aborted) {
           throw new Error('Download aborted')
       }
-      
+
+      // 🧹 CACHE CLEANUP: Remove entries older than 14 days to prevent bloat
+      const CLEANUP_THRESHOLD = 14 * 24 * 60 * 60 * 1000
+      Object.keys(modCache).forEach(key => {
+          const entry = modCache[key]
+          if (entry && typeof entry === 'object') {
+              if (nowTime - (entry.timestamp || 0) > CLEANUP_THRESHOLD) {
+                  delete modCache[key]
+              }
+          } else {
+              // Cleanup old format (simple size number)
+              delete modCache[key]
+          }
+      })
+
+      // Save updated size cache only on complete success
+      store.set('modSizeCache', modCache)
+
+      // Final progress to 100%
+      this.sendProgress('Checking/Downloading Mods', 100, 100)
       this.log("Mods sync completed.")
   }
 

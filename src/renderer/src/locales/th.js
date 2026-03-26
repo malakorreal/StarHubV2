@@ -3,7 +3,8 @@ export default {
     guest: "แขก (ยังไม่ได้ Login)",
     loginFailed: "เข้าสู่ระบบไม่สำเร็จ",
     loginError: "เกิดข้อผิดพลาดในการเข้าสู่ระบบ",
-    noMinecraft: "ไม่พบ Minecraft Java Edition ในบัญชีนี้"
+    noMinecraft: "ไม่พบ Minecraft Java Edition ในบัญชีนี้",
+    userBanned: "บัญชีของคุณถูกระงับการใช้งาน (Banned)"
   },
   sidebar: {
     library: "คลัง Instance",
@@ -41,6 +42,7 @@ export default {
     addAccount: "เพิ่มบัญชี",
     general: "ทั่วไป",
     account: "บัญชี",
+    achievements: "ความสำเร็จ",
     noAccounts: "ไม่ค้นพบบัญชี",
     active: "กําลังใช้งาน",
     inactive: "ไม่ได้ใช้งาน",
@@ -141,6 +143,11 @@ export default {
     title: "เงียบจังห์แหะ",
     message: "อืมมม, ดูเหมือนว่าคุณจะยังไม่มีสิทธิ์เข้าถึง Instance ใดๆ กรุณาติดต่อผู้สร้าง (MALAKOR) / หรือไม่ก็ลองเปลื่ยนบัญชีที่มีสิทธิ์การเข้าถึง Instance",
     settings: "ตั้งค่าบัญชี"
+  },
+  noInternet: {
+    title: "ไม่มีการเชื่อมต่ออินเทอร์เน็ต",
+    message: "ดูเหมือนว่าคุณจะไม่ได้เชื่อมต่ออินเทอร์เน็ต กรุณาตรวจสอบการเชื่อมต่อของคุณและลองใหม่อีกครั้ง",
+    retry: "ลองใหม่"
   },
   update: {
     checking: "กำลังตรวจสอบการอัปเดต...",

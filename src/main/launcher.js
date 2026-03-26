@@ -11,6 +11,8 @@ import axios from 'axios'
 import AdmZip from 'adm-zip'
 import os from 'os'
 import { execSync, spawn } from 'child_process'
+import { analyzeCrash } from './crashAnalyzer'
+import { addPlaytime, checkAndGrantLaunchAchievements } from './supabase'
 
 const launcher = new Client()
 
@@ -90,7 +92,11 @@ export function setupLauncher(ipcMain, mainWindow) {
 
     // Use AppData to avoid non-ASCII path issues
     const baseDir = app.getPath('userData')
-    const rootPath = path.join(baseDir, 'instances', instance.id)
+    const id = String(instance.id)
+    if (id === '.' || id === '..' || !/^[a-zA-Z0-9_.-]+$/.test(id)) {
+        throw new Error(`[SECURITY] Invalid instance ID: ${id}`)
+    }
+    const rootPath = path.join(baseDir, 'instances', id)
     const modsFolder = path.join(rootPath, 'mods')
 
     // 🚨 DYNAMIC FILENAME: Use filename from URL if possible, otherwise fallback to modpack.zip
@@ -205,13 +211,7 @@ export function setupLauncher(ipcMain, mainWindow) {
         let needsDownload = forceRepair || !fs.existsSync(zipPath)
         console.log(`[ZIP] needsDownload: ${needsDownload} (forceRepair: ${forceRepair}, zipExists: ${fs.existsSync(zipPath)})`)
         
-        if (needsDownload) {
-             console.log(`[ZIP] Downloading Modpack: ${instance.modpackUrl}`)
-             
-             // 🚨 Ensure we start with a clean file for new download
-             // We don't delete here anymore because downloadLargeFile with 'w' mode will handle it via safeOpen
-             // which has better EPERM/Retry logic.
-
+        const tryDownloadModpack = async () => {
              try {
                 await syncManager.downloadLargeFile(instance.modpackUrl, zipPath, { signal })
              } catch (e) {
@@ -239,6 +239,11 @@ export function setupLauncher(ipcMain, mainWindow) {
                     throw e // Re-throw if no mirror is available or if aborted
                 }
              }
+        }
+
+        if (needsDownload) {
+             console.log(`[ZIP] Downloading Modpack: ${instance.modpackUrl}`)
+             await tryDownloadModpack()
              console.log(`[ZIP] Extraction starting: ${zipPath} -> ${rootPath}`)
              await syncManager.extractZip(zipPath, rootPath, { signal, ignoreFiles: instance.ignoreFiles })
         } else {
@@ -273,7 +278,7 @@ export function setupLauncher(ipcMain, mainWindow) {
                         }
                     }
                  } catch(err) {}
-                 await syncManager.downloadLargeFile(instance.modpackUrl, zipPath, { signal })
+                 await tryDownloadModpack()
                  // Need to extract after redownloading!
                  await syncManager.extractZip(zipPath, rootPath, { signal, ignoreFiles: instance.ignoreFiles })
              }
@@ -528,7 +533,20 @@ export function setupLauncher(ipcMain, mainWindow) {
         await fs.promises.writeFile(patchStatePath, JSON.stringify({ version: currentVersionForState, managedMods, updatedAt: Date.now() }, null, 2), 'utf-8')
     } catch (e) {}
 
-        // Cleanup logic is being moved to the patch comparison block for stability.
+    // 🚨 FINAL VERIFICATION: Ensure all required files are present and valid
+    // This is crucial for users with unstable internet.
+    if (validModRelPaths.size > 0) {
+        console.log(`[VERIFY] Final integrity check for ${validModRelPaths.size} mods...`)
+        syncManager.sendProgress('Final integrity check...', 0, 1)
+        const { added, corrupt } = await syncManager.comparePatches(modsFolder, Array.from(validModRelPaths), instance.ignoreFiles || [])
+        
+        if (added.length > 0 || corrupt.length > 0) {
+            console.error(`[VERIFY] Integrity check failed: ${added.length} missing, ${corrupt.length} corrupt.`)
+            const details = added.length > 0 ? `${added.length} files missing` : `${corrupt.length} files corrupt`
+            throw new Error(`The modpack is incomplete (${details}). Please try again with better internet.`)
+        }
+        console.log(`[VERIFY] Integrity check passed!`)
+    }
 
     // 3. Save Installed Version
     // Prioritize modpackVersion if available, otherwise use Minecraft version
@@ -650,28 +668,39 @@ export function setupLauncher(ipcMain, mainWindow) {
         const ram = store.get('ram', 4096)
         const totalMemMB = Math.floor(os.totalmem() / 1024 / 1024)
         const totalMemGB = totalMemMB / 1024
+        
+        // 🚨 IMPROVED RAM MANAGEMENT:
+        // Use a more generous cap for modern modpacks while staying safe.
         let hardMax
         if (totalMemGB <= 4) {
-            hardMax = 2048
+            hardMax = 2560 // Give 2.5GB for 4GB systems
         } else if (totalMemGB <= 6) {
-            hardMax = 3072
+            hardMax = 4096 // Give 4GB for 6GB systems
         } else if (totalMemGB <= 8) {
-            hardMax = 4096
+            hardMax = 6144 // Give 6GB for 8GB systems
         } else if (totalMemGB <= 12) {
-            hardMax = 6144
+            hardMax = 8192 // Give 8GB for 12GB systems
         } else {
-            hardMax = 8192
+            hardMax = 12288 // Give up to 12GB for high-end systems
         }
-        const dynamicCap = Math.floor(totalMemMB * 0.6)
+        
+        // Allow up to 75% of total RAM if it's within hardMax
+        const dynamicCap = Math.floor(totalMemMB * 0.75)
         const safeCap = Math.min(dynamicCap, hardMax)
         const ramToUse = Math.min(ram, safeCap)
+        
         if (ramToUse < ram) {
+            console.log(`[RAM] Capping memory from ${ram}MB to ${ramToUse}MB (Safe Limit)`)
             syncManager.sendProgress('Adjusting Memory...', 1, 1, `Using ${ramToUse} MB (cap ${safeCap} MB)`)
         }
         
         // Use AppData to avoid non-ASCII path issues
         const baseDir = app.getPath('userData')
-        const rootPath = path.join(baseDir, 'instances', instance.id)
+        const id = String(instance.id)
+        if (id === '.' || id === '..' || !/^[a-zA-Z0-9_.-]+$/.test(id)) {
+            throw new Error(`[SECURITY] Invalid instance ID: ${id}`)
+        }
+        const rootPath = path.join(baseDir, 'instances', id)
         
         // ---------------------------------------------------------
         // 📦 Mod Downloading System (Zip & Individual)
@@ -883,6 +912,7 @@ export function setupLauncher(ipcMain, mainWindow) {
                             else if (instance.version === '1.19.2') forgeVersion = '43.2.0'
                             else if (instance.version === '1.19.4') forgeVersion = '45.1.0'
                             else if (instance.version === '1.20.2') forgeVersion = '48.1.0'
+                            else if (instance.version === '1.20.4') forgeVersion = '49.0.0'
                             
                             if (forgeVersion) {
                                 console.warn(`[FORGE] Used fallback version for ${instance.version}: ${forgeVersion}`)
@@ -892,25 +922,19 @@ export function setupLauncher(ipcMain, mainWindow) {
 
                     // 3. If we have a forgeVersion, prepare the installer
                     if (forgeVersion) {
-                        // Ensure version doesn't already contain the MC version (some detections might include it)
                         const cleanForgeVersion = forgeVersion.replace(`${instance.version}-`, '')
                         const forgeFullVersion = `${instance.version}-${cleanForgeVersion}`
                         
-                        const installerUrl = `https://maven.minecraftforge.net/net/minecraftforge/forge/${forgeFullVersion}/forge-${forgeFullVersion}-installer.jar`
-                        
                         const cacheDir = path.join(baseDir, 'cache')
-                        const installerPath = path.join(cacheDir, `forge-${forgeFullVersion}-installer.jar`)
-                        
                         if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir, { recursive: true })
                         
-                        // Check/Download logic
+                        const installerPath = path.join(cacheDir, `forge-${forgeFullVersion}-installer.jar`)
                         let needsInstallerDownload = !fs.existsSync(installerPath)
                          
                         if (!needsInstallerDownload) {
                              try {
                                  const stat = fs.statSync(installerPath)
                                  if (stat.size < 1000) { 
-                                     console.log(`[AUTO-FIX] Deleting invalid/corrupt installer: ${installerPath}`)
                                      fs.unlinkSync(installerPath)
                                      needsInstallerDownload = true
                                  }
@@ -918,25 +942,32 @@ export function setupLauncher(ipcMain, mainWindow) {
                         }
 
                         if (needsInstallerDownload) {
-                             console.log(`Downloading Forge Installer: ${installerUrl}`)
+                             console.log(`[FORGE] Preparing to download Forge ${forgeFullVersion}...`)
                              syncManager.sendProgress('Downloading Forge Installer...', 0, 1)
-                             try {
-                               await syncManager.downloadLargeFile(installerUrl, installerPath, { signal })
-                             } catch (e) {
-                               if (signal.aborted || e.message === 'Download aborted' || e.message === 'Launch aborted') {
-                                   try { if (fs.existsSync(installerPath)) fs.unlinkSync(installerPath) } catch {}
-                                   throw new Error('Download aborted')
-                               }
-                               console.warn(`[FORGE] Primary Maven download failed: ${e.message}. Trying mirror...`)
-                               try {
-                                   const mirror = `https://bmclapi2.bangbang93.com/maven/net/minecraftforge/forge/${forgeFullVersion}/forge-${forgeFullVersion}-installer.jar`
-                                   await syncManager.downloadLargeFile(mirror, installerPath, { signal })
-                               } catch (e2) {
-                                   console.warn(`[FORGE] BMCLAPI mirror failed: ${e2.message}. Trying official files mirror...`)
-                                   const officialMirror = `https://files.minecraftforge.net/net/minecraftforge/forge/${forgeFullVersion}/forge-${forgeFullVersion}-installer.jar`
-                                   await syncManager.downloadLargeFile(officialMirror, installerPath, { signal })
-                               }
+                             
+                             const mirrors = [
+                                 `https://bmclapi2.bangbang93.com/maven/net/minecraftforge/forge/${forgeFullVersion}/forge-${forgeFullVersion}-installer.jar`,
+                                 `https://maven.minecraftforge.net/net/minecraftforge/forge/${forgeFullVersion}/forge-${forgeFullVersion}-installer.jar`,
+                                 `https://files.minecraftforge.net/maven/net/minecraftforge/forge/${forgeFullVersion}/forge-${forgeFullVersion}-installer.jar`
+                             ]
+
+                             let success = false
+                             for (const url of mirrors) {
+                                 if (signal.aborted) break
+                                 try {
+                                     console.log(`[FORGE] Trying mirror: ${url}`)
+                                     await syncManager.downloadLargeFile(url, installerPath, { signal })
+                                     success = true
+                                     break
+                                 } catch (e) {
+                                     console.warn(`[FORGE] Mirror failed: ${url} - ${e.message}`)
+                                 }
                              }
+
+                             if (!success && !signal.aborted) {
+                                 throw new Error(`Failed to download Forge installer for ${instance.version} (tried ${mirrors.length} mirrors). Please check your internet connection.`)
+                             }
+                             
                              if (signal.aborted) {
                                  try { if (fs.existsSync(installerPath)) fs.unlinkSync(installerPath) } catch {}
                                  throw new Error('Download aborted')
@@ -947,10 +978,14 @@ export function setupLauncher(ipcMain, mainWindow) {
                         console.log(`[FORGE] Installer ready at: ${installerPath}`)
                         forgeInstallerPath = installerPath
                     } else {
-                        console.warn("[FORGE] Could not determine Forge version. Launch might fail if installer is required.")
+                        // If Forge is strictly required but we can't find a version AND don't have a profile
+                        if (!detectedVersionId && !instance.customVersionId) {
+                            throw new Error(`Could not determine a valid Forge version for Minecraft ${instance.version}.`)
+                        }
                     }
                 } catch (err) {
-                    console.error("[FORGE] Error preparing Forge:", err.message)
+                    console.error("[FORGE] Critical Error:", err.message)
+                    throw err // Rethrow to stop launch
                 }
             }
 
@@ -958,8 +993,9 @@ export function setupLauncher(ipcMain, mainWindow) {
             // - If we already have a custom version folder (detectedVersionId or explicit), use custom.
             // - Else, rely on MCLC + forge installer to create the profile from the base MC version.
             const validateCustomId = (customId) => {
+                const versionDir = path.join(rootPath, 'versions', customId)
                 try {
-                    const jsonPath = path.join(rootPath, 'versions', customId, `${customId}.json`)
+                    const jsonPath = path.join(versionDir, `${customId}.json`)
                     if (!fs.existsSync(jsonPath)) return false
                     const stat = fs.statSync(jsonPath)
                     if (!stat.isFile() || stat.size < 16) return false
@@ -984,6 +1020,7 @@ export function setupLauncher(ipcMain, mainWindow) {
                     }
                     return true
                 } catch (e) {
+                    console.warn(`[VERSION] Profile ${customId} validation failed: ${e.message}`)
                     return false
                 }
             }
@@ -991,11 +1028,13 @@ export function setupLauncher(ipcMain, mainWindow) {
             let selectedCustomId = null
             const explicitCustomValid = instance.customVersionId ? validateCustomId(instance.customVersionId) : false
             const detectedCustomValid = detectedVersionId ? validateCustomId(detectedVersionId) : false
+            
             if (instance.customVersionId && !explicitCustomValid) {
                 console.warn(`[VERSION] Invalid custom profile '${instance.customVersionId}'. Falling back to installer/base version.`)
             }
+            
             if (!instance.customVersionId && detectedVersionId && !detectedCustomValid) {
-                console.warn(`[VERSION] Detected profile '${detectedVersionId}' is not valid for loader '${instance.loader}'. Falling back to installer/base version.`)
+                console.warn(`[VERSION] Detected profile '${detectedVersionId}' is not valid for loader '${instance.loader}'.`)
             }
 
             if (instance.customVersionId && explicitCustomValid) {
@@ -1004,6 +1043,10 @@ export function setupLauncher(ipcMain, mainWindow) {
             } else if (detectedVersionId && detectedCustomValid) {
                 selectedCustomId = detectedVersionId
                 console.log(`[VERSION] Using detected custom version: ${selectedCustomId}`)
+            } else if (detectedVersionId && !detectedCustomValid && instance.loader !== 'vanilla') {
+                // Relaxed fallback: if we found something that matches MC version and we need a loader, try it anyway
+                selectedCustomId = detectedVersionId
+                console.log(`[VERSION] Using detected version with relaxed validation: ${selectedCustomId}`)
             }
 
             if (selectedCustomId) {
@@ -1020,8 +1063,7 @@ export function setupLauncher(ipcMain, mainWindow) {
                     }
                 }
             } else if (instance.loader === 'forge') {
-                // Keep versionOpts as release and pass installer path so MCLC installs forge profile for us.
-                console.log("[VERSION] No Forge profile detected; will install via installer during launch.")
+                console.log("[VERSION] Forge requested. Profile status:", selectedCustomId ? "Found" : "Not found, will use installer if available")
             }
         }
 
@@ -1035,7 +1077,19 @@ export function setupLauncher(ipcMain, mainWindow) {
         
         // JVM Arguments (e.g. -Xmx, -D...)
         const rawJavaArgs = javaArgs ? javaArgs.split(' ').filter(a => a.trim().length > 0) : []
-        const jvmArgs = []
+        const jvmArgs = [
+            "-XX:+UseG1GC",
+            "-XX:+UnlockExperimentalVMOptions",
+            "-XX:MaxGCPauseMillis=100",
+            "-XX:+DisableExplicitGC",
+            "-XX:TargetSurvivorRatio=90",
+            "-XX:G1NewSizePercent=35",
+            "-XX:G1MaxNewSizePercent=60",
+            "-XX:G1MixedGCLiveThresholdPercent=90",
+            "-XX:+AlwaysPreTouch",
+            "-XX:+ParallelRefProcEnabled",
+            "-Dsun.rmi.dgc.server.gcInterval=2147483646"
+        ]
 
         // Sanitize JVM Args: Remove Game Args that users mistakenly put in Java Args
         for (let i = 0; i < rawJavaArgs.length; i++) {
@@ -1129,13 +1183,11 @@ export function setupLauncher(ipcMain, mainWindow) {
             opts.quickPlay = quickPlayConfig
         }
 
+
         // Setup Event Listeners BEFORE launching
         launcher.on('debug', (e) => {
             mainWindow.webContents.send('game-log', `[DEBUG] ${e}`)
         })
-        let vlcErrorDetected = false
-        let oomDetected = false
-        let invalidSessionDetected = false
 
         // Log session to file for crash reports
         const logsDir = path.join(rootPath, 'logs')
@@ -1144,22 +1196,22 @@ export function setupLauncher(ipcMain, mainWindow) {
         const sessionLogPath = path.join(logsDir, `session-${sessionStamp}.log`)
         const sessionStream = fs.createWriteStream(sessionLogPath)
         let exceptionDetected = false
+        let logBuffer = "" // Store last few lines for analysis
+        let gameStartTime = null
+        
         launcher.on('data', (e) => {
             console.log(`[DATA] ${e}`)
             mainWindow.webContents.send('game-log', `${e}`)
             const text = String(e)
             try { sessionStream.write(text + '\n') } catch {}
-            if (text.includes('libvlc error') || text.includes('no suitable interface module')) {
-                vlcErrorDetected = true
+            
+            // Keep buffer size reasonable (last 20KB)
+            logBuffer += text + "\n"
+            if (logBuffer.length > 20000) {
+                logBuffer = logBuffer.slice(-20000)
             }
-            const lower = text.toLowerCase()
-            if (lower.includes('insufficient memory for the java runtime environment') || lower.includes('native memory allocation (mmap) failed')) {
-                oomDetected = true
-            }
-            if (lower.includes('failed to login: invalid session')) {
-                invalidSessionDetected = true
-            }
-            if (lower.includes('exception') || lower.includes('error')) {
+
+            if (text.toLowerCase().includes('exception') || text.toLowerCase().includes('error')) {
                 exceptionDetected = true
             }
         })
@@ -1174,41 +1226,80 @@ export function setupLauncher(ipcMain, mainWindow) {
              }
         })
 
-        launcher.on('arguments', (e) => {
+        launcher.on('arguments', async (e) => {
             console.log("Game Launched")
+            gameStartTime = Date.now()
             mainWindow.webContents.send('launch-success')
-            mainWindow.hide() // Hide to Tray
+            
+            // Check for launch-related achievements
+            if (auth && auth.uuid) {
+                checkAndGrantLaunchAchievements(auth.uuid).then(unlockedAchievements => {
+                    if (unlockedAchievements && unlockedAchievements.length > 0) {
+                        unlockedAchievements.forEach(ach => {
+                            if (mainWindow && !mainWindow.isDestroyed()) {
+                                mainWindow.webContents.send('achievement-unlocked', ach)
+                            }
+                        })
+                    }
+                }).catch(err => {
+                    console.error('[ACHIEVEMENT] Error checking launch achievements:', err)
+                })
+            }
+            
+            const behavior = store.get('closeBehavior', 'ask')
+            if (behavior === 'tray') {
+                console.log("[LAUNCHER] Hiding to tray as per settings")
+                mainWindow.hide()
+            } else if (behavior === 'quit') {
+                console.log("[LAUNCHER] Quitting launcher as per settings")
+                app.quit()
+            } else {
+                console.log("[LAUNCHER] Keeping launcher open (Ask/Default)")
+                // Optionally minimize instead of hiding completely
+                // mainWindow.minimize() 
+            }
+            
             setActivity('playing', instance.name, Date.now())
         })
 
-        launcher.on('close', (code) => {
+        launcher.on('close', async (code) => {
              console.log("Game Closed with code", code)
              activeLauncherProcess = null
              setActivity('selecting')
              try { sessionStream.end() } catch {}
+
+             // 🟢 Update Playtime & Check Achievements
+             if (gameStartTime && auth && auth.uuid) {
+                 const durationMs = Date.now() - gameStartTime
+                 const minutes = Math.floor(durationMs / 60000)
+                 if (minutes > 0) {
+                     console.log(`[ACHIEVEMENT] Adding ${minutes} minutes to user ${auth.name}`)
+                     const result = await addPlaytime(auth.uuid, minutes)
+                     if (result && result.unlocked && result.unlocked.length > 0) {
+                         for (const ach of result.unlocked) {
+                             console.log(`[ACHIEVEMENT] User ${auth.name} unlocked: ${ach.title}`)
+                             if (mainWindow && !mainWindow.isDestroyed()) {
+                                 mainWindow.webContents.send('achievement-unlocked', ach)
+                             }
+                         }
+                     }
+                 }
+             }
              
-             if (vlcErrorDetected) {
+             // 🔍 Analyze logs for common crashes
+             const crashInfo = analyzeCrash(logBuffer)
+             
+             if (crashInfo) {
+                 if (crashInfo.error === 'Session หมดอายุ (Invalid Session)') {
+                     try {
+                         store.delete('auth')
+                     } catch (e) {}
+                 }
+                 
                  mainWindow.webContents.send('game-closed', { 
                      code, 
-                     error: 'Video Mod Error (VLC)', 
-                     details: 'Mod ที่ใช้วิดีโอ (เช่น FancyMenu) ทำงานผิดพลาด\nโปรดติดตั้ง Visual C++ Redistributable (x64)' 
-                 })
-             } else if (oomDetected) {
-                 mainWindow.webContents.send('game-closed', {
-                     code,
-                     error: 'Insufficient Memory (Java)',
-                     details: 'หน่วยความจำในเครื่องไม่เพียงพอสำหรับ Java ในการเปิดเกม\n\nวิธีแก้ที่แนะนำ:\n- ลดค่า RAM ในหน้า Settings ของ StarHub (แท็บ General)\n- ถ้าเครื่องมี RAM น้อยกว่า 8GB แนะนำให้ตั้งไว้ประมาณ 2048-3072 MB\n- ปิดโปรแกรมอื่น ๆ ที่ใช้ RAM เยอะก่อนเปิดเกม\n- รีสตาร์ทเครื่องถ้ายังเป็นอยู่'
-                 })
-             } else if (invalidSessionDetected) {
-                 try {
-                     store.delete('auth')
-                 } catch (e) {
-                     console.error("Failed to clear auth after invalid session:", e)
-                 }
-                 mainWindow.webContents.send('game-closed', {
-                     code,
-                     error: 'Invalid Session',
-                     details: 'ไม่สามารถเข้าสู่เซิร์ฟเวอร์ได้เพราะ Session ของ Minecraft ไม่ถูกต้องหรือหมดอายุ\n\nStarHub ทำการออกจากระบบให้แล้ว\nกรุณาเปิด Settings แล้วล็อกอินบัญชี Minecraft ใหม่อีกครั้ง จากนั้นเปิดเกมใหม่แล้วลองเข้าเซิร์ฟเวอร์อีกครั้ง'
+                     error: crashInfo.error, 
+                     details: crashInfo.solution 
                  })
              } else {
                  if (code !== 0 || exceptionDetected) {
@@ -1238,7 +1329,10 @@ export function setupLauncher(ipcMain, mainWindow) {
                  }
              }
              
-             mainWindow.show()
+             if (!mainWindow.isDestroyed()) {
+                 mainWindow.show()
+                 mainWindow.focus()
+             }
         })
         
         // Await launch to catch initialization errors
@@ -1277,6 +1371,27 @@ export function setupLauncher(ipcMain, mainWindow) {
             error.message === 'Unzip aborted' ||
             error.message === 'Extraction aborted'
         ) {
+            // 🚨 CLEANUP: If we aborted during Forge/Fabric installation, the versions folder might be corrupt
+            try {
+                const versionsPath = path.join(rootPath, 'versions')
+                if (fs.existsSync(versionsPath)) {
+                    const loaderMatch = instance.loader === 'vanilla' ? null : (instance.loader === 'forge' ? 'forge' : 'fabric')
+                    if (loaderMatch) {
+                        const dirs = fs.readdirSync(versionsPath).filter(d => d.toLowerCase().includes(loaderMatch) && d.includes(instance.version))
+                        for (const d of dirs) {
+                            const fullPath = path.join(versionsPath, d)
+                            const stats = fs.statSync(fullPath)
+                            // If folder was created very recently (last 2 mins), it's likely the one we just aborted
+                            if (Date.now() - stats.birthtimeMs < 120000) {
+                                console.log(`[CLEANUP] Removing potentially corrupt ${instance.loader} profile created during aborted launch: ${d}`)
+                                fs.rmSync(fullPath, { recursive: true, force: true })
+                            }
+                        }
+                    }
+                }
+            } catch (e) {
+                console.warn("[CLEANUP] Failed to cleanup aborted version folder:", e.message)
+            }
             return { success: false, error: 'Cancelled' }
         }
         return { success: false, error: error.message }
@@ -1321,16 +1436,18 @@ export function setupLauncher(ipcMain, mainWindow) {
   })
 
   ipcMain.handle('open-instance-folder', async (event, instance) => {
-      if (!instance) return { success: false, reason: 'no_instance' }
+      if (!instance || !instance.id) return { success: false, reason: 'no_instance' }
       
       // Security: Validate instance ID to prevent path traversal (allow dots, underscores, dashes)
-      if (!/^[a-zA-Z0-9_.-]+$/.test(instance.id)) {
-          console.error(`[SECURITY] Invalid instance ID attempted: ${instance.id}`)
+      // Explicitly reject "." and ".." and any string containing "/" or "\"
+      const id = String(instance.id)
+      if (id === '.' || id === '..' || !/^[a-zA-Z0-9_.-]+$/.test(id)) {
+          console.error(`[SECURITY] Invalid instance ID attempted: ${id}`)
           return { success: false, reason: 'invalid_id' }
       }
 
       const baseDir = app.getPath('userData')
-      const folder = path.join(baseDir, 'instances', instance.id)
+      const folder = path.join(baseDir, 'instances', id)
       
       if (!fs.existsSync(folder)) {
           return { success: false, reason: 'not_found' }
@@ -1345,52 +1462,28 @@ export function setupLauncher(ipcMain, mainWindow) {
               return { success: false, error: 'Invalid instance' }
           }
 
-          if (!/^[a-zA-Z0-9_.-]+$/.test(instance.id)) {
-              console.error(`[SECURITY] Invalid instance ID for uninstall: ${instance.id}`)
+          const id = String(instance.id)
+          if (id === '.' || id === '..' || !/^[a-zA-Z0-9_.-]+$/.test(id)) {
+              console.error(`[SECURITY] Invalid instance ID for uninstall: ${id}`)
               return { success: false, error: 'invalid_id' }
           }
 
           const baseDir = app.getPath('userData')
-          const instancePath = path.join(baseDir, 'instances', instance.id)
+          const instancePath = path.join(baseDir, 'instances', id)
 
           if (fs.existsSync(instancePath)) {
               await fs.promises.rm(instancePath, { recursive: true, force: true })
           }
 
           const installed = store.get('installed_versions', {})
-          if (installed && Object.prototype.hasOwnProperty.call(installed, instance.id)) {
-              delete installed[instance.id]
+          if (installed && Object.prototype.hasOwnProperty.call(installed, id)) {
+              delete installed[id]
               store.set('installed_versions', installed)
           }
 
           return { success: true }
       } catch (error) {
           console.error("[UNINSTALL] Failed:", error)
-          return { success: false, error: error.message }
-      }
-  })
-
-  ipcMain.handle('repair-game', async (event, instanceId) => {
-      try {
-          if (!instanceId) return { success: false, error: 'No Instance ID' }
-          
-          const baseDir = app.getPath('userData')
-          const instancePath = path.join(baseDir, 'instances', instanceId)
-          const librariesPath = path.join(instancePath, 'libraries')
-          const assetsPath = path.join(instancePath, 'assets')
-          
-          console.log(`[REPAIR] Deleting libraries for instance: ${instanceId}`)
-          
-          if (fs.existsSync(librariesPath)) {
-              await fs.promises.rm(librariesPath, { recursive: true, force: true })
-          }
-          if (fs.existsSync(assetsPath)) {
-              await fs.promises.rm(assetsPath, { recursive: true, force: true })
-          }
-
-          return { success: true }
-      } catch (error) {
-          console.error("[REPAIR] Failed:", error)
           return { success: false, error: error.message }
       }
   })

@@ -7,3 +7,4 @@ minecraft_data
 .vscode
 *.log
 .DS_Store
+.env

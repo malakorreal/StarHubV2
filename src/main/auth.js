@@ -3,6 +3,7 @@ import { getStore } from './store'
 import { setActivity } from './rpc'
 import icon from '../../resources/icon.ico?asset'
 import axios from 'axios'
+import { syncUserToDb, checkUserBanStatus } from './supabase'
 
 async function validateSession(accessToken) {
     try {
@@ -94,6 +95,15 @@ export function setupAuth(ipcMain, mainWindow) {
         
         // Save to Accounts list
         saveAccount(store, mclcToken, token)
+
+        // 🟢 SYNC TO SUPABASE & CHECK BAN
+        console.log(`[AUTH] Syncing user ${mclcToken.name} to database...`)
+        await syncUserToDb(mclcToken)
+        const isBanned = await checkUserBanStatus(mclcToken.uuid)
+        if (isBanned) {
+            console.error(`[AUTH] User ${mclcToken.name} is BANNED.`)
+            return { success: false, error: { message: 'USER_BANNED' } }
+        }
         
         // Update RPC with new user info
         setActivity('Browsing StarHub', 'In Launcher')
@@ -151,6 +161,16 @@ export function setupAuth(ipcMain, mainWindow) {
 
         if (validation.valid) {
             console.log("Session is valid.")
+            
+            // 🟢 SYNC TO SUPABASE & CHECK BAN ON REFRESH
+            console.log(`[AUTH] Syncing user ${currentAccount.name} to database (session check)...`)
+            await syncUserToDb({ uuid: currentAccount.uuid, name: currentAccount.name })
+            const isBanned = await checkUserBanStatus(currentAccount.uuid)
+            if (isBanned) {
+                console.error(`[AUTH] User ${currentAccount.name} is BANNED.`)
+                return { success: false, error: { message: 'USER_BANNED' } }
+            }
+
             setActivity('Browsing StarHub', 'In Launcher')
             return { 
                 success: true, 
