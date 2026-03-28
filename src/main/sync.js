@@ -469,16 +469,32 @@ export class SyncManager {
             if (signal?.aborted) throw new Error('Download aborted')
 
             // Fix 3: Robust Filename Parsing with Fallback
-            let fileName
+            let fileName = null
             try {
-                fileName = decodeURIComponent(new URL(modUrl).pathname.split('/').pop())
+                // Try to get filename from URL pathname first
+                const urlObj = new URL(modUrl)
+                const urlPath = decodeURIComponent(urlObj.pathname)
+                fileName = urlPath.split('/').pop()
+                
+                // If pathname doesn't have a filename (e.g. ends in /), try query params
+                if (!fileName || !fileName.includes('.')) {
+                    const params = urlObj.searchParams
+                    // Common params: file, name, filename
+                    fileName = params.get('file') || params.get('name') || params.get('filename') || fileName
+                }
             } catch (e) {
                 // Fallback for malformed URLs
-                fileName = decodeURIComponent(modUrl.split('/').pop().split('?')[0])
+                try {
+                    fileName = decodeURIComponent(modUrl.split('/').pop().split('?')[0])
+                } catch (e2) {
+                    fileName = null
+                }
             }
 
-            if (!fileName) {
-                abortError = new Error(`Invalid mod URL: ${modUrl}`)
+            if (!fileName || fileName.trim() === '') {
+                this.log(`[SYNC-WARN] Could not determine filename for ${modUrl}, skipping...`)
+                completed++
+                updateGlobalProgress()
                 return
             }
 
@@ -501,10 +517,17 @@ export class SyncManager {
                     shouldDownload = false
                 } else {
                     try {
-                        const head = await axios.head(modUrl, { timeout: 10000 })
+                        // If file exists but no valid cache, or cache expired, check remote
+                        const head = await axios.head(modUrl, { 
+                            headers: {
+                                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                            },
+                            timeout: 10000 
+                        })
                         const remoteSize = parseInt(head.headers['content-length'], 10)
                         
                         if (remoteSize > 0 && stat.size !== remoteSize) {
+                            this.log(`[SYNC] Size mismatch for ${fileName}: local=${stat.size}, remote=${remoteSize}. Redownloading...`)
                             shouldDownload = true
                         } else {
                             shouldDownload = false
@@ -514,9 +537,13 @@ export class SyncManager {
                             }
                         }
                     } catch (headErr) {
-                        // Network error during HEAD -> trust local file to avoid redundant re-downloads
-                        this.log(`[CACHE] HEAD check failed for ${fileName}, trusting local file.`)
-                        shouldDownload = false
+                        // Network error during HEAD -> trust local file if it exists and looks valid (not 0 bytes)
+                        if (stat.size > 0) {
+                            this.log(`[CACHE] HEAD check failed for ${fileName} (${headErr.message}), trusting existing local file.`)
+                            shouldDownload = false
+                        } else {
+                            shouldDownload = true
+                        }
                     }
                 }
             } catch (stateErr) {
@@ -525,6 +552,11 @@ export class SyncManager {
             }
 
             if (shouldDownload) {
+                // Before downloading, ensure any existing partial file is removed
+                if (fs.existsSync(dest)) {
+                    try { fs.chmodSync(dest, 0o666); fs.unlinkSync(dest) } catch(e) {}
+                }
+
                 await this.downloadFile(modUrl, dest, {
                     signal,
                     onProgress: (loaded, full) => {

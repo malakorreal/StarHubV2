@@ -542,8 +542,14 @@ export function setupLauncher(ipcMain, mainWindow) {
         
         if (added.length > 0 || corrupt.length > 0) {
             console.error(`[VERIFY] Integrity check failed: ${added.length} missing, ${corrupt.length} corrupt.`)
+            if (added.length > 0) {
+                console.log(`[VERIFY] Missing files:`, added.join(', '))
+            }
+            if (corrupt.length > 0) {
+                console.log(`[VERIFY] Corrupt files:`, corrupt.join(', '))
+            }
             const details = added.length > 0 ? `${added.length} files missing` : `${corrupt.length} files corrupt`
-            throw new Error(`The modpack is incomplete (${details}). Please try again with better internet.`)
+            throw new Error(`The modpack is incomplete (${details}). Please try again or use "Repair Game Files".`)
         }
         console.log(`[VERIFY] Integrity check passed!`)
     }
