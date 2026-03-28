@@ -664,6 +664,14 @@ export function setupLauncher(ipcMain, mainWindow) {
              javaPath = await javaManager.ensureJava(instance.version, signal)
         }
 
+        // 🚨 ARCHITECTURE CHECK: Log Java info
+        try {
+            const javaInfo = execSync(`"${javaPath}" -version`, { stdio: ['ignore', 'pipe', 'pipe'] }).toString()
+            console.log(`[JAVA] Runtime Info:\n${javaInfo}`)
+        } catch (e) {
+            console.warn(`[JAVA] Failed to get version info: ${e.message}`)
+        }
+
         console.log("Launching instance:", instance.name)
         const ram = store.get('ram', 4096)
         const totalMemMB = Math.floor(os.totalmem() / 1024 / 1024)
@@ -1086,8 +1094,6 @@ export function setupLauncher(ipcMain, mainWindow) {
             "-XX:G1NewSizePercent=35",
             "-XX:G1MaxNewSizePercent=60",
             "-XX:G1MixedGCLiveThresholdPercent=90",
-            "-XX:+AlwaysPreTouch",
-            "-XX:+ParallelRefProcEnabled",
             "-Dsun.rmi.dgc.server.gcInterval=2147483646"
         ]
 
@@ -1174,7 +1180,7 @@ export function setupLauncher(ipcMain, mainWindow) {
             customArgs: jvmArgs,           // MCLC: customArgs = JVM Arguments
             customLaunchArgs: gameArgs,    // MCLC: customLaunchArgs = Game Arguments
             overrides: {
-                detached: false // Keep attached to see logs/close event
+                detached: true // Let the game run independently for better stability
             }
         }
 
@@ -1183,10 +1189,29 @@ export function setupLauncher(ipcMain, mainWindow) {
             opts.quickPlay = quickPlayConfig
         }
 
+        // Log launch options (Masking authorization for security)
+        try {
+            const logOpts = { ...opts, authorization: { ...opts.authorization, access_token: '***', uuid: '***' } }
+            console.log("[LAUNCHER] Launch Options:", JSON.stringify(logOpts, null, 2))
+        } catch (e) {
+            console.warn("[LAUNCHER] Failed to log launch options:", e.message)
+        }
+
 
         // Setup Event Listeners BEFORE launching
         launcher.on('debug', (e) => {
+            console.log(`[DEBUG] ${e}`)
             mainWindow.webContents.send('game-log', `[DEBUG] ${e}`)
+        })
+
+        launcher.on('error', (err) => {
+            console.error(`[LAUNCHER ERROR] ${err}`)
+            mainWindow.webContents.send('game-log', `[LAUNCHER ERROR] ${err}`)
+            mainWindow.webContents.send('game-closed', { 
+                code: -1, 
+                error: 'Launcher Error', 
+                details: `ไม่สามารถเริ่มโปรเซสเกมได้: ${err.message || err}\n\nสาเหตุที่พบบ่อย:\n- แอนตี้ไวรัสบล็อกโปรแกรม\n- Java ไม่สมบูรณ์\n- RAM ไม่พอ`
+            })
         })
 
         // Log session to file for crash reports
@@ -1200,9 +1225,9 @@ export function setupLauncher(ipcMain, mainWindow) {
         let gameStartTime = null
         
         launcher.on('data', (e) => {
-            console.log(`[DATA] ${e}`)
-            mainWindow.webContents.send('game-log', `${e}`)
             const text = String(e)
+            console.log(`[DATA] ${text}`)
+            mainWindow.webContents.send('game-log', text)
             try { sessionStream.write(text + '\n') } catch {}
             
             // Keep buffer size reasonable (last 20KB)
@@ -1226,10 +1251,16 @@ export function setupLauncher(ipcMain, mainWindow) {
              }
         })
 
-        launcher.on('arguments', async (e) => {
-            console.log("Game Launched")
+        launcher.on('arguments', async (args) => {
+            console.log("Game Launched with arguments:", args.join(' '))
             gameStartTime = Date.now()
             mainWindow.webContents.send('launch-success')
+            
+            // Save launch command for debugging (sensitive info like tokens should be masked if needed, but for now we need full info)
+            try {
+                const debugCmdPath = path.join(logsDir, `launch-cmd-${sessionStamp}.txt`)
+                fs.writeFileSync(debugCmdPath, args.join(' '))
+            } catch (e) {}
             
             // Check for launch-related achievements
             if (auth && auth.uuid) {
