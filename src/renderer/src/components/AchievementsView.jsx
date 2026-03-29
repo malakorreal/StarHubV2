@@ -33,33 +33,86 @@ function AchievementsView() {
 
             {loading ? (
                 <div style={{ display: 'flex', justifyContent: 'center', padding: '40px', color: 'var(--text-secondary)' }}>
-                    Loading achievements...
+                    {t('settings.loadingAchievements')}
                 </div>
             ) : achievements.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-secondary)', opacity: 0.6 }}>
-                    No achievements available yet.
+                    {t('settings.noAchievements')}
                 </div>
             ) : (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '20px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '20px' }}>
                     {achievements.map(ach => {
                         const isUnlocked = unlocked.includes(ach.id)
                         return (
                             <div key={ach.id} style={{
                                 background: 'var(--card-bg)',
                                 border: `1px solid ${isUnlocked ? (ach.color || 'var(--accent)') : 'var(--border-color)'}`,
-                                borderRadius: '8px',
+                                borderRadius: '12px',
                                 padding: '20px',
-                                opacity: isUnlocked ? 1 : 0.5,
-                                transition: 'all 0.3s',
-                                filter: isUnlocked ? 'none' : 'grayscale(80%)',
-                                boxShadow: isUnlocked ? `0 0 15px ${(ach.color || 'var(--accent)')}33` : 'none'
+                                opacity: isUnlocked ? 1 : 0.4,
+                                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                                filter: isUnlocked ? 'none' : 'grayscale(100%)',
+                                boxShadow: isUnlocked ? `0 8px 24px ${(ach.color || 'var(--accent)')}22` : 'none',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                alignItems: 'center',
+                                textAlign: 'center',
+                                position: 'relative',
+                                overflow: 'hidden'
                             }}>
-                                <div style={{ fontSize: '2em', marginBottom: '15px' }}>{ach.icon || '🏆'}</div>
-                                <h4 style={{ margin: '0 0 5px 0', color: isUnlocked ? '#fff' : 'var(--text-secondary)' }}>{ach.title}</h4>
-                                <p style={{ margin: 0, fontSize: '0.9em', color: 'var(--text-secondary)' }}>{ach.description}</p>
+                                {ach.is_limited && (
+                                    <div style={{
+                                        position: 'absolute',
+                                        top: '10px',
+                                        right: '-25px',
+                                        background: '#F44336',
+                                        color: '#fff',
+                                        fontSize: '0.65em',
+                                        fontWeight: 'bold',
+                                        padding: '2px 30px',
+                                        transform: 'rotate(45deg)',
+                                        boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+                                        zIndex: 1
+                                    }}>
+                                        {t('settings.limited')}
+                                    </div>
+                                )}
+
+                                <div style={{ 
+                                    width: '64px', 
+                                    height: '64px', 
+                                    marginBottom: '15px',
+                                    display: 'flex',
+                                    justifyContent: 'center',
+                                    alignItems: 'center',
+                                    background: isUnlocked ? `${ach.color}15` : 'rgba(255,255,255,0.05)',
+                                    borderRadius: '16px',
+                                    border: `1px solid ${isUnlocked ? `${ach.color}40` : 'rgba(255,255,255,0.1)'}`,
+                                    fontSize: '2.5em'
+                                }}>
+                                    {ach.image ? (
+                                        <img src={ach.image} style={{ width: '40px', height: '40px', objectFit: 'contain' }} alt={ach.title} />
+                                    ) : (
+                                        ach.icon || '🏆'
+                                    )}
+                                </div>
+
+                                <h4 style={{ margin: '0 0 8px 0', color: isUnlocked ? '#fff' : 'var(--text-secondary)', fontSize: '1.1em' }}>{ach.title}</h4>
+                                <p style={{ margin: 0, fontSize: '0.85em', color: 'var(--text-secondary)', lineHeight: '1.4' }}>{ach.description}</p>
+                                
                                 {isUnlocked && (
-                                    <div style={{ marginTop: '10px', fontSize: '0.75em', color: 'var(--accent)', fontWeight: 'bold', textTransform: 'uppercase' }}>
-                                        Unlocked!
+                                    <div style={{ 
+                                        marginTop: '15px', 
+                                        fontSize: '0.7em', 
+                                        color: ach.color || 'var(--accent)', 
+                                        fontWeight: '800', 
+                                        textTransform: 'uppercase',
+                                        letterSpacing: '1px',
+                                        padding: '4px 12px',
+                                        background: `${ach.color}15`,
+                                        borderRadius: '20px'
+                                    }}>
+                                        {t('settings.unlocked')}
                                     </div>
                                 )}
                             </div>

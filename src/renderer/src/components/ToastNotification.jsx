@@ -95,48 +95,73 @@ const ToastNotification = ({ message, type = 'info', onClose, duration = 2000, i
                 >
                     ×
                 </button>
-                <div style={{
-                width: '24px',
-                height: '24px',
-                borderRadius: '50%',
-                background: `${color}20`,
-                display: 'flex',
-                justifyContent: 'center',
-                alignItems: 'center',
-                color: color,
-                flexShrink: 0
-            }}>
-                {type === 'success' && (
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                        <polyline points="20 6 9 17 4 12"></polyline>
-                    </svg>
-                )}
                 {type === 'achievement' && (
-                    <div style={{ fontSize: '1.2em' }}>{icon}</div>
+                    <div style={{ 
+                        width: '40px', 
+                        height: '40px', 
+                        borderRadius: '10px', 
+                        background: 'rgba(255, 215, 0, 0.15)', 
+                        display: 'flex', 
+                        justifyContent: 'center', 
+                        alignItems: 'center',
+                        border: '1px solid rgba(255, 215, 0, 0.3)',
+                        flexShrink: 0
+                    }}>
+                        {icon && icon.startsWith('http') ? (
+                            <img src={icon} style={{ width: '28px', height: '28px', objectFit: 'contain' }} alt="Achievement" />
+                        ) : (
+                            <div style={{ fontSize: '1.5em' }}>{icon || '🏆'}</div>
+                        )}
+                    </div>
                 )}
-                {type === 'info' && (
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                        <line x1="12" y1="16" x2="12" y2="12"></line>
-                        <line x1="12" y1="8" x2="12.01" y2="8"></line>
-                    </svg>
+                {type !== 'achievement' && (
+                    <div style={{
+                        width: '24px',
+                        height: '24px',
+                        borderRadius: '50%',
+                        background: `${color}20`,
+                        display: 'flex',
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                        color: color,
+                        flexShrink: 0
+                    }}>
+                        {type === 'success' && (
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                                <polyline points="20 6 9 17 4 12"></polyline>
+                            </svg>
+                        )}
+                        {type === 'info' && (
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                                <line x1="12" y1="16" x2="12" y2="12"></line>
+                                <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                            </svg>
+                        )}
+                        {type === 'warning' && (
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                                <line x1="12" y1="9" x2="12" y2="13"></line>
+                                <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                            </svg>
+                        )}
+                        {type === 'error' && (
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <line x1="15" y1="9" x2="9" y2="15"></line>
+                                <line x1="9" y1="9" x2="15" y2="15"></line>
+                            </svg>
+                        )}
+                    </div>
                 )}
-                {type === 'warning' && (
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
-                        <line x1="12" y1="9" x2="12" y2="13"></line>
-                        <line x1="12" y1="17" x2="12.01" y2="17"></line>
-                    </svg>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                {type === 'achievement' && (
+                    <div style={{ fontSize: '0.75em', color: '#FFD700', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                        Achievement Unlocked!
+                    </div>
                 )}
-                {type === 'error' && (
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                        <circle cx="12" cy="12" r="10"></circle>
-                        <line x1="15" y1="9" x2="9" y2="15"></line>
-                        <line x1="9" y1="9" x2="15" y2="15"></line>
-                    </svg>
-                )}
-            </div>
-            <div style={{ fontSize: '14px', fontWeight: '500' }}>
-                {message}
+                <div style={{ fontSize: '14px', fontWeight: '600', color: '#fff' }}>
+                    {message}
+                </div>
             </div>
         </div>
         </>

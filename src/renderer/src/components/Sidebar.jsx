@@ -188,8 +188,8 @@ function Sidebar({ instances, selectedInstance, onSelectInstance, onRefresh, isR
           alignItems: 'center',
           transition: 'padding 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)'
       }}>
-         <div 
-            onClick={onOpenSettings} // Keep this for user settings
+          <div 
+            onClick={onOpenSettings}
             title="User Settings"
             style={{ 
                 padding: '12px', 
@@ -204,7 +204,8 @@ function Sidebar({ instances, selectedInstance, onSelectInstance, onRefresh, isR
                 marginBottom: '12px',
                 justifyContent: isExpanded ? 'flex-start' : 'center',
                 width: isExpanded ? 'auto' : '48px',
-                height: isExpanded ? 'auto' : '48px'
+                height: isExpanded ? 'auto' : '48px',
+                position: 'relative'
             }}
             onMouseOver={e => { e.currentTarget.style.background = 'var(--card-bg)'; e.currentTarget.style.transform = isExpanded ? 'translateY(-2px)' : 'scale(1.05)'; }}
             onMouseOut={e => { e.currentTarget.style.background = 'var(--input-bg)'; e.currentTarget.style.transform = isExpanded ? 'translateY(0)' : 'scale(1)'; }}
@@ -215,7 +216,9 @@ function Sidebar({ instances, selectedInstance, onSelectInstance, onRefresh, isR
                   backgroundSize: 'cover',
                   backgroundPosition: 'center',
                   backgroundColor: '#333',
-                  flexShrink: 0
+                  flexShrink: 0,
+                  border: user?.account_type === 'admin' ? '2px solid #ff4757' : 
+                          user?.account_type === 'support' ? '2px solid #2ed573' : '2px solid transparent'
               }}></div>
               <div style={{ 
                   flex: 1, 
@@ -225,8 +228,28 @@ function Sidebar({ instances, selectedInstance, onSelectInstance, onRefresh, isR
                   transition: 'opacity 0.2s, width 0.2s',
                   display: isExpanded ? 'block' : 'none'
               }}>
-                  <div style={{ fontSize: '0.95em', fontWeight: '700', color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{user ? user.name : 'Guest'}</div>
-                  <div style={{ fontSize: '0.75em', color: 'var(--text-secondary)' }}>My Account</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <div style={{ fontSize: '0.95em', fontWeight: '700', color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{user ? user.name : 'Guest'}</div>
+                    {user?.account_type && user.account_type !== 'normal' && (
+                        <div style={{ 
+                            fontSize: '0.6em', 
+                            padding: '1px 6px', 
+                            borderRadius: '4px', 
+                            background: user.account_type === 'admin' ? 'linear-gradient(45deg, #ff4757, #ff6b81)' : 'linear-gradient(45deg, #2ed573, #7bed9f)',
+                            color: '#fff',
+                            fontWeight: '900',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.5px',
+                            boxShadow: user.account_type === 'admin' ? '0 0 10px rgba(255, 71, 87, 0.5)' : '0 0 10px rgba(46, 213, 115, 0.5)'
+                        }}>
+                            {user.account_type}
+                        </div>
+                    )}
+                  </div>
+                  <div style={{ fontSize: '0.75em', color: 'var(--text-secondary)' }}>
+                    {user?.account_type === 'admin' ? 'Administrator' : 
+                     user?.account_type === 'support' ? 'Support Team' : 'Member'}
+                  </div>
               </div>
               <div style={{ color: 'var(--text-secondary)', fontSize: '1.2em', display: isExpanded ? 'block' : 'none' }}>⚙️</div>
           </div>
