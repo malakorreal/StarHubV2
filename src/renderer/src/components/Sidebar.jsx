@@ -253,30 +253,49 @@ function Sidebar({ instances, selectedInstance, onSelectInstance, onRefresh, isR
                   opacity: isExpanded ? 1 : 0,
                   width: isExpanded ? 'auto' : 0,
                   transition: 'opacity 0.2s, width 0.2s',
-                  display: isExpanded ? 'block' : 'none',
+                  display: isExpanded ? 'flex' : 'none',
+                  flexDirection: 'column',
                   zIndex: 1
               }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <div style={{ fontSize: '1em', fontWeight: '800', color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{user ? user.name : 'Guest'}</div>
-                    {user?.account_type && user.account_type !== 'normal' && (
-                        <div style={{ 
-                            fontSize: '0.65em', 
-                            padding: '2px 8px', 
-                            borderRadius: '6px', 
-                            background: user.account_type === 'admin' ? '#ff4757' : '#2ed573',
-                            color: '#fff',
-                            fontWeight: '900',
-                            textTransform: 'uppercase',
-                            letterSpacing: '0.5px'
-                        }}>
-                            {user.account_type}
-                        </div>
-                    )}
                   </div>
-                  <div style={{ fontSize: '0.75em', color: 'rgba(255,255,255,0.6)', fontWeight: '500' }}>
-                    {user?.account_type === 'admin' ? '👑 Administrator' : 
-                     user?.account_type === 'support' ? '🛡️ Support Team' : '👤 Player Member'}
-                  </div>
+                  
+                  {/* Banner Rank System */}
+                  {user?.account_type && user.account_type !== 'normal' && (
+                      <div style={{ 
+                          marginTop: '4px',
+                          fontSize: '0.6em', 
+                          padding: '2px 8px', 
+                          borderRadius: '6px', 
+                          background: user.account_type === 'admin' ? 
+                                     'linear-gradient(90deg, #ff4757, #ff6b81)' : 
+                                     'linear-gradient(90deg, #2ed573, #7bed9f)',
+                          color: '#fff',
+                          fontWeight: '900',
+                          textTransform: 'uppercase',
+                          letterSpacing: '1px',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          width: 'fit-content',
+                          boxShadow: user.account_type === 'admin' ? 
+                                     '0 2px 8px rgba(255, 71, 87, 0.4)' : 
+                                     '0 2px 8px rgba(46, 213, 115, 0.4)',
+                          animation: 'pulse 2s infinite'
+                      }}>
+                          <span style={{ fontSize: '1.2em' }}>
+                            {user.account_type === 'admin' ? '👑' : '🛡️'}
+                          </span>
+                          {user.account_type}
+                      </div>
+                  )}
+
+                  {!user?.account_type || user.account_type === 'normal' ? (
+                      <div style={{ fontSize: '0.75em', color: 'rgba(255,255,255,0.6)', fontWeight: '500' }}>
+                        👤 Player Member
+                      </div>
+                  ) : null}
               </div>
               <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: '1.2em', display: isExpanded ? 'block' : 'none', zIndex: 1 }}>⚙️</div>
           </div>
