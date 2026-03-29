@@ -98,7 +98,9 @@ export function setupAuth(ipcMain, mainWindow) {
 
         // 🟢 SYNC TO SUPABASE & CHECK BAN
         console.log(`[AUTH] Syncing user ${mclcToken.name} to database...`)
-        const dbUser = await syncUserToDb({ uuid: mclcToken.uuid, name: mclcToken.name })
+        const dbUsers = await syncUserToDb({ uuid: mclcToken.uuid, name: mclcToken.name })
+        const dbUser = Array.isArray(dbUsers) ? dbUsers[0] : null
+        
         const isBanned = await checkUserBanStatus(mclcToken.uuid)
         if (isBanned) {
             console.error(`[AUTH] User ${mclcToken.name} is BANNED.`)
@@ -168,7 +170,9 @@ export function setupAuth(ipcMain, mainWindow) {
             
             // 🟢 SYNC TO SUPABASE & CHECK BAN ON REFRESH
             console.log(`[AUTH] Syncing user ${currentAccount.name} to database (session check)...`)
-            const dbUser = await syncUserToDb({ uuid: currentAccount.uuid, name: currentAccount.name })
+            const dbUsers = await syncUserToDb({ uuid: currentAccount.uuid, name: currentAccount.name })
+            const dbUser = Array.isArray(dbUsers) ? dbUsers[0] : null
+            
             const isBanned = await checkUserBanStatus(currentAccount.uuid)
             if (isBanned) {
                 console.error(`[AUTH] User ${currentAccount.name} is BANNED.`)
