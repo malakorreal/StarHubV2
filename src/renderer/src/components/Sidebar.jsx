@@ -192,33 +192,60 @@ function Sidebar({ instances, selectedInstance, onSelectInstance, onRefresh, isR
             onClick={onOpenSettings}
             title="User Settings"
             style={{ 
-                padding: '12px', 
-                borderRadius: '12px',
+                padding: isExpanded ? '15px' : '10px', 
+                borderRadius: '16px',
                 display: 'flex', 
                 alignItems: 'center', 
                 gap: isExpanded ? '14px' : '0', 
                 cursor: 'pointer',
-                background: 'var(--input-bg)',
-                border: '1px solid var(--border-color)',
-                transition: 'all 0.2s',
-                marginBottom: '12px',
+                background: user?.account_type === 'admin' ? 'linear-gradient(135deg, rgba(255, 71, 87, 0.2) 0%, rgba(0,0,0,0.6) 100%)' : 
+                            user?.account_type === 'support' ? 'linear-gradient(135deg, rgba(46, 213, 115, 0.2) 0%, rgba(0,0,0,0.6) 100%)' : 
+                            'linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(0,0,0,0.4) 100%)',
+                border: user?.account_type === 'admin' ? '1.5px solid rgba(255, 71, 87, 0.4)' : 
+                        user?.account_type === 'support' ? '1.5px solid rgba(46, 213, 115, 0.4)' : 
+                        '1.5px solid var(--border-color)',
+                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                marginBottom: '15px',
                 justifyContent: isExpanded ? 'flex-start' : 'center',
-                width: isExpanded ? 'auto' : '48px',
-                height: isExpanded ? 'auto' : '48px',
-                position: 'relative'
+                width: isExpanded ? 'auto' : '52px',
+                height: isExpanded ? 'auto' : '52px',
+                position: 'relative',
+                overflow: 'hidden',
+                boxShadow: user?.account_type === 'admin' ? '0 4px 15px rgba(255, 71, 87, 0.15)' : 
+                           user?.account_type === 'support' ? '0 4px 15px rgba(46, 213, 115, 0.15)' : 'none'
             }}
-            onMouseOver={e => { e.currentTarget.style.background = 'var(--card-bg)'; e.currentTarget.style.transform = isExpanded ? 'translateY(-2px)' : 'scale(1.05)'; }}
-            onMouseOut={e => { e.currentTarget.style.background = 'var(--input-bg)'; e.currentTarget.style.transform = isExpanded ? 'translateY(0)' : 'scale(1)'; }}
+            onMouseOver={e => { 
+                e.currentTarget.style.transform = isExpanded ? 'translateY(-3px)' : 'scale(1.05)';
+                e.currentTarget.style.filter = 'brightness(1.2)';
+            }}
+            onMouseOut={e => { 
+                e.currentTarget.style.transform = 'translateY(0) scale(1)';
+                e.currentTarget.style.filter = 'brightness(1)';
+            }}
           >
+              {/* Animated Glow for Ranks */}
+              {isExpanded && user?.account_type && user.account_type !== 'normal' && (
+                  <div style={{
+                      position: 'absolute',
+                      top: 0, left: 0, right: 0, bottom: 0,
+                      background: user.account_type === 'admin' ? 
+                                 'radial-gradient(circle at top right, rgba(255, 71, 87, 0.1), transparent)' : 
+                                 'radial-gradient(circle at top right, rgba(46, 213, 115, 0.1), transparent)',
+                      pointerEvents: 'none'
+                  }}></div>
+              )}
+
               <div style={{ 
-                  width: '36px', height: '36px', borderRadius: '10px', 
+                  width: '40px', height: '40px', borderRadius: '12px', 
                   backgroundImage: user ? `url(https://minotar.net/avatar/${user.name}/64.png)` : 'none',
                   backgroundSize: 'cover',
                   backgroundPosition: 'center',
                   backgroundColor: '#333',
                   flexShrink: 0,
-                  border: user?.account_type === 'admin' ? '2px solid #ff4757' : 
-                          user?.account_type === 'support' ? '2px solid #2ed573' : '2px solid transparent'
+                  border: user?.account_type === 'admin' ? '2.5px solid #ff4757' : 
+                          user?.account_type === 'support' ? '2.5px solid #2ed573' : '2px solid rgba(255,255,255,0.2)',
+                  boxShadow: user?.account_type === 'admin' ? '0 0 10px rgba(255, 71, 87, 0.4)' : 
+                             user?.account_type === 'support' ? '0 0 10px rgba(46, 213, 115, 0.4)' : 'none'
               }}></div>
               <div style={{ 
                   flex: 1, 
@@ -226,32 +253,32 @@ function Sidebar({ instances, selectedInstance, onSelectInstance, onRefresh, isR
                   opacity: isExpanded ? 1 : 0,
                   width: isExpanded ? 'auto' : 0,
                   transition: 'opacity 0.2s, width 0.2s',
-                  display: isExpanded ? 'block' : 'none'
+                  display: isExpanded ? 'block' : 'none',
+                  zIndex: 1
               }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                    <div style={{ fontSize: '0.95em', fontWeight: '700', color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{user ? user.name : 'Guest'}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <div style={{ fontSize: '1em', fontWeight: '800', color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{user ? user.name : 'Guest'}</div>
                     {user?.account_type && user.account_type !== 'normal' && (
                         <div style={{ 
-                            fontSize: '0.6em', 
-                            padding: '1px 6px', 
-                            borderRadius: '4px', 
-                            background: user.account_type === 'admin' ? 'linear-gradient(45deg, #ff4757, #ff6b81)' : 'linear-gradient(45deg, #2ed573, #7bed9f)',
+                            fontSize: '0.65em', 
+                            padding: '2px 8px', 
+                            borderRadius: '6px', 
+                            background: user.account_type === 'admin' ? '#ff4757' : '#2ed573',
                             color: '#fff',
                             fontWeight: '900',
                             textTransform: 'uppercase',
-                            letterSpacing: '0.5px',
-                            boxShadow: user.account_type === 'admin' ? '0 0 10px rgba(255, 71, 87, 0.5)' : '0 0 10px rgba(46, 213, 115, 0.5)'
+                            letterSpacing: '0.5px'
                         }}>
                             {user.account_type}
                         </div>
                     )}
                   </div>
-                  <div style={{ fontSize: '0.75em', color: 'var(--text-secondary)' }}>
-                    {user?.account_type === 'admin' ? 'Administrator' : 
-                     user?.account_type === 'support' ? 'Support Team' : 'Member'}
+                  <div style={{ fontSize: '0.75em', color: 'rgba(255,255,255,0.6)', fontWeight: '500' }}>
+                    {user?.account_type === 'admin' ? '👑 Administrator' : 
+                     user?.account_type === 'support' ? '🛡️ Support Team' : '👤 Player Member'}
                   </div>
               </div>
-              <div style={{ color: 'var(--text-secondary)', fontSize: '1.2em', display: isExpanded ? 'block' : 'none' }}>⚙️</div>
+              <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: '1.2em', display: isExpanded ? 'block' : 'none', zIndex: 1 }}>⚙️</div>
           </div>
           
           {/* About Developer Button */}
