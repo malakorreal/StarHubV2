@@ -40,13 +40,14 @@ function AchievementsView() {
                 </div>
             ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', flex: 1, overflow: 'hidden' }}>
-                    <div style={{ 
+                    <div className="achievements-grid" style={{ 
                         display: 'grid', 
                         gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))', 
                         gap: '12px',
-                        maxHeight: '240px',
                         overflowY: 'auto',
-                        padding: '5px'
+                        padding: '10px',
+                        flex: 1,
+                        maxHeight: '300px'
                     }}>
                         {achievements.map(ach => {
                             const isUnlocked = unlocked.includes(ach.id)
@@ -70,7 +71,8 @@ function AchievementsView() {
                                         alignItems: 'center',
                                         justifyContent: 'center',
                                         position: 'relative',
-                                        overflow: 'hidden'
+                                        overflow: 'hidden',
+                                        minWidth: '100px'
                                     }}
                                     onMouseOver={e => {
                                         if (!isSelected) {
@@ -142,7 +144,8 @@ function AchievementsView() {
                         alignItems: 'center',
                         minHeight: '90px',
                         transition: 'all 0.3s',
-                        borderLeft: selectedAch ? `4px solid ${selectedAch.color || 'var(--accent)'}` : '1px solid var(--border-color)'
+                        borderLeft: selectedAch ? `4px solid ${selectedAch.color || 'var(--accent)'}` : '1px solid var(--border-color)',
+                        flexShrink: 0
                     }}>
                         {selectedAch ? (
                             <>
@@ -201,7 +204,6 @@ function AchievementsView() {
             )}
         </div>
     )
-}
 }
 
 export default AchievementsView

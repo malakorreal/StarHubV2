@@ -261,41 +261,51 @@ function Sidebar({ instances, selectedInstance, onSelectInstance, onRefresh, isR
                     <div style={{ fontSize: '1em', fontWeight: '800', color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{user ? user.name : 'Guest'}</div>
                   </div>
                   
-                  {/* Banner Rank System */}
-                  {user?.account_type && user.account_type !== 'normal' && (
+                  {/* Cool Banner System for Admin/Support */}
+                  {user?.account_type && (user.account_type === 'admin' || user.account_type === 'support') ? (
                       <div style={{ 
                           marginTop: '4px',
                           fontSize: '0.6em', 
-                          padding: '2px 8px', 
+                          padding: '3px 10px', 
                           borderRadius: '6px', 
                           background: user.account_type === 'admin' ? 
-                                     'linear-gradient(90deg, #ff4757, #ff6b81)' : 
-                                     'linear-gradient(90deg, #2ed573, #7bed9f)',
+                                     'linear-gradient(90deg, #ff4757, #ff6b81, #ff4757)' : 
+                                     'linear-gradient(90deg, #2ed573, #7bed9f, #2ed573)',
+                          backgroundSize: '200% auto',
                           color: '#fff',
                           fontWeight: '900',
                           textTransform: 'uppercase',
                           letterSpacing: '1px',
                           display: 'inline-flex',
                           alignItems: 'center',
-                          gap: '4px',
+                          gap: '5px',
                           width: 'fit-content',
                           boxShadow: user.account_type === 'admin' ? 
-                                     '0 2px 8px rgba(255, 71, 87, 0.4)' : 
-                                     '0 2px 8px rgba(46, 213, 115, 0.4)',
-                          animation: 'pulse 2s infinite'
+                                     '0 2px 10px rgba(255, 71, 87, 0.4)' : 
+                                     '0 2px 10px rgba(46, 213, 115, 0.4)',
+                          animation: 'shimmer 2s linear infinite'
                       }}>
+                          <style>{`
+                              @keyframes shimmer {
+                                  0% { background-position: 0% center; }
+                                  100% { background-position: 200% center; }
+                              }
+                              @keyframes pulse {
+                                  0% { transform: scale(1); }
+                                  50% { transform: scale(1.02); }
+                                  100% { transform: scale(1); }
+                              }
+                          `}</style>
                           <span style={{ fontSize: '1.2em' }}>
                             {user.account_type === 'admin' ? '👑' : '🛡️'}
                           </span>
                           {user.account_type}
                       </div>
-                  )}
-
-                  {!user?.account_type || user.account_type === 'normal' ? (
-                      <div style={{ fontSize: '0.75em', color: 'rgba(255,255,255,0.6)', fontWeight: '500' }}>
-                        👤 Player Member
+                  ) : (
+                      <div style={{ fontSize: '0.75em', color: 'rgba(255,255,255,0.5)', fontWeight: '500', marginTop: '2px' }}>
+                        {t ? t('sidebar.myAccount') : '👤 Player Member'}
                       </div>
-                  ) : null}
+                  )}
               </div>
               <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: '1.2em', display: isExpanded ? 'block' : 'none', zIndex: 1 }}>⚙️</div>
           </div>

@@ -98,7 +98,7 @@ export function setupAuth(ipcMain, mainWindow) {
 
         // 🟢 SYNC TO SUPABASE & CHECK BAN
         console.log(`[AUTH] Syncing user ${mclcToken.name} to database...`)
-        await syncUserToDb(mclcToken)
+        const dbUser = await syncUserToDb({ uuid: mclcToken.uuid, name: mclcToken.name })
         const isBanned = await checkUserBanStatus(mclcToken.uuid)
         if (isBanned) {
             console.error(`[AUTH] User ${mclcToken.name} is BANNED.`)
@@ -110,7 +110,11 @@ export function setupAuth(ipcMain, mainWindow) {
         
         return { 
             success: true, 
-            profile: { name: mclcToken.name, id: mclcToken.uuid }, 
+            profile: { 
+                name: mclcToken.name, 
+                id: mclcToken.uuid,
+                account_type: dbUser?.account_type || 'normal'
+            }, 
             access_token: mclcToken 
         }
     } catch (err) {
@@ -164,7 +168,7 @@ export function setupAuth(ipcMain, mainWindow) {
             
             // 🟢 SYNC TO SUPABASE & CHECK BAN ON REFRESH
             console.log(`[AUTH] Syncing user ${currentAccount.name} to database (session check)...`)
-            await syncUserToDb({ uuid: currentAccount.uuid, name: currentAccount.name })
+            const dbUser = await syncUserToDb({ uuid: currentAccount.uuid, name: currentAccount.name })
             const isBanned = await checkUserBanStatus(currentAccount.uuid)
             if (isBanned) {
                 console.error(`[AUTH] User ${currentAccount.name} is BANNED.`)
@@ -174,7 +178,11 @@ export function setupAuth(ipcMain, mainWindow) {
             setActivity('Browsing StarHub', 'In Launcher')
             return { 
                 success: true, 
-                profile: { name: currentAccount.name, id: currentAccount.uuid }, 
+                profile: { 
+                    name: currentAccount.name, 
+                    id: currentAccount.uuid,
+                    account_type: dbUser?.account_type || 'normal'
+                }, 
                 access_token: mclcToken 
             }
         }
