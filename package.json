@@ -1,6 +1,6 @@
 {
   "name": "starhub-v2",
-  "version": "1.0.80",
+  "version": "1.0.81",
   "author": "Malakor",
   "description": "StarHub Launcher - A modern Minecraft launcher for StarHub community.",
   "main": "out/main/index.js",
