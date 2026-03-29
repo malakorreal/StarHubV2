@@ -22,6 +22,7 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
   const [checkingForUpdates, setCheckingForUpdates] = useState(false)
   const [themeId, setThemeId] = useState(localStorage.getItem('theme_id') || 'gold')
   const [closeBehavior, setCloseBehavior] = useState('ask')
+  const [onLaunchBehavior, setOnLaunchBehavior] = useState('tray')
   const [bgAnimation, setBgAnimation] = useState(!!enableAnimation)
   const [accounts, setAccounts] = useState([])
   const [loadingAccounts, setLoadingAccounts] = useState(false)
@@ -105,6 +106,7 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
             if (s && typeof s.maxConcurrentDownloads !== 'undefined') setMaxConcurrentDownloads(s.maxConcurrentDownloads)
             if (s && typeof s.autoCheckUpdates !== 'undefined') setAutoCheckUpdates(s.autoCheckUpdates)
             if (s && typeof s.closeBehavior !== 'undefined') setCloseBehavior(s.closeBehavior)
+            if (s && typeof s.onLaunchBehavior !== 'undefined') setOnLaunchBehavior(s.onLaunchBehavior)
             if (s && typeof s.bgAnimation !== 'undefined') {
                 setBgAnimation(!!s.bgAnimation)
                 if (setEnableAnimation) setEnableAnimation(!!s.bgAnimation)
@@ -125,6 +127,7 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
             maxConcurrentDownloads,
             autoCheckUpdates,
             closeBehavior,
+            onLaunchBehavior,
             bgAnimation
         })
       }
@@ -194,6 +197,17 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
           })
       }
   }
+
+  useEffect(() => {
+      const handleTrayRepair = () => {
+          setActiveTab('general')
+          setShowRepairModal(true)
+      }
+      
+      if (window.api && window.api.onOpenRepairFromTray) {
+          window.api.onOpenRepairFromTray(handleTrayRepair)
+      }
+  }, [])
 
   return (
     <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 2000, backdropFilter: 'blur(5px)', willChange: 'opacity, transform' }}>
@@ -311,7 +325,7 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
               
               {/* General Tab */}
               {activeTab === 'general' && (
-                  <div style={{ animation: 'fadeIn 0.3s' }}>
+                  <div className="fade-in">
                       <h3 style={{ marginTop: 0, marginBottom: '20px', borderBottom: '1px solid var(--border-color)', paddingBottom: '10px', color: 'var(--text-primary)' }}>{t('settings.general')}</h3>
                       
                       {/* Theme Selector */}
@@ -703,7 +717,7 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
 
               {/* Launcher Graphics Tab */}
               {activeTab === 'launcher' && (
-                  <div style={{ animation: 'fadeIn 0.3s' }}>
+                  <div className="fade-in">
                       <h3 style={{ marginTop: 0, marginBottom: '20px', borderBottom: '1px solid var(--border-color)', paddingBottom: '10px', color: 'var(--text-primary)' }}>{t('settings.launcherGraphics') || 'Launcher Interface'}</h3>
                       
                       <div style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -763,12 +777,35 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
                               <option value="quit">{t('settings.closeBehaviorQuit') || (currentLanguage === 'th' ? 'ปิดโปรแกรม' : 'Exit Application')}</option>
                           </select>
                       </div>
+
+                      <div style={{ marginBottom: '25px' }}>
+                          <label style={{ display: 'block', marginBottom: '10px', color: 'var(--text-secondary)' }}>
+                              {t('settings.onLaunchBehavior') || (currentLanguage === 'th' ? 'เมื่อเริ่มเกม' : 'On Game Launch')}
+                          </label>
+                          <select
+                              value={onLaunchBehavior}
+                              onChange={(e) => setOnLaunchBehavior(e.target.value)}
+                              style={{
+                                  width: '100%',
+                                  padding: '10px',
+                                  background: 'var(--input-bg)',
+                                  border: '1px solid var(--border-color)',
+                                  borderRadius: '4px',
+                                  color: 'var(--text-primary)'
+                              }}
+                          >
+                              <option value="tray">{t('settings.onLaunchTray') || (currentLanguage === 'th' ? 'ย่อลง Tray' : 'Minimize to Tray')}</option>
+                              <option value="minimize">{t('settings.onLaunchMinimize') || (currentLanguage === 'th' ? 'ย่อหน้าต่างลง' : 'Minimize Window')}</option>
+                              <option value="quit">{t('settings.onLaunchQuit') || (currentLanguage === 'th' ? 'ปิดโปรแกรม' : 'Exit Application')}</option>
+                              <option value="keep">{t('settings.onLaunchKeep') || (currentLanguage === 'th' ? 'เปิดค้างไว้' : 'Keep Launcher Open')}</option>
+                          </select>
+                      </div>
                   </div>
               )}
 
               {/* Graphics Tab (Now Game Graphics) */}
               {activeTab === 'graphics' && (
-                  <div style={{ animation: 'fadeIn 0.3s' }}>
+                  <div className="fade-in">
                       <h3 style={{ marginTop: 0, marginBottom: '20px', borderBottom: '1px solid var(--border-color)', paddingBottom: '10px', color: 'var(--text-primary)' }}>{t('settings.gameGraphics') || 'Game Graphics'}</h3>
                       
                       {/* Resolution */}
@@ -847,7 +884,7 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
 
               {/* Account Tab */}
               {activeTab === 'account' && (
-                  <div style={{ animation: 'fadeIn 0.3s' }}>
+                  <div className="fade-in">
                       <h3 style={{ marginTop: 0, marginBottom: '20px', borderBottom: '1px solid var(--border-color)', paddingBottom: '10px', color: 'var(--text-primary)' }}>{t('settings.account')}</h3>
                       
                       {/* Account List */}

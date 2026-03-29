@@ -47,31 +47,36 @@ export function setupLauncher(ipcMain, mainWindow) {
 
   // Helper to prepare files (Download/Extract)
   const prepareGameFiles = async (instance, forceRepair = false, signal = null) => {
-    // ---------------------------------------------------------
+    // Use AppData to avoid non-ASCII path issues
+    const baseDir = app.getPath('userData')
+    const id = String(instance.id)
+    if (id === '.' || id === '..' || !/^[a-zA-Z0-9_.-]+$/.test(id)) {
+        throw new Error(`[SECURITY] Invalid instance ID: ${id}`)
+    }
+    const rootPath = path.join(baseDir, 'instances', id)
+    const modsFolder = path.join(rootPath, 'mods')
+
+    // 🚨 DISK SPACE CHECK (EARLY)
+    const freeGB = getFreeSpaceGB(rootPath)
+    if (freeGB > 0 && freeGB < 1.5) {
+        throw new Error(`พื้นที่ดิสก์ไม่เพียงพอ (เหลือ ${freeGB.toFixed(2)} GB) ต้องการอย่างน้อย 1.5 GB`)
+    }
+
     // 🌐 URL NORMALIZATION (Dropbox & etc)
-    // ---------------------------------------------------------
     const normalizeUrl = (url) => {
         if (!url) return url
         let finalUrl = url.trim()
         
-        // Handle Dropbox specific logic
         if (finalUrl.includes('dropbox.com')) {
-            if (finalUrl.includes('?dl=0')) {
-                finalUrl = finalUrl.replace('?dl=0', '?dl=1')
-            } else if (!finalUrl.includes('?dl=1')) {
-                finalUrl = finalUrl.includes('?') ? `${finalUrl}&dl=1` : `${finalUrl}?dl=1`
-            }
+            if (finalUrl.includes('?dl=0')) finalUrl = finalUrl.replace('?dl=0', '?dl=1')
+            else if (!finalUrl.includes('?dl=1')) finalUrl = finalUrl.includes('?') ? `${finalUrl}&dl=1` : `${finalUrl}?dl=1`
         }
         
-        // 🚨 IMPORTANT: Encode URL to handle spaces/Thai characters in filename
-        // We only encode if it's not already encoded (simple check for %)
-        // But better is to use encodeURI on the full path after stripping protocol
         try {
             const parts = finalUrl.split('://')
             if (parts.length === 2) {
                 const protocol = parts[0]
                 const rest = parts[1]
-                // encodeURI is safe for already encoded chars like %20
                 finalUrl = `${protocol}://${encodeURI(decodeURI(rest))}`
             }
         } catch (e) {
@@ -82,22 +87,11 @@ export function setupLauncher(ipcMain, mainWindow) {
     }
 
     if (instance.modpackUrl) {
-        const oldUrl = instance.modpackUrl
         instance.modpackUrl = normalizeUrl(instance.modpackUrl)
-        if (oldUrl !== instance.modpackUrl) console.log(`[ZIP] Normalized URL: ${instance.modpackUrl}`)
     }
     if (instance.modpackMirrorUrl) {
         instance.modpackMirrorUrl = normalizeUrl(instance.modpackMirrorUrl)
     }
-
-    // Use AppData to avoid non-ASCII path issues
-    const baseDir = app.getPath('userData')
-    const id = String(instance.id)
-    if (id === '.' || id === '..' || !/^[a-zA-Z0-9_.-]+$/.test(id)) {
-        throw new Error(`[SECURITY] Invalid instance ID: ${id}`)
-    }
-    const rootPath = path.join(baseDir, 'instances', id)
-    const modsFolder = path.join(rootPath, 'mods')
 
     // 🚨 DYNAMIC FILENAME: Use filename from URL if possible, otherwise fallback to modpack.zip
     let modpackFileName = 'modpack.zip'
@@ -534,22 +528,30 @@ export function setupLauncher(ipcMain, mainWindow) {
     } catch (e) {}
 
     // 🚨 FINAL VERIFICATION: Ensure all required files are present and valid
-    // This is crucial for users with unstable internet.
     if (validModRelPaths.size > 0) {
         console.log(`[VERIFY] Final integrity check for ${validModRelPaths.size} mods...`)
         syncManager.sendProgress('Final integrity check...', 0, 1)
-        const { added, corrupt } = await syncManager.comparePatches(modsFolder, Array.from(validModRelPaths), instance.ignoreFiles || [])
+        
+        // Detailed check
+        const desired = Array.from(validModRelPaths)
+        const { added, corrupt } = await syncManager.comparePatches(modsFolder, desired, instance.ignoreFiles || [])
         
         if (added.length > 0 || corrupt.length > 0) {
-            console.error(`[VERIFY] Integrity check failed: ${added.length} missing, ${corrupt.length} corrupt.`)
-            if (added.length > 0) {
-                console.log(`[VERIFY] Missing files:`, added.join(', '))
+            console.error(`[VERIFY] FAILED: ${added.length} missing, ${corrupt.length} corrupt.`)
+            
+            // Auto-repair attempt for final verification failures
+            if (forceRepair) {
+                 throw new Error(`The modpack is still incomplete after repair (${added.length} missing). Please check your internet.`)
+            } else {
+                 console.log("[VERIFY] Attempting auto-fix for missing/corrupt files...")
+                 await syncManager.syncMods(instance.mods, modsFolder, { signal })
+                 
+                 // Second check
+                 const finalCheck = await syncManager.comparePatches(modsFolder, desired, instance.ignoreFiles || [])
+                 if (finalCheck.added.length > 0 || finalCheck.corrupt.length > 0) {
+                     throw new Error(`ไฟล์มอดไม่ครบ (${finalCheck.added.length} ไฟล์หาย) กรุณาลองกด "ซ่อมแซมไฟล์เกม"`)
+                 }
             }
-            if (corrupt.length > 0) {
-                console.log(`[VERIFY] Corrupt files:`, corrupt.join(', '))
-            }
-            const details = added.length > 0 ? `${added.length} files missing` : `${corrupt.length} files corrupt`
-            throw new Error(`The modpack is incomplete (${details}). Please try again or use "Repair Game Files".`)
         }
         console.log(`[VERIFY] Integrity check passed!`)
     }
@@ -1283,21 +1285,29 @@ export function setupLauncher(ipcMain, mainWindow) {
                 })
             }
             
-            const behavior = store.get('closeBehavior', 'ask')
-            if (behavior === 'tray') {
-                console.log("[LAUNCHER] Hiding to tray as per settings")
-                mainWindow.hide()
-            } else if (behavior === 'quit') {
-                console.log("[LAUNCHER] Quitting launcher as per settings")
-                app.quit()
-            } else {
-                console.log("[LAUNCHER] Keeping launcher open (Ask/Default)")
-                // Optionally minimize instead of hiding completely
-                // mainWindow.minimize() 
-            }
-            
-            setActivity('playing', instance.name, Date.now())
-        })
+            const onLaunch = store.get('onLaunchBehavior', 'tray')
+             
+             // 🚨 IMPROVED HIDE LOGIC:
+             // Add a small delay to ensure 'launch-success' IPC reaches renderer first
+             setTimeout(() => {
+                 if (!mainWindow || mainWindow.isDestroyed()) return
+ 
+                 if (onLaunch === 'tray') {
+                     console.log("[LAUNCHER] Hiding to tray as per onLaunchBehavior")
+                     mainWindow.hide()
+                 } else if (onLaunch === 'quit') {
+                     console.log("[LAUNCHER] Quitting launcher as per onLaunchBehavior")
+                     app.quit()
+                 } else if (onLaunch === 'minimize') {
+                     console.log("[LAUNCHER] Minimizing launcher as per onLaunchBehavior")
+                     mainWindow.minimize()
+                 } else {
+                     console.log("[LAUNCHER] Keeping launcher open as per onLaunchBehavior")
+                 }
+             }, 500)
+             
+             setActivity('playing', instance.name, Date.now())
+         })
 
         launcher.on('close', async (code) => {
              console.log("Game Closed with code", code)

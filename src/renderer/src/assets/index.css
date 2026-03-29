@@ -49,6 +49,27 @@ a, button, .titlebar-button, .sidebar-item, input, select, .pointer {
   background: #888;
 }
 
+/* Global Animations */
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes scaleIn {
+    from { opacity: 0; transform: scale(0.95); }
+    to { opacity: 1; transform: scale(1); }
+}
+
+.fade-in {
+    animation: fadeIn 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    will-change: opacity, transform;
+}
+
+.scale-in {
+    animation: scaleIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+    will-change: opacity, transform;
+}
+
 /* Animations */
 .bg-animation {
     position: fixed;
@@ -59,6 +80,7 @@ a, button, .titlebar-button, .sidebar-item, input, select, .pointer {
     z-index: -1;
     overflow: hidden;
     background: linear-gradient(to bottom, #1a1b1e, #000);
+    will-change: transform;
 }
 
 .cube {
@@ -66,15 +88,13 @@ a, button, .titlebar-button, .sidebar-item, input, select, .pointer {
     bottom: -100px;
     width: 40px;
     height: 40px;
-    background: rgba(255, 255, 255, 0.05); /* Pale white */
-    border: 1px solid rgba(255, 255, 255, 0.1); /* Pale white border */
-    /* Use translate and rotate properties to avoid transform conflict */
-    translate: 0 0;
-    rotate: 0deg;
-    animation: rise 20s infinite ease-in, rotate 20s infinite linear; /* Slower rise and rotation */
-    will-change: translate, rotate, opacity; /* Optimize performance */
-    /* Hardware acceleration hint */
-    transform: translateZ(0);
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    /* Use transform for GPU acceleration */
+    transform: translate3d(0, 0, 0) rotate(0deg);
+    animation: rise 20s infinite ease-in, rotate 20s infinite linear;
+    will-change: transform, opacity;
+    backface-visibility: hidden;
 }
 
 /* Pause animations when hidden */
@@ -82,18 +102,16 @@ a, button, .titlebar-button, .sidebar-item, input, select, .pointer {
     animation-play-state: paused !important;
 }
 
-/* Removed extra cubes to reduce GPU load */
-
 @keyframes rise {
-    0% { translate: 0 0; opacity: 0; }
-    10% { opacity: 0.8; } /* Lower max opacity */
+    0% { transform: translate3d(0, 0, 0); opacity: 0; }
+    10% { opacity: 0.8; }
     90% { opacity: 0.8; }
-    100% { translate: 0 -120vh; opacity: 0; }
+    100% { transform: translate3d(0, -120vh, 0); opacity: 0; }
 }
 
 @keyframes rotate {
-    0% { rotate: 0deg; }
-    100% { rotate: 360deg; }
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
 }
 
 @keyframes spin {

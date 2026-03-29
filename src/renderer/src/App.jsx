@@ -424,6 +424,15 @@ function App() {
         if (typeof unsub === 'function') unsubs.push(unsub)
     }
 
+    if (window.api.onOpenRepairFromTray) {
+        const unsub = window.api.onOpenRepairFromTray(() => {
+            if (launchStatusRef.current === 'running') return
+            setShowSettings(true)
+            // The Settings component itself also listens to this and shows the modal
+        })
+        if (typeof unsub === 'function') unsubs.push(unsub)
+    }
+
     return () => {
         if (instancesRefreshIntervalRef.current) {
             clearInterval(instancesRefreshIntervalRef.current)

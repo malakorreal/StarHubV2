@@ -203,7 +203,7 @@ const MainContent = memo(({ instance, installedVersion, status, progress, onLaun
   )
 
   return (
-    <div style={{ flex: 1, position: 'relative', overflow: 'hidden', background: 'var(--sidebar-bg)' }}>
+    <div className="fade-in" style={{ flex: 1, position: 'relative', overflow: 'hidden', background: 'var(--sidebar-bg)', willChange: 'opacity, transform' }}>
       {/* Background Image with Transition */}
       {!isVideoOnly && (
         <div style={{

@@ -75,22 +75,23 @@ export class SyncManager {
   /**
    * Helper to safely open a file with retry logic for EPERM errors (Common on Windows)
    */
-  async safeOpen(dest, mode, retries = 10, delay = 1000) {
+  async safeOpen(dest, mode, retries = 15, delay = 1000) {
       for (let i = 0; i < retries; i++) {
           try {
-              // On Windows, sometimes just trying to delete/unlink before opening helps
               if (mode === 'w' && i === 0) {
                   try {
                       if (fs.existsSync(dest)) {
-                          fs.chmodSync(dest, 0o666) // Ensure it's writable
+                          fs.chmodSync(dest, 0o666) 
                       }
                   } catch (e) {}
               }
 
-              return await fs.promises.open(dest, mode)
+              const handle = await fs.promises.open(dest, mode)
+              return handle
           } catch (e) {
-              if ((e.code === 'EPERM' || e.code === 'EBUSY' || e.code === 'EACCES') && i < retries - 1) {
-                  this.log(`[FILE-LOCKED] ${dest} is locked (${e.code}), retrying in ${delay}ms... (${i+1}/${retries})`)
+              const isLocked = e.code === 'EPERM' || e.code === 'EBUSY' || e.code === 'EACCES'
+              if (isLocked && i < retries - 1) {
+                  this.log(`[FILE-LOCKED] ${path.basename(dest)} is locked (${e.code}), retrying... (${i+1}/${retries})`)
                   await this.sleep(delay)
                   continue
               }
@@ -110,12 +111,12 @@ export class SyncManager {
         signal = null
     } = options
 
-    this.log(`[DOWNLOAD] Starting download for ${path.basename(dest)} from ${url}`)
+    const fileName = path.basename(dest)
+    this.log(`[DOWNLOAD] Starting download for ${fileName}`)
     
-    // 🚨 Use a temporary file to avoid locking issues during write
     const tempDest = `${dest}.tmp`
     if (fs.existsSync(tempDest)) {
-        try { fs.unlinkSync(tempDest) } catch(e) {}
+        try { fs.chmodSync(tempDest, 0o666); fs.unlinkSync(tempDest) } catch(e) {}
     }
 
     let attempt = 0
@@ -124,40 +125,33 @@ export class SyncManager {
         
         let fd = null
         try {
-            // Check if file exists and has correct size (if possible)
-            try {
-                const stats = await fs.promises.stat(dest)
-                if (checkSize) {
+            // Pre-check size
+            if (checkSize && fs.existsSync(dest)) {
+                try {
+                    const stats = await fs.promises.stat(dest)
                     const head = await axios.head(url, {
-                        headers: {
-                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-                        },
-                        timeout: 15000
+                        headers: { 'User-Agent': 'Mozilla/5.0' },
+                        timeout: 10000
                     })
                     const remoteSize = parseInt(head.headers['content-length'], 10)
-                    if (remoteSize && remoteSize === stats.size) {
-                        this.log(`[DOWNLOAD] File already exists and matches size: ${path.basename(dest)}`)
-                        return true // Skip download
+                    if (remoteSize > 0 && stats.size === remoteSize) {
+                        this.log(`[DOWNLOAD] Already exists: ${fileName}`)
+                        return true
                     }
-                }
-            } catch (e) {
-                // File doesn't exist or error checking, proceed to download
+                } catch (e) { /* Fallback to download */ }
             }
             
             const response = await axios({
                 method: 'get',
                 url: url,
                 responseType: 'stream',
-                headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-                },
+                headers: { 'User-Agent': 'Mozilla/5.0' },
                 timeout: 30000
             })
 
-            const totalLength = response.headers['content-length']
+            const totalLength = parseInt(response.headers['content-length'], 10) || 0
             let downloaded = 0
             
-            // Use safeOpen for downloadFile as well to prevent EPERM
             fd = await this.safeOpen(tempDest, 'w')
             const writer = fs.createWriteStream(null, { fd: fd.fd, autoClose: false })
             
@@ -166,8 +160,8 @@ export class SyncManager {
             response.data.on('data', (chunk) => {
                 downloaded += chunk.length
                 const now = Date.now()
-                if (totalLength && (now - lastOnProgress > 100 || downloaded === parseInt(totalLength, 10))) {
-                    onProgress(downloaded, parseInt(totalLength, 10))
+                if (totalLength && (now - lastOnProgress > 100 || downloaded === totalLength)) {
+                    onProgress(downloaded, totalLength)
                     lastOnProgress = now
                 }
             })
@@ -189,35 +183,32 @@ export class SyncManager {
                 })
             })
 
-            // 🚨 FINAL VERIFICATION: Check file size against content-length if available
-            if (totalLength) {
+            if (totalLength > 0) {
                 const stat = await fd.stat()
-                if (stat.size !== parseInt(totalLength, 10)) {
-                    throw new Error(`Download incomplete: expected ${totalLength} bytes but got ${stat.size} bytes.`)
+                if (stat.size !== totalLength) {
+                    throw new Error(`Incomplete: expected ${totalLength} but got ${stat.size}`)
                 }
             }
 
-            // Close file properly before rename
             await fd.close()
             fd = null
 
-            // 🔄 RENAME (Atomic Move)
+            // Atomic rename with retries
             if (fs.existsSync(dest)) {
                  try { fs.chmodSync(dest, 0o666); fs.unlinkSync(dest) } catch(e) {}
             }
             
-            // Safe Rename with Retry
-            for (let i = 0; i < 5; i++) {
+            for (let i = 0; i < 10; i++) {
                 try {
                     fs.renameSync(tempDest, dest)
                     break
                 } catch(e) {
-                    if (i === 4) throw e
+                    if (i === 9) throw e
                     await this.sleep(500)
                 }
             }
 
-            this.log(`[DOWNLOAD] Successfully downloaded and moved: ${path.basename(dest)}`)
+            this.log(`[DOWNLOAD] Success: ${fileName}`)
             return true
 
         } catch (error) {
@@ -226,7 +217,7 @@ export class SyncManager {
                 fd = null
             }
             attempt++
-            this.log(`[DOWNLOAD] Failed (Attempt ${attempt}/${retries}): ${path.basename(dest)} - ${error.message}`)
+            this.log(`[DOWNLOAD] Error (Attempt ${attempt}/${retries}): ${fileName} - ${error.message}`)
             if (attempt > retries) {
                 try { if (fs.existsSync(tempDest)) fs.unlinkSync(tempDest) } catch(e) {}
                 throw error
@@ -241,12 +232,11 @@ export class SyncManager {
    */
   async downloadLargeFile(url, dest, options = {}) {
      const { signal = null } = options
-     this.log(`[LARGE-DOWNLOAD] Starting chunked download for ${path.basename(dest)} from ${url}`)
+     const fileName = path.basename(dest)
+     this.log(`[LARGE-DOWNLOAD] Starting chunked download: ${fileName}`)
      
-     // 🚨 Use a temporary file
      const tempDest = `${dest}.tmp`
 
-     // 🚨 Pre-emptive check: If temp file exists, try to make it writable and delete it
      if (fs.existsSync(tempDest)) {
          try {
              fs.chmodSync(tempDest, 0o666)
@@ -256,108 +246,89 @@ export class SyncManager {
          }
      }
 
-     // 1. Get file size
      let totalSize = 0
      try {
          if (signal?.aborted) throw new Error('Download aborted')
          const head = await axios.head(url, {
-             headers: {
-                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-             },
+             headers: { 'User-Agent': 'Mozilla/5.0' },
              timeout: 15000
          })
          totalSize = parseInt(head.headers['content-length'], 10)
          
-         // Check if server supports Range requests
          const acceptRanges = head.headers['accept-ranges']
          if (acceptRanges !== 'bytes' && !head.headers['content-range']) {
-             this.log("[LARGE-DOWNLOAD] Server does not explicitly support Range requests, falling back to stream.")
+             this.log("[LARGE-DOWNLOAD] No range support, falling back to stream.")
              return this.downloadFile(url, dest, options)
          }
 
      } catch (e) {
-         if (signal?.aborted || e.message === 'Download aborted') throw new Error('Download aborted')
-         this.log(`[LARGE-DOWNLOAD] Could not determine file size or server capabilities: ${e.message}. Falling back to stream.`)
+         if (signal?.aborted) throw new Error('Download aborted')
+         this.log(`[LARGE-DOWNLOAD] Size check failed: ${e.message}. Falling back.`)
          return this.downloadFile(url, dest, options)
      }
 
      if (!totalSize) return this.downloadFile(url, dest, options)
 
-     // 2. Setup chunks
      const chunks = Math.ceil(totalSize / CHUNK_SIZE)
-     this.log(`Downloading ${path.basename(dest)} in ${chunks} chunks (Total: ${(totalSize/1024/1024).toFixed(2)} MB)`)
+     this.log(`Downloading ${fileName} in ${chunks} chunks (${(totalSize/1024/1024).toFixed(2)} MB)`)
 
      const fd = await this.safeOpen(tempDest, 'w')
      let downloadedTotal = 0
+     let abortError = null
      
      const downloadChunk = async (i) => {
-         if (signal?.aborted) throw new Error('Download aborted')
+         if (signal?.aborted || abortError) return
          
          const start = i * CHUNK_SIZE
          const end = Math.min(start + CHUNK_SIZE - 1, totalSize - 1)
          
          let retries = 0
          while (retries <= MAX_RETRIES) {
-             if (signal?.aborted) throw new Error('Download aborted')
+             if (signal?.aborted || abortError) return
              try {
                  const startTime = Date.now()
-                const response = await axios({
+                 const response = await axios({
                     method: 'get',
                     url: url,
-                    headers: {
-                        Range: `bytes=${start}-${end}`
-                    },
+                    headers: { Range: `bytes=${start}-${end}` },
                     responseType: 'arraybuffer',
-                    timeout: 30000
-                })
+                    timeout: 45000
+                 })
                  
-                 if (signal?.aborted) throw new Error('Download aborted')
+                 if (signal?.aborted || abortError) return
 
                  const buffer = Buffer.from(response.data)
-                 // Write at specific position (safe for concurrency)
                  await fd.write(buffer, 0, buffer.length, start)
                  
-                 // Throttling
                  const maxSpeed = getStore().get('maxDownloadSpeed', 0)
                  if (maxSpeed > 0) {
                      const bps = maxSpeed * 1024 * 1024
                      const expectedTime = (buffer.length / bps) * 1000
                      const actualTime = Date.now() - startTime
-                     if (actualTime < expectedTime) {
-                         await this.sleep(expectedTime - actualTime)
-                     }
+                     if (actualTime < expectedTime) await this.sleep(expectedTime - actualTime)
                  }
 
-                 // Update progress
                  downloadedTotal += buffer.length
-                 // Explicitly free buffer memory
                  response.data = null 
                  
                  this.sendProgress('Downloading Modpack...', downloadedTotal, totalSize)
-                 return // Success
+                 return 
              } catch (e) {
-                 if (signal?.aborted || e.message === 'Download aborted') throw new Error('Download aborted')
+                 if (signal?.aborted || abortError) return
                  retries++
-                 if (retries > MAX_RETRIES) {
-                     throw e
-                 }
-                 await this.sleep(1000 * retries)
+                 if (retries > MAX_RETRIES) throw e
+                 await this.sleep(1500 * retries)
              }
          }
      }
 
-     // Parallel Execution with Limit
      const queue = Array.from({ length: chunks }, (_, i) => i)
      const workers = []
-     
-     // Shared error state to stop other workers
-     let abortError = null
      const concurrency = getStore().get('maxConcurrentDownloads', 5)
 
      for (let w = 0; w < concurrency; w++) {
          workers.push((async () => {
-             while (queue.length > 0) {
-                 if (abortError || signal?.aborted) return
+             while (queue.length > 0 && !abortError && !signal?.aborted) {
                  const i = queue.shift()
                  if (i !== undefined) {
                      try {
@@ -376,10 +347,9 @@ export class SyncManager {
         if (abortError) throw abortError
         if (signal?.aborted) throw new Error('Download aborted')
 
-        // 🚨 FINAL VERIFICATION: Ensure we actually downloaded all bytes
         const stat = await fd.stat()
         if (stat.size !== totalSize) {
-            throw new Error(`Download incomplete: expected ${totalSize} bytes but got ${stat.size} bytes. Please check your internet.`)
+            throw new Error(`Incomplete: expected ${totalSize} but got ${stat.size}`)
         }
 
      } catch (e) {
@@ -390,23 +360,21 @@ export class SyncManager {
      
      await fd.close()
 
-     // 🔄 RENAME (Atomic Move)
      if (fs.existsSync(dest)) {
           try { fs.chmodSync(dest, 0o666); fs.unlinkSync(dest) } catch(e) {}
      }
      
-     // Safe Rename with Retry
-     for (let i = 0; i < 5; i++) {
+     for (let i = 0; i < 10; i++) {
          try {
              fs.renameSync(tempDest, dest)
              break
          } catch(e) {
-             if (i === 4) throw e
+             if (i === 9) throw e
              await this.sleep(500)
          }
      }
 
-     this.log(`[LARGE-DOWNLOAD] Successfully downloaded and moved: ${path.basename(dest)}`)
+     this.log(`[LARGE-DOWNLOAD] Success: ${fileName}`)
      return true
   }
 
@@ -418,9 +386,9 @@ export class SyncManager {
       const { signal = null } = options
 
       try {
-          await fs.promises.access(modsFolder)
-      } catch {
-          await fs.promises.mkdir(modsFolder, { recursive: true })
+          if (!fs.existsSync(modsFolder)) await fs.promises.mkdir(modsFolder, { recursive: true })
+      } catch (e) {
+          this.log(`[SYNC-ERROR] Could not create mods folder: ${e.message}`)
       }
 
       this.log(`Syncing ${mods.length} mods...`)
@@ -429,70 +397,42 @@ export class SyncManager {
       const total = mods.length
       const store = getStore()
       const modCache = store.get('modSizeCache', {})
-      const CACHE_EXPIRATION_MS = 7 * 24 * 60 * 60 * 1000 // 7 days
+      const CACHE_EXPIRATION_MS = 14 * 24 * 60 * 60 * 1000 // 14 days
       const nowTime = Date.now()
       
-      // Store progress of each running download (key: modUrl, value: percentage 0-1)
       const currentProgress = new Map()
 
-      // Helper to calculate and send global progress
       const updateGlobalProgress = () => {
-          // Base progress from completed files (each counts as 100%)
           let totalProgressPoints = completed * 100
-          
-          // Add partial progress from active downloads
-          for (const p of currentProgress.values()) {
-              totalProgressPoints += p
-          }
-          
-          // Calculate average percentage
-          // Max points = total * 100
+          for (const p of currentProgress.values()) totalProgressPoints += p
           const globalPercent = total > 0 ? (totalProgressPoints / total) : 0
-          
-          // Send as 0-100 range
           this.sendProgress('Checking/Downloading Mods', Math.min(globalPercent, 99.9), 100)
       }
 
-      // Simple queue for concurrency
       const queue = [...mods]
-      
       let abortError = null
 
       const next = async () => {
           if (queue.length === 0 || abortError || signal?.aborted) return
           const modUrl = queue.shift()
           
-          // Initialize progress for this mod
           currentProgress.set(modUrl, 0)
           
           try {
             if (signal?.aborted) throw new Error('Download aborted')
 
-            // Fix 3: Robust Filename Parsing with Fallback
             let fileName = null
             try {
-                // Try to get filename from URL pathname first
                 const urlObj = new URL(modUrl)
-                const urlPath = decodeURIComponent(urlObj.pathname)
-                fileName = urlPath.split('/').pop()
-                
-                // If pathname doesn't have a filename (e.g. ends in /), try query params
+                fileName = path.basename(decodeURIComponent(urlObj.pathname))
                 if (!fileName || !fileName.includes('.')) {
-                    const params = urlObj.searchParams
-                    // Common params: file, name, filename
-                    fileName = params.get('file') || params.get('name') || params.get('filename') || fileName
+                    fileName = urlObj.searchParams.get('file') || urlObj.searchParams.get('name') || fileName
                 }
             } catch (e) {
-                // Fallback for malformed URLs
-                try {
-                    fileName = decodeURIComponent(modUrl.split('/').pop().split('?')[0])
-                } catch (e2) {
-                    fileName = null
-                }
+                fileName = decodeURIComponent(modUrl.split('/').pop().split('?')[0])
             }
 
             if (!fileName || fileName.trim() === '') {
-                this.log(`[SYNC-WARN] Could not determine filename for ${modUrl}, skipping...`)
                 completed++
                 updateGlobalProgress()
                 return
@@ -500,63 +440,36 @@ export class SyncManager {
 
             const dest = path.join(modsFolder, fileName)
 
-            // Fix 1: Cache Check with Expiration & Cleanup logic
             let shouldDownload = false
             try {
                 const stat = await fs.promises.stat(dest)
                 const cached = modCache[fileName]
-                
-                // Validate cache entry: must exist, have size, and be less than 7 days old
-                const isCacheValid = cached && 
-                                   typeof cached === 'object' && 
-                                   cached.size === stat.size && 
-                                   (nowTime - (cached.timestamp || 0) < CACHE_EXPIRATION_MS)
+                const isCacheValid = cached && typeof cached === 'object' && cached.size === stat.size && (nowTime - (cached.timestamp || 0) < CACHE_EXPIRATION_MS)
 
                 if (isCacheValid) {
-                    // Trust cache, avoid HEAD request
                     shouldDownload = false
                 } else {
                     try {
-                        // If file exists but no valid cache, or cache expired, check remote
                         const head = await axios.head(modUrl, { 
-                            headers: {
-                                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-                            },
+                            headers: { 'User-Agent': 'Mozilla/5.0' },
                             timeout: 10000 
                         })
                         const remoteSize = parseInt(head.headers['content-length'], 10)
-                        
                         if (remoteSize > 0 && stat.size !== remoteSize) {
-                            this.log(`[SYNC] Size mismatch for ${fileName}: local=${stat.size}, remote=${remoteSize}. Redownloading...`)
                             shouldDownload = true
                         } else {
                             shouldDownload = false
-                            // Update cache with fresh timestamp even if size matched
-                            if (remoteSize > 0) {
-                                modCache[fileName] = { size: remoteSize, timestamp: nowTime }
-                            }
+                            if (remoteSize > 0) modCache[fileName] = { size: remoteSize, timestamp: nowTime }
                         }
                     } catch (headErr) {
-                        // Network error during HEAD -> trust local file if it exists and looks valid (not 0 bytes)
-                        if (stat.size > 0) {
-                            this.log(`[CACHE] HEAD check failed for ${fileName} (${headErr.message}), trusting existing local file.`)
-                            shouldDownload = false
-                        } else {
-                            shouldDownload = true
-                        }
+                        shouldDownload = stat.size === 0
                     }
                 }
             } catch (stateErr) {
-                // File doesn't exist
                 shouldDownload = true
             }
 
             if (shouldDownload) {
-                // Before downloading, ensure any existing partial file is removed
-                if (fs.existsSync(dest)) {
-                    try { fs.chmodSync(dest, 0o666); fs.unlinkSync(dest) } catch(e) {}
-                }
-
                 await this.downloadFile(modUrl, dest, {
                     signal,
                     onProgress: (loaded, full) => {
@@ -567,15 +480,12 @@ export class SyncManager {
                         }
                     }
                 })
-
-                // Fix 1: Only save to cache AFTER successful download
                 try {
                     const finalStat = await fs.promises.stat(dest)
                     modCache[fileName] = { size: finalStat.size, timestamp: nowTime }
                 } catch (e) {}
             }
 
-            // Success path
             completed++
             currentProgress.delete(modUrl)
             updateGlobalProgress()
@@ -587,54 +497,30 @@ export class SyncManager {
                   return
               }
               console.error(`Failed to sync mod: ${modUrl}`, e)
-              abortError = new Error(`Failed to download mod: ${path.basename(modUrl)}`)
+              abortError = e
               return
           }
 
-          // Fix 2: Check abortError before next() to avoid race condition
-          if (!abortError && !signal?.aborted) {
-              await next()
-          }
+          if (!abortError && !signal?.aborted) await next()
       }
 
-      // Start initial batch
       const workers = []
       const concurrency = store.get('maxConcurrentDownloads', 5)
-      for (let i = 0; i < Math.min(concurrency, mods.length); i++) {
-          workers.push(next())
-      }
+      for (let i = 0; i < Math.min(concurrency, mods.length); i++) workers.push(next())
       
       await Promise.all(workers)
       
-      // Fix 2: Only save cache if there were no errors in the entire session
-      if (abortError) {
-          throw abortError
-      }
+      if (abortError) throw abortError
+      if (signal?.aborted) throw new Error('Download aborted')
 
-      if (signal?.aborted) {
-          throw new Error('Download aborted')
-      }
-
-      // 🧹 CACHE CLEANUP: Remove entries older than 14 days to prevent bloat
-      const CLEANUP_THRESHOLD = 14 * 24 * 60 * 60 * 1000
+      // Cache Cleanup
+      const CLEANUP_THRESHOLD = 30 * 24 * 60 * 60 * 1000
       Object.keys(modCache).forEach(key => {
-          const entry = modCache[key]
-          if (entry && typeof entry === 'object') {
-              if (nowTime - (entry.timestamp || 0) > CLEANUP_THRESHOLD) {
-                  delete modCache[key]
-              }
-          } else {
-              // Cleanup old format (simple size number)
-              delete modCache[key]
-          }
+          if (!modCache[key] || nowTime - (modCache[key].timestamp || 0) > CLEANUP_THRESHOLD) delete modCache[key]
       })
 
-      // Save updated size cache only on complete success
       store.set('modSizeCache', modCache)
-
-      // Final progress to 100%
       this.sendProgress('Checking/Downloading Mods', 100, 100)
-      this.log("Mods sync completed.")
   }
 
   /**

@@ -9,6 +9,7 @@ export function setupStore(ipcMain) {
       ram: store.get('ram', 4096),
       systemRam: Math.round(os.totalmem() / 1024 / 1024), // Add system RAM in MB
       closeBehavior: store.get('closeBehavior', 'ask'),
+      onLaunchBehavior: store.get('onLaunchBehavior', 'tray'), // New: Default to tray on launch
       bgAnimation: store.get('bgAnimation', false),
       javaPath: store.get('javaPath', ''),
       instances: store.get('instances', []),

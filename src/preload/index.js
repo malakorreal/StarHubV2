@@ -88,6 +88,12 @@ const api = {
     ipcRenderer.on('achievement-unlocked', listener)
     return () => ipcRenderer.removeListener('achievement-unlocked', listener)
   },
+  onOpenRepairFromTray: (callback) => {
+    ipcRenderer.removeAllListeners('open-repair-from-tray')
+    const listener = (event, value) => callback(value)
+    ipcRenderer.on('open-repair-from-tray', listener)
+    return () => ipcRenderer.removeListener('open-repair-from-tray', listener)
+  },
   // Backup
   backupInstanceData: (instance) => ipcRenderer.invoke('backup-instance-data', instance),
   // RPC

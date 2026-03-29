@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, ipcMain, Tray, Menu } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, Tray, Menu, nativeImage } from 'electron'
 import { join } from 'path'
 import { promises as fs } from 'fs'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
@@ -15,6 +15,24 @@ import { autoUpdater } from 'electron-updater'
 
 let mainWindow
 let tray = null
+
+// ----------------------------------------------------------------------
+// 🔒 SINGLE INSTANCE LOCK
+// ----------------------------------------------------------------------
+const gotTheLock = app.requestSingleInstanceLock()
+
+if (!gotTheLock) {
+  app.quit()
+} else {
+  app.on('second-instance', (event, commandLine, workingDirectory) => {
+    // Someone tried to run a second instance, we should focus our window.
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore()
+      if (!mainWindow.isVisible()) mainWindow.show()
+      mainWindow.focus()
+    }
+  })
+}
 
 import { getUserAchievements, getAllAchievements, checkAndGrantLaunchAchievements } from './supabase'
 
@@ -304,10 +322,36 @@ app.whenReady().then(() => {
   })
 
   // Tray
-  tray = new Tray(icon)
+  const trayIcon = nativeImage.createFromPath(icon)
+  tray = new Tray(trayIcon)
   const contextMenu = Menu.buildFromTemplate([
-    { label: 'Open StarHub', click: () => mainWindow.show() },
-    { label: 'Quit', click: () => app.quit() }
+    { 
+        label: '  Open StarHub', 
+        icon: trayIcon.resize({ width: 16, height: 16 }),
+        click: () => {
+            if (mainWindow) {
+                mainWindow.show()
+                mainWindow.focus()
+            }
+        } 
+    },
+    { 
+        label: '  Fix launcher (Repair)', 
+        click: () => {
+            if (mainWindow) {
+                mainWindow.show()
+                mainWindow.focus()
+                mainWindow.webContents.send('open-repair-from-tray')
+            }
+        }
+    },
+    { type: 'separator' },
+    { 
+        label: '  Exit', 
+        click: () => {
+            app.quit()
+        } 
+    }
   ])
   tray.setToolTip('StarHub Launcher')
   tray.setContextMenu(contextMenu)

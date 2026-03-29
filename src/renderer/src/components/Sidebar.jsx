@@ -87,7 +87,9 @@ function Sidebar({ instances, selectedInstance, onSelectInstance, onRefresh, isR
             paddingTop: '40px', 
             borderRight: '1px solid var(--border-color)',
             zIndex: 100,
-            transition: 'width 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)'
+            transition: 'width 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)',
+            position: 'relative',
+            willChange: 'transform'
         }}
     >
       <div style={{ 
@@ -261,12 +263,12 @@ function Sidebar({ instances, selectedInstance, onSelectInstance, onRefresh, isR
                     <div style={{ fontSize: '1em', fontWeight: '800', color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{user ? user.name : 'Guest'}</div>
                   </div>
                   
-                  {/* Cool Banner System for Admin/Support */}
+                  {/* Banner Rank System without Emojis and with Cool Animations */}
                   {user?.account_type && (user.account_type === 'admin' || user.account_type === 'support') ? (
-                      <div style={{ 
-                          marginTop: '4px',
-                          fontSize: '0.6em', 
-                          padding: '3px 10px', 
+                      <div className={`rank-banner-${user.account_type}`} style={{ 
+                          marginTop: '6px',
+                          fontSize: '0.65em', 
+                          padding: '3px 12px', 
                           borderRadius: '6px', 
                           background: user.account_type === 'admin' ? 
                                      'linear-gradient(90deg, #ff4757, #ff6b81, #ff4757)' : 
@@ -275,30 +277,36 @@ function Sidebar({ instances, selectedInstance, onSelectInstance, onRefresh, isR
                           color: '#fff',
                           fontWeight: '900',
                           textTransform: 'uppercase',
-                          letterSpacing: '1px',
+                          letterSpacing: '1.5px',
                           display: 'inline-flex',
                           alignItems: 'center',
-                          gap: '5px',
                           width: 'fit-content',
                           boxShadow: user.account_type === 'admin' ? 
-                                     '0 2px 10px rgba(255, 71, 87, 0.4)' : 
-                                     '0 2px 10px rgba(46, 213, 115, 0.4)',
-                          animation: 'shimmer 2s linear infinite'
+                                     '0 0 15px rgba(255, 71, 87, 0.5)' : 
+                                     '0 0 15px rgba(46, 213, 115, 0.5)',
+                          position: 'relative',
+                          overflow: 'hidden'
                       }}>
                           <style>{`
                               @keyframes shimmer {
                                   0% { background-position: 0% center; }
                                   100% { background-position: 200% center; }
                               }
-                              @keyframes pulse {
-                                  0% { transform: scale(1); }
-                                  50% { transform: scale(1.02); }
-                                  100% { transform: scale(1); }
+                              @keyframes glow-admin {
+                                  0%, 100% { box-shadow: 0 0 10px rgba(255, 71, 87, 0.4), inset 0 0 5px rgba(255, 255, 255, 0.2); }
+                                  50% { box-shadow: 0 0 20px rgba(255, 71, 87, 0.8), inset 0 0 10px rgba(255, 255, 255, 0.4); }
+                              }
+                              @keyframes glow-support {
+                                  0%, 100% { box-shadow: 0 0 10px rgba(46, 213, 115, 0.4), inset 0 0 5px rgba(255, 255, 255, 0.2); }
+                                  50% { box-shadow: 0 0 20px rgba(46, 213, 115, 0.8), inset 0 0 10px rgba(255, 255, 255, 0.4); }
+                              }
+                              .rank-banner-admin {
+                                  animation: shimmer 2s linear infinite, glow-admin 3s ease-in-out infinite;
+                              }
+                              .rank-banner-support {
+                                  animation: shimmer 2s linear infinite, glow-support 3s ease-in-out infinite;
                               }
                           `}</style>
-                          <span style={{ fontSize: '1.2em' }}>
-                            {user.account_type === 'admin' ? '👑' : '🛡️'}
-                          </span>
                           {user.account_type}
                       </div>
                   ) : (
