@@ -128,17 +128,18 @@ export function setupLauncher(ipcMain, mainWindow) {
     if (signal?.aborted) throw new Error('Launch aborted')
 
     if (forceRepair) {
-        // 🚨 CLEANUP: Remove any .zip files in root to avoid disk space issues
+        // 🚨 CLEANUP: Remove any .zip or .tmp files in root to avoid disk space issues
         if (fs.existsSync(rootPath)) {
             try {
                 const existingFiles = fs.readdirSync(rootPath)
                 for (const file of existingFiles) {
-                    if (file.toLowerCase().endsWith('.zip')) {
+                    const lowerFile = file.toLowerCase()
+                    if (lowerFile.endsWith('.zip') || lowerFile.endsWith('.tmp')) {
                         const fullPath = path.join(rootPath, file)
                         try {
                             fs.chmodSync(fullPath, 0o666)
                             fs.rmSync(fullPath, { force: true })
-                            console.log(`[CLEANUP] Deleted old zip: ${file}`)
+                            console.log(`[CLEANUP] Deleted old file: ${file}`)
                         } catch (e) {
                             console.warn(`[CLEANUP] Failed to delete ${file}: ${e.message}`)
                         }
@@ -206,23 +207,28 @@ export function setupLauncher(ipcMain, mainWindow) {
         console.log(`[ZIP] needsDownload: ${needsDownload} (forceRepair: ${forceRepair}, zipExists: ${fs.existsSync(zipPath)})`)
         
         const tryDownloadModpack = async () => {
+             const tempZipPath = `${zipPath}.tmp`
              try {
                 await syncManager.downloadLargeFile(instance.modpackUrl, zipPath, { signal })
              } catch (e) {
-                // If failed or aborted, delete partial zip so it doesn't block next attempt
-                if (fs.existsSync(zipPath)) {
-                    try { 
-                        // Retry logic for EPERM deletion
-                        for (let i = 0; i < 5; i++) {
-                            try {
-                                fs.rmSync(zipPath, { force: true })
-                                break
-                            } catch(err) {
-                                if (i === 4) break
-                                await new Promise(r => setTimeout(r, 500))
+                // If failed or aborted, delete partial zip files so they don't block next attempt
+                const filesToDelete = [zipPath, tempZipPath]
+                for (const pathToDelete of filesToDelete) {
+                    if (fs.existsSync(pathToDelete)) {
+                        try { 
+                            // Retry logic for EPERM deletion
+                            for (let i = 0; i < 5; i++) {
+                                try {
+                                    fs.chmodSync(pathToDelete, 0o666)
+                                    fs.rmSync(pathToDelete, { force: true })
+                                    break
+                                } catch(err) {
+                                    if (i === 4) break
+                                    await new Promise(r => setTimeout(r, 500))
+                                }
                             }
-                        }
-                    } catch(err) {}
+                        } catch(err) {}
+                    }
                 }
 
                 if (instance.modpackMirrorUrl && !signal?.aborted) {

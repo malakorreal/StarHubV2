@@ -78,10 +78,14 @@ export class SyncManager {
   async safeOpen(dest, mode, retries = 15, delay = 1000) {
       for (let i = 0; i < retries; i++) {
           try {
-              if (mode === 'w' && i === 0) {
+              if (mode === 'w') {
                   try {
                       if (fs.existsSync(dest)) {
                           fs.chmodSync(dest, 0o666) 
+                          // If it's a new write and we're retrying, try to delete it first
+                          if (i > 0) {
+                              try { fs.unlinkSync(dest) } catch(e) {}
+                          }
                       }
                   } catch (e) {}
               }
@@ -92,6 +96,8 @@ export class SyncManager {
               const isLocked = e.code === 'EPERM' || e.code === 'EBUSY' || e.code === 'EACCES'
               if (isLocked && i < retries - 1) {
                   this.log(`[FILE-LOCKED] ${path.basename(dest)} is locked (${e.code}), retrying... (${i+1}/${retries})`)
+                  // On Windows, EPERM often means an antivirus is scanning the file or it's locked by another handle.
+                  // Small delay then retry.
                   await this.sleep(delay)
                   continue
               }
@@ -116,7 +122,15 @@ export class SyncManager {
     
     const tempDest = `${dest}.tmp`
     if (fs.existsSync(tempDest)) {
-        try { fs.chmodSync(tempDest, 0o666); fs.unlinkSync(tempDest) } catch(e) {}
+        try { 
+            fs.chmodSync(tempDest, 0o666)
+            // Retry deletion for .tmp if it exists
+            for (let i = 0; i < 5; i++) {
+                try { fs.unlinkSync(tempDest); break } catch(e) { if (i === 4) throw e; await this.sleep(500) }
+            }
+        } catch(e) {
+            this.log(`[DOWNLOAD] Warning: Could not delete existing temp file ${tempDest}: ${e.message}`)
+        }
     }
 
     let attempt = 0
@@ -240,7 +254,16 @@ export class SyncManager {
      if (fs.existsSync(tempDest)) {
          try {
              fs.chmodSync(tempDest, 0o666)
-             fs.unlinkSync(tempDest)
+             // Retry deletion for .tmp if it exists
+             for (let i = 0; i < 10; i++) {
+                 try { 
+                    fs.unlinkSync(tempDest)
+                    break 
+                 } catch(e) { 
+                    if (i === 9) throw e
+                    await this.sleep(1000) 
+                 }
+             }
          } catch (e) {
              this.log(`[LARGE-DOWNLOAD] Temp cleanup warning: ${e.message}`)
          }
@@ -353,7 +376,9 @@ export class SyncManager {
         }
 
      } catch (e) {
-        await fd.close()
+        if (fd) {
+            try { await fd.close() } catch(err) {}
+        }
         try { if (fs.existsSync(tempDest)) fs.unlinkSync(tempDest) } catch(err) {}
         throw e
      }
