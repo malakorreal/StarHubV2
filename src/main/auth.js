@@ -98,26 +98,41 @@ export function setupAuth(ipcMain, mainWindow) {
 
         // 🟢 SYNC TO SUPABASE & CHECK BAN
         console.log(`[AUTH] Syncing user ${mclcToken.name} to database...`)
-        const dbUsers = await syncUserToDb({ uuid: mclcToken.uuid, name: mclcToken.name })
-        const dbUser = Array.isArray(dbUsers) ? dbUsers[0] : null
-        
-        const isBanned = await checkUserBanStatus(mclcToken.uuid)
-        if (isBanned) {
-            console.error(`[AUTH] User ${mclcToken.name} is BANNED.`)
-            return { success: false, error: { message: 'USER_BANNED' } }
-        }
-        
-        // Update RPC with new user info
-        setActivity('Browsing StarHub', 'In Launcher')
-        
-        return { 
-            success: true, 
-            profile: { 
-                name: mclcToken.name, 
-                id: mclcToken.uuid,
-                account_type: dbUser?.account_type || 'normal'
-            }, 
-            access_token: mclcToken 
+        try {
+            const dbUsers = await syncUserToDb({ uuid: mclcToken.uuid, name: mclcToken.name })
+            console.log(`[AUTH] Sync result:`, dbUsers ? 'SUCCESS' : 'FAILED')
+            const dbUser = Array.isArray(dbUsers) ? dbUsers[0] : null
+            
+            const isBanned = await checkUserBanStatus(mclcToken.uuid)
+            if (isBanned) {
+                console.error(`[AUTH] User ${mclcToken.name} is BANNED.`)
+                return { success: false, error: { message: 'USER_BANNED' } }
+            }
+            
+            // Update RPC with new user info
+            setActivity('Browsing StarHub', 'In Launcher')
+            
+            return { 
+                success: true, 
+                profile: { 
+                    name: mclcToken.name, 
+                    id: mclcToken.uuid,
+                    account_type: dbUser?.account_type || 'normal'
+                }, 
+                access_token: mclcToken 
+            }
+        } catch (dbErr) {
+            console.error(`[AUTH] Database sync error:`, dbErr)
+            // Still allow login even if DB fails, but log it
+            return { 
+                success: true, 
+                profile: { 
+                    name: mclcToken.name, 
+                    id: mclcToken.uuid,
+                    account_type: 'normal'
+                }, 
+                access_token: mclcToken 
+            }
         }
     } catch (err) {
         console.error("Login Error:", err)
@@ -170,24 +185,38 @@ export function setupAuth(ipcMain, mainWindow) {
             
             // 🟢 SYNC TO SUPABASE & CHECK BAN ON REFRESH
             console.log(`[AUTH] Syncing user ${currentAccount.name} to database (session check)...`)
-            const dbUsers = await syncUserToDb({ uuid: currentAccount.uuid, name: currentAccount.name })
-            const dbUser = Array.isArray(dbUsers) ? dbUsers[0] : null
-            
-            const isBanned = await checkUserBanStatus(currentAccount.uuid)
-            if (isBanned) {
-                console.error(`[AUTH] User ${currentAccount.name} is BANNED.`)
-                return { success: false, error: { message: 'USER_BANNED' } }
-            }
+            try {
+                const dbUsers = await syncUserToDb({ uuid: currentAccount.uuid, name: currentAccount.name })
+                console.log(`[AUTH] Refresh sync result:`, dbUsers ? 'SUCCESS' : 'FAILED')
+                const dbUser = Array.isArray(dbUsers) ? dbUsers[0] : null
+                
+                const isBanned = await checkUserBanStatus(currentAccount.uuid)
+                if (isBanned) {
+                    console.error(`[AUTH] User ${currentAccount.name} is BANNED.`)
+                    return { success: false, error: { message: 'USER_BANNED' } }
+                }
 
-            setActivity('Browsing StarHub', 'In Launcher')
-            return { 
-                success: true, 
-                profile: { 
-                    name: currentAccount.name, 
-                    id: currentAccount.uuid,
-                    account_type: dbUser?.account_type || 'normal'
-                }, 
-                access_token: mclcToken 
+                setActivity('Browsing StarHub', 'In Launcher')
+                return { 
+                    success: true, 
+                    profile: { 
+                        name: currentAccount.name, 
+                        id: currentAccount.uuid,
+                        account_type: dbUser?.account_type || 'normal'
+                    }, 
+                    access_token: mclcToken 
+                }
+            } catch (dbErr) {
+                console.error(`[AUTH] Refresh DB sync error:`, dbErr)
+                return { 
+                    success: true, 
+                    profile: { 
+                        name: currentAccount.name, 
+                        id: currentAccount.uuid,
+                        account_type: 'normal'
+                    }, 
+                    access_token: mclcToken 
+                }
             }
         }
         

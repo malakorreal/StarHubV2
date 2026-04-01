@@ -1,7 +1,7 @@
 import axios from 'axios'
 import { getStore } from './store'
 
-const JSON_URL = 'https://api.npoint.io/e941143771dfcea29992' // TODO: Change this to your new API URL (e.g. https://your-app.onrender.com/api/instances)
+const JSON_URL = 'https://api.npoint.io/e941143771dfcea29992' // Primary API URL
 
 export async function getInstances(mainWindow = null, force = false) {
   const store = getStore()
@@ -37,18 +37,15 @@ async function fetchAndNotify(mainWindow, cacheKey) {
 
 async function fetchAndCache(cacheKey) {
   try {
-    const response = await axios.get(JSON_URL + '?t=' + Date.now()) // Anti-cache
+    // Use npoint.io as primary source as requested
+    const response = await axios.get(JSON_URL + '?t=' + Date.now())
     let data = response.data
 
     if (typeof data === 'string') {
-      // Remove comments if any (JSON doesn't support comments but sometimes people add them in Gists)
+      // Remove comments if any
       data = data.replace(/\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "").trim()
     }
 
-    // Handle potential malformed JSON (like missing brackets if user edited raw)
-    // But usually Gist raw is fine. 
-    // If response.data is already an object/array, axios parsed it.
-    
     let instances = []
     if (typeof data === 'object') {
         instances = Array.isArray(data) ? data : [data]
@@ -57,7 +54,6 @@ async function fetchAndCache(cacheKey) {
              instances = JSON.parse(data)
         } catch (e) {
             console.error("JSON Parse error, attempting fix...")
-            // Try to wrap in brackets if it's a list of objects without []
             if (data.trim().startsWith('{') && data.trim().endsWith('}')) {
                  const fixed = `[${data}]`
                  instances = JSON.parse(fixed)

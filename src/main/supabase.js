@@ -4,20 +4,38 @@ import { ACHIEVEMENTS, getAchievementDetails } from './achievements'
 const supabaseUrl = process.env.SUPABASE_URL
 const supabaseKey = process.env.SUPABASE_KEY
 
+console.log('[SUPABASE] Initializing with URL:', supabaseUrl ? 'PRESENT' : 'MISSING')
+console.log('[SUPABASE] Initializing with Key:', supabaseKey ? 'PRESENT' : 'MISSING')
+
 if (!supabaseUrl || !supabaseKey) {
-    console.warn('[SUPABASE] Missing credentials in .env file. Database features will be disabled.')
+    console.error('[SUPABASE] Critical Error: Missing credentials in environment variables.')
 }
 
 export const supabase = (supabaseUrl && supabaseKey) 
     ? createClient(supabaseUrl, supabaseKey) 
     : null
 
+if (supabase) {
+    console.log('[SUPABASE] Client initialized successfully.')
+} else {
+    console.error('[SUPABASE] Client failed to initialize.')
+}
+
 /**
  * Helper to sync user to database
  * Table structure: users (uuid: text primary key, username: text, last_seen: timestamp, is_banned: boolean)
  */
 export async function syncUserToDb(profile) {
-    if (!supabase || !profile || !profile.uuid) return null
+    if (!supabase) {
+        console.warn('[SUPABASE] syncUserToDb skipped: Supabase client not initialized.')
+        return null
+    }
+    if (!profile || !profile.uuid) {
+        console.warn('[SUPABASE] syncUserToDb skipped: Invalid profile data.', profile)
+        return null
+    }
+
+    console.log(`[SUPABASE] Attempting to sync user: ${profile.name} (${profile.uuid})`)
 
     try {
         const { data, error } = await supabase
@@ -26,17 +44,18 @@ export async function syncUserToDb(profile) {
                 uuid: profile.uuid, 
                 username: profile.name, 
                 last_seen: new Date().toISOString(),
-                // We don't overwrite is_banned on upsert, it should be managed from dashboard
             }, { onConflict: 'uuid' })
             .select()
 
         if (error) {
-            console.error('[SUPABASE] Sync error:', error.message)
+            console.error('[SUPABASE] Upsert Error:', error.code, error.message, error.details)
             return null
         }
+        
+        console.log('[SUPABASE] User sync successful.')
         return data
     } catch (e) {
-        console.error('[SUPABASE] Sync exception:', e.message)
+        console.error('[SUPABASE] Sync exception:', e.name, e.message)
         return null
     }
 }
