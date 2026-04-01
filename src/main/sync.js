@@ -62,9 +62,15 @@ export class SyncManager {
   }
 
   log(message) {
-    console.log(`[SyncManager] ${message}`)
+    const formattedMessage = `[SyncManager] ${message}`
+    console.log(formattedMessage)
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-        // Optional: Send logs to UI console if needed
+        // Send logs to UI to help users debug when things look "stuck"
+        this.mainWindow.webContents.send('launch-progress', {
+            type: 'log',
+            message: formattedMessage,
+            timestamp: Date.now()
+        })
     }
   }
 
@@ -120,19 +126,9 @@ export class SyncManager {
     const fileName = path.basename(dest)
     this.log(`[DOWNLOAD] Starting download for ${fileName}`)
     
-    const tempDest = `${dest}.tmp`
-    if (fs.existsSync(tempDest)) {
-        try { 
-            fs.chmodSync(tempDest, 0o666)
-            // Retry deletion for .tmp if it exists
-            for (let i = 0; i < 5; i++) {
-                try { fs.unlinkSync(tempDest); break } catch(e) { if (i === 4) throw e; await this.sleep(500) }
-            }
-        } catch(e) {
-            this.log(`[DOWNLOAD] Warning: Could not delete existing temp file ${tempDest}: ${e.message}`)
-        }
-    }
-
+    // Use unique temp filename to avoid EPERM on open/rename if multiple attempts happen
+    const tempDest = `${dest}.tmp_${Date.now()}_${Math.random().toString(36).substring(7)}`
+    
     let attempt = 0
     while (attempt <= retries) {
         if (signal?.aborted) throw new Error('Download aborted')
@@ -155,6 +151,7 @@ export class SyncManager {
                 } catch (e) { /* Fallback to download */ }
             }
             
+            this.log(`[DOWNLOAD] Opening temp file: ${path.basename(tempDest)}`)
             const response = await axios({
                 method: 'get',
                 url: url,
@@ -208,17 +205,18 @@ export class SyncManager {
             fd = null
 
             // Atomic rename with retries
+            this.log(`[DOWNLOAD] Finalizing: ${fileName}`)
             if (fs.existsSync(dest)) {
                  try { fs.chmodSync(dest, 0o666); fs.unlinkSync(dest) } catch(e) {}
             }
             
-            for (let i = 0; i < 10; i++) {
+            for (let i = 0; i < 15; i++) {
                 try {
                     fs.renameSync(tempDest, dest)
                     break
                 } catch(e) {
-                    if (i === 9) throw e
-                    await this.sleep(500)
+                    if (i === 14) throw e
+                    await this.sleep(1000)
                 }
             }
 
@@ -249,25 +247,8 @@ export class SyncManager {
      const fileName = path.basename(dest)
      this.log(`[LARGE-DOWNLOAD] Starting chunked download: ${fileName}`)
      
-     const tempDest = `${dest}.tmp`
-
-     if (fs.existsSync(tempDest)) {
-         try {
-             fs.chmodSync(tempDest, 0o666)
-             // Retry deletion for .tmp if it exists
-             for (let i = 0; i < 10; i++) {
-                 try { 
-                    fs.unlinkSync(tempDest)
-                    break 
-                 } catch(e) { 
-                    if (i === 9) throw e
-                    await this.sleep(1000) 
-                 }
-             }
-         } catch (e) {
-             this.log(`[LARGE-DOWNLOAD] Temp cleanup warning: ${e.message}`)
-         }
-     }
+     // Use unique temp filename to avoid EPERM
+     const tempDest = `${dest}.tmp_${Date.now()}_${Math.random().toString(36).substring(7)}`
 
      let totalSize = 0
      try {
@@ -315,7 +296,7 @@ export class SyncManager {
                     url: url,
                     headers: { Range: `bytes=${start}-${end}` },
                     responseType: 'arraybuffer',
-                    timeout: 45000
+                    timeout: 45000 // Individual chunk timeout
                  })
                  
                  if (signal?.aborted || abortError) return
@@ -339,6 +320,7 @@ export class SyncManager {
              } catch (e) {
                  if (signal?.aborted || abortError) return
                  retries++
+                 this.log(`[CHUNK-ERROR] Chunk ${i} failed (Attempt ${retries}/${MAX_RETRIES}): ${e.message}`)
                  if (retries > MAX_RETRIES) throw e
                  await this.sleep(1500 * retries)
              }
@@ -385,17 +367,19 @@ export class SyncManager {
      
      await fd.close()
 
+     this.log(`[LARGE-DOWNLOAD] Finalizing: ${fileName}`)
      if (fs.existsSync(dest)) {
           try { fs.chmodSync(dest, 0o666); fs.unlinkSync(dest) } catch(e) {}
      }
      
-     for (let i = 0; i < 10; i++) {
+     for (let i = 0; i < 15; i++) {
          try {
              fs.renameSync(tempDest, dest)
              break
          } catch(e) {
-             if (i === 9) throw e
-             await this.sleep(500)
+             if (i === 14) throw e
+             this.log(`[RENAME-LOCKED] Failed to rename temp file, retrying... (${i+1}/15)`)
+             await this.sleep(1000)
          }
      }
 

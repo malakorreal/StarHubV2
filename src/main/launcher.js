@@ -207,28 +207,26 @@ export function setupLauncher(ipcMain, mainWindow) {
         console.log(`[ZIP] needsDownload: ${needsDownload} (forceRepair: ${forceRepair}, zipExists: ${fs.existsSync(zipPath)})`)
         
         const tryDownloadModpack = async () => {
-             const tempZipPath = `${zipPath}.tmp`
              try {
                 await syncManager.downloadLargeFile(instance.modpackUrl, zipPath, { signal })
              } catch (e) {
-                // If failed or aborted, delete partial zip files so they don't block next attempt
-                const filesToDelete = [zipPath, tempZipPath]
-                for (const pathToDelete of filesToDelete) {
-                    if (fs.existsSync(pathToDelete)) {
-                        try { 
-                            // Retry logic for EPERM deletion
-                            for (let i = 0; i < 5; i++) {
-                                try {
-                                    fs.chmodSync(pathToDelete, 0o666)
-                                    fs.rmSync(pathToDelete, { force: true })
-                                    break
-                                } catch(err) {
-                                    if (i === 4) break
-                                    await new Promise(r => setTimeout(r, 500))
-                                }
+                // If failed or aborted, delete partial zip files
+                // Note: unique temp files in sync.js are cleaned up there, 
+                // but we still try to cleanup the main zipPath if it was partially moved.
+                if (fs.existsSync(zipPath)) {
+                    try { 
+                        // Retry logic for EPERM deletion
+                        for (let i = 0; i < 5; i++) {
+                            try {
+                                fs.chmodSync(zipPath, 0o666)
+                                fs.rmSync(zipPath, { force: true })
+                                break
+                            } catch(err) {
+                                if (i === 4) break
+                                await new Promise(r => setTimeout(r, 500))
                             }
-                        } catch(err) {}
-                    }
+                        }
+                    } catch(err) {}
                 }
 
                 if (instance.modpackMirrorUrl && !signal?.aborted) {
