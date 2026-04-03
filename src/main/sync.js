@@ -79,6 +79,72 @@ export class SyncManager {
   }
 
   /**
+   * Enhanced ignore logic supporting:
+   * - Exact paths: "options.txt", "mods/keep-me.jar"
+   * - Directory: "config/", "screenshots" (matches all contents)
+   * - Wildcards: "*.txt", "logs/*.log", "config/.*"
+   */
+  shouldIgnore(relPath, ignoreList) {
+    if (!relPath) return false
+    
+    // Normalize path (Windows backslashes to forward slashes)
+    const normPath = relPath.replace(/\\/g, '/').toLowerCase().replace(/^\/+/, '')
+    
+    const systemWhitelist = ['figura', 'fragmentskin', 'cache', 'shaderpacks', 'screenshots', 'emotes', 'logs']
+    const combined = [...systemWhitelist, ...(Array.isArray(ignoreList) ? ignoreList : [])]
+
+    return combined.some(pattern => {
+      if (!pattern) return false
+      
+      // Normalize pattern: convert \ to /, remove leading /, and handle "./"
+      let p = String(pattern)
+        .replace(/\\/g, '/')
+        .toLowerCase()
+        .replace(/^\/+/, '')
+        .replace(/\/+\.\/+/g, '/') // "config/./" -> "config/"
+        .replace(/\/+\.$/, '/')    // "config/." -> "config/"
+      
+      // 1. Exact match
+      if (normPath === p) return true
+
+      // 2. Directory match (e.g. "config/" matches "config/file.txt")
+      const dirPattern = p.endsWith('/') ? p : p + '/'
+      if (normPath.startsWith(dirPattern)) return true
+
+      // 3. Simple Wildcard match (e.g. "*.txt")
+      if (p.includes('*')) {
+        // Convert glob-like pattern to regex
+        const regexPattern = p
+          .replace(/[.+^${}()|[\]\\]/g, '\\$&') // Escape regex special chars
+          .replace(/\\\*/g, '.*')               // Convert * to .*
+        
+        try {
+            const regex = new RegExp(`^${regexPattern}$`)
+            if (regex.test(normPath)) return true
+            
+            // Handle "folder/*.ext" style
+            if (p.includes('/') && !p.endsWith('*')) {
+                const folderPart = p.substring(0, p.lastIndexOf('/') + 1)
+                if (normPath.startsWith(folderPart)) {
+                    const filePart = normPath.substring(folderPart.length)
+                    const filePattern = p.substring(folderPart.length)
+                    const fileRegex = new RegExp(`^${filePattern.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\\\*/g, '.*')}$`)
+                    if (fileRegex.test(filePart)) return true
+                }
+            }
+        } catch (e) {
+            console.error(`[IGNORE] Invalid regex from pattern ${p}:`, e.message)
+        }
+      }
+
+      // 4. Filename match (Legacy support - check if the pattern matches just the basename)
+      if (path.basename(normPath) === p) return true
+
+      return false
+    })
+  }
+
+  /**
    * Helper to safely open a file with retry logic for EPERM errors (Common on Windows)
    */
   async safeOpen(dest, mode, retries = 15, delay = 1000) {
@@ -117,7 +183,7 @@ export class SyncManager {
    */
   async downloadFile(url, dest, options = {}) {
     const { 
-        retries = MAX_RETRIES, 
+        retries = MAX_RETRIES + 3, // Even more retries for slow connections
         onProgress = () => {},
         checkSize = true,
         signal = null
@@ -135,13 +201,14 @@ export class SyncManager {
         
         let fd = null
         try {
-            // Pre-check size
+            // Pre-check size with timeout
             if (checkSize && fs.existsSync(dest)) {
                 try {
                     const stats = await fs.promises.stat(dest)
                     const head = await axios.head(url, {
                         headers: { 'User-Agent': 'Mozilla/5.0' },
-                        timeout: 10000
+                        timeout: 15000,
+                        validateStatus: (status) => status >= 200 && status < 300
                     })
                     const remoteSize = parseInt(head.headers['content-length'], 10)
                     if (remoteSize > 0 && stats.size === remoteSize) {
@@ -157,7 +224,9 @@ export class SyncManager {
                 url: url,
                 responseType: 'stream',
                 headers: { 'User-Agent': 'Mozilla/5.0' },
-                timeout: 30000
+                timeout: 30000, // Connection timeout
+                maxContentLength: Infinity,
+                maxBodyLength: Infinity
             })
 
             const totalLength = parseInt(response.headers['content-length'], 10) || 0
@@ -168,7 +237,17 @@ export class SyncManager {
             
             let lastOnProgress = 0
             
+            // Setup response data handling with timeout protection
+            let dataReceivedAt = Date.now()
+            const dataTimeoutCheck = setInterval(() => {
+                if (Date.now() - dataReceivedAt > 45000) { // 45s no data
+                    response.data.destroy(new Error('Data transfer timeout'))
+                    clearInterval(dataTimeoutCheck)
+                }
+            }, 5000)
+
             response.data.on('data', (chunk) => {
+                dataReceivedAt = Date.now()
                 downloaded += chunk.length
                 const now = Date.now()
                 if (totalLength && (now - lastOnProgress > 100 || downloaded === totalLength)) {
@@ -187,8 +266,17 @@ export class SyncManager {
             }
 
             await new Promise((resolve, reject) => {
-                writer.on('finish', resolve)
+                writer.on('finish', () => {
+                    clearInterval(dataTimeoutCheck)
+                    resolve()
+                })
                 writer.on('error', (err) => {
+                    clearInterval(dataTimeoutCheck)
+                    writer.destroy()
+                    reject(err)
+                })
+                response.data.on('error', (err) => {
+                    clearInterval(dataTimeoutCheck)
                     writer.destroy()
                     reject(err)
                 })
@@ -234,28 +322,32 @@ export class SyncManager {
                 try { if (fs.existsSync(tempDest)) fs.unlinkSync(tempDest) } catch(e) {}
                 throw error
             }
-            await this.sleep(1000 * attempt)
+            // Exponential backoff for slow connections
+            await this.sleep(Math.min(2000 * attempt, 10000))
         }
     }
   }
 
   /**
    * Download a large file using chunks (Range requests)
+   * Enhanced: Supports resuming from partial downloads if internet fails.
    */
   async downloadLargeFile(url, dest, options = {}) {
-     const { signal = null } = options
+     const { signal = null, retries = 7 } = options // Even more retries for large files
      const fileName = path.basename(dest)
      this.log(`[LARGE-DOWNLOAD] Starting chunked download: ${fileName}`)
      
-     // Use unique temp filename to avoid EPERM
-     const tempDest = `${dest}.tmp_${Date.now()}_${Math.random().toString(36).substring(7)}`
+     // Stable temp filename for resuming
+     const tempDest = `${dest}.part`
+     const stateFile = `${dest}.state`
 
      let totalSize = 0
      try {
          if (signal?.aborted) throw new Error('Download aborted')
          const head = await axios.head(url, {
              headers: { 'User-Agent': 'Mozilla/5.0' },
-             timeout: 15000
+             timeout: 25000, // Increased timeout for slow connections
+             validateStatus: (status) => status >= 200 && status < 300
          })
          totalSize = parseInt(head.headers['content-length'], 10)
          
@@ -267,7 +359,7 @@ export class SyncManager {
 
      } catch (e) {
          if (signal?.aborted) throw new Error('Download aborted')
-         this.log(`[LARGE-DOWNLOAD] Size check failed: ${e.message}. Falling back.`)
+         this.log(`[LARGE-DOWNLOAD] Size check failed: ${e.message}. Falling back to standard download.`)
          return this.downloadFile(url, dest, options)
      }
 
@@ -276,25 +368,66 @@ export class SyncManager {
      const chunks = Math.ceil(totalSize / CHUNK_SIZE)
      this.log(`Downloading ${fileName} in ${chunks} chunks (${(totalSize/1024/1024).toFixed(2)} MB)`)
 
-     const fd = await this.safeOpen(tempDest, 'w')
-     let downloadedTotal = 0
+     // 🔄 RESUME LOGIC: Check if we have a partial state
+     let finishedChunks = new Set()
+     try {
+         if (fs.existsSync(stateFile) && fs.existsSync(tempDest)) {
+             const rawState = fs.readFileSync(stateFile, 'utf8')
+             const state = JSON.parse(rawState)
+             // Only resume if it's the same file (same size)
+             if (state.totalSize === totalSize) {
+                 finishedChunks = new Set(state.finished || [])
+                 this.log(`[RESUME] Found partial download. Resuming from chunk ${finishedChunks.size}/${chunks}...`)
+             } else {
+                 this.log("[RESUME] File size changed, starting fresh.")
+                 try { fs.unlinkSync(tempDest); fs.unlinkSync(stateFile) } catch(e) {}
+             }
+         }
+     } catch (e) {
+         this.log("[RESUME] Failed to read state file, starting fresh.")
+     }
+
+     // Ensure temp file exists (open with 'a' to avoid truncation, or 'w' if fresh)
+     const mode = finishedChunks.size > 0 ? 'r+' : 'w'
+     if (mode === 'w' && !fs.existsSync(path.dirname(tempDest))) {
+         fs.mkdirSync(path.dirname(tempDest), { recursive: true })
+     }
+     
+     const fd = await this.safeOpen(tempDest, mode)
+     // If we are starting fresh with 'w', make sure file is allocated (optional but good)
+     
+     let downloadedTotal = finishedChunks.size * CHUNK_SIZE 
+     // Note: last chunk might be smaller, but this is used for progress UI
+     if (finishedChunks.size === chunks) downloadedTotal = totalSize
+
      let abortError = null
      
+     const saveState = () => {
+         try {
+             fs.writeFileSync(stateFile, JSON.stringify({
+                 totalSize,
+                 finished: Array.from(finishedChunks),
+                 updatedAt: Date.now()
+             }))
+         } catch (e) {}
+     }
+
      const downloadChunk = async (i) => {
          if (signal?.aborted || abortError) return
-         
+         if (finishedChunks.has(i)) return // Skip already finished chunks
+
          const start = i * CHUNK_SIZE
          const end = Math.min(start + CHUNK_SIZE - 1, totalSize - 1)
          
-         let retries = 0
-         while (retries <= MAX_RETRIES) {
+         let attempt = 0
+         while (attempt <= retries) {
              if (signal?.aborted || abortError) return
              try {
                  const startTime = Date.now()
                  const response = await axios({
                     method: 'get',
                     url: url,
-                    headers: { Range: `bytes=${start}-${end}` },
+                    headers: { Range: `bytes=${start}-${end}`, 'User-Agent': 'Mozilla/5.0' },
                     responseType: 'arraybuffer',
                     timeout: 45000 // Individual chunk timeout
                  })
@@ -312,24 +445,32 @@ export class SyncManager {
                      if (actualTime < expectedTime) await this.sleep(expectedTime - actualTime)
                  }
 
+                 finishedChunks.add(i)
                  downloadedTotal += buffer.length
                  response.data = null 
                  
+                 // Periodically save state (every 5 chunks or so)
+                 if (finishedChunks.size % 5 === 0) saveState()
+
                  this.sendProgress('Downloading Modpack...', downloadedTotal, totalSize)
                  return 
              } catch (e) {
                  if (signal?.aborted || abortError) return
-                 retries++
-                 this.log(`[CHUNK-ERROR] Chunk ${i} failed (Attempt ${retries}/${MAX_RETRIES}): ${e.message}`)
-                 if (retries > MAX_RETRIES) throw e
-                 await this.sleep(1500 * retries)
+                 attempt++
+                 this.log(`[CHUNK-ERROR] Chunk ${i} failed (Attempt ${attempt}/${retries}): ${e.message}`)
+                 if (attempt > retries) throw e
+                 
+                 // Wait longer for each retry (exponential backoff)
+                 const waitTime = Math.min(2000 * attempt, 10000)
+                 await this.sleep(waitTime)
              }
          }
      }
 
-     const queue = Array.from({ length: chunks }, (_, i) => i)
+     const queue = Array.from({ length: chunks }, (_, i) => i).filter(i => !finishedChunks.has(i))
      const workers = []
-     const concurrency = getStore().get('maxConcurrentDownloads', 5)
+     // Reduce concurrency for slow internet if needed, but 3-5 is usually fine
+     const concurrency = Math.min(getStore().get('maxConcurrentDownloads', 5), 3) 
 
      for (let w = 0; w < concurrency; w++) {
          workers.push((async () => {
@@ -354,6 +495,7 @@ export class SyncManager {
 
         const stat = await fd.stat()
         if (stat.size !== totalSize) {
+            // Check if we can fix it by downloading missing chunks
             throw new Error(`Incomplete: expected ${totalSize} but got ${stat.size}`)
         }
 
@@ -361,7 +503,8 @@ export class SyncManager {
         if (fd) {
             try { await fd.close() } catch(err) {}
         }
-        try { if (fs.existsSync(tempDest)) fs.unlinkSync(tempDest) } catch(err) {}
+        // DO NOT delete temp file or state file on failure! 
+        // This allows resuming on the next attempt.
         throw e
      }
      
@@ -375,10 +518,12 @@ export class SyncManager {
      for (let i = 0; i < 15; i++) {
          try {
              fs.renameSync(tempDest, dest)
+             // SUCCESS: Cleanup state file
+             try { if (fs.existsSync(stateFile)) fs.unlinkSync(stateFile) } catch(e) {}
              break
          } catch(e) {
              if (i === 14) throw e
-             this.log(`[RENAME-LOCKED] Failed to rename temp file, retrying... (${i+1}/15)`)
+             this.log(`[RENAME-LOCKED] Failed to finalize file, retrying... (${i+1}/15)`)
              await this.sleep(1000)
          }
      }
@@ -479,20 +624,29 @@ export class SyncManager {
             }
 
             if (shouldDownload) {
-                await this.downloadFile(modUrl, dest, {
-                    signal,
-                    onProgress: (loaded, full) => {
-                        if (full > 0) {
-                            const percent = (loaded / full) * 100
-                            currentProgress.set(modUrl, percent)
-                            updateGlobalProgress()
-                        }
-                    }
-                })
+                // Individual mod download retry logic (handled by downloadFile)
                 try {
-                    const finalStat = await fs.promises.stat(dest)
-                    modCache[fileName] = { size: finalStat.size, timestamp: nowTime }
-                } catch (e) {}
+                    await this.downloadFile(modUrl, dest, {
+                        signal,
+                        retries: 5, // More retries for individual mods
+                        onProgress: (loaded, full) => {
+                            if (full > 0) {
+                                const percent = (loaded / full) * 100
+                                currentProgress.set(modUrl, percent)
+                                updateGlobalProgress()
+                            }
+                        }
+                    })
+                    try {
+                        const finalStat = await fs.promises.stat(dest)
+                        modCache[fileName] = { size: finalStat.size, timestamp: nowTime }
+                    } catch (e) {}
+                } catch (e) {
+                    // Log error but maybe try to continue with other mods?
+                    // For now, we still abort if a mod fails completely after retries, 
+                    // but the retries are now more robust.
+                    throw e
+                }
             }
 
             completed++
@@ -536,7 +690,7 @@ export class SyncManager {
    * Compare local folder against a list of valid filenames
    * Returns lists of added (missing locally), deleted (extra locally), kept, and corrupt files.
    */
-  async comparePatches(folder, validFilenames = [], ignoreList = []) {
+  async comparePatches(folder, validFilenames = [], ignoreList = [], pathPrefix = "") {
       const result = {
           added: [],    // In validFilenames but not in folder (New files to download)
           deleted: [],  // In folder but not in validFilenames (Old files to remove)
@@ -553,7 +707,6 @@ export class SyncManager {
           const normalizeRel = (rel) => rel.split(path.sep).join('/')
           const validSet = new Set(validFilenames)
           const lowerValidBasenames = new Set(validFilenames.map(v => path.basename(v).toLowerCase()))
-          const systemWhitelist = ['figura', 'fragmentskin', 'cache', 'shaderpacks', 'screenshots', ...ignoreList]
 
           const localFiles = []
           const listFilesRecursive = async (dir, prefix = "") => {
@@ -561,8 +714,11 @@ export class SyncManager {
               for (const ent of entries) {
                   const rel = prefix ? `${prefix}/${ent.name}` : ent.name
                   const abs = path.join(dir, ent.name)
-                  const relLower = rel.toLowerCase()
-                  const isWhitelisted = systemWhitelist.some(w => relLower.includes(String(w).toLowerCase()))
+                  
+                  // Use pathPrefix to check against ignoreFiles (e.g. "mods/my-mod.jar")
+                  const fullRel = pathPrefix ? `${pathPrefix}/${rel}` : rel
+                  const isWhitelisted = this.shouldIgnore(fullRel, ignoreList)
+                  
                   if (ent.isDirectory()) {
                       if (isWhitelisted) {
                           result.kept.push(rel)
@@ -608,9 +764,13 @@ export class SyncManager {
               }
 
               const isValidExact = validSet.has(f.rel)
-              const isValidByName = lowerValidBasenames.has(f.name.toLowerCase())
+              // We only consider it "valid by name" if it's in a folder that we don't strictly manage via the patch,
+              // OR if it's a known configuration file that might have case differences on Windows.
+              // For most game files (mods, libraries), we want exact path matching.
+              const isConfig = f.rel.endsWith('.txt') || f.rel.endsWith('.options') || f.rel.endsWith('.json')
+              const isValidByName = isConfig && lowerValidBasenames.has(f.name.toLowerCase())
 
-              if (isValidExact || isValidByName) {
+              if (isValidExact || (isValidByName && f.rel.split('/')[0] === Array.from(validSet).find(v => path.basename(v).toLowerCase() === f.name.toLowerCase())?.split('/')[0])) {
                   if (!isCorrupt) result.kept.push(f.rel)
                   continue
               }
@@ -640,14 +800,14 @@ export class SyncManager {
   /**
    * Cleanup folder by removing files not in the whitelist
    */
-  async cleanupFolder(folder, validFilenames = [], ignoreList = []) {
+  async cleanupFolder(folder, validFilenames = [], ignoreList = [], pathPrefix = "") {
       try {
           if (!fs.existsSync(folder)) return
 
-          this.log(`[CLEANUP] Checking folder: ${folder}`)
+          this.log(`[CLEANUP] Checking folder: ${folder} (Prefix: ${pathPrefix})`)
           
           // Use comparePatches logic to identify files to delete
-          const { deleted } = await this.comparePatches(folder, validFilenames, ignoreList)
+          const { deleted } = await this.comparePatches(folder, validFilenames, ignoreList, pathPrefix)
 
           for (const file of deleted) {
               const filePath = path.join(folder, file)
@@ -655,15 +815,16 @@ export class SyncManager {
               await fs.promises.rm(filePath, { recursive: true, force: true })
           }
 
-          const systemWhitelist = ['figura', 'fragmentskin', 'cache', 'shaderpacks', 'screenshots', ...ignoreList]
           const pruneEmptyDirs = async (dir, prefix = "") => {
               const entries = await fs.promises.readdir(dir, { withFileTypes: true })
               for (const ent of entries) {
                   if (!ent.isDirectory()) continue
                   const rel = prefix ? `${prefix}/${ent.name}` : ent.name
                   const abs = path.join(dir, ent.name)
-                  const relLower = rel.toLowerCase()
-                  const isWhitelisted = systemWhitelist.some(w => relLower.includes(String(w).toLowerCase()))
+                  
+                  const fullRel = pathPrefix ? `${pathPrefix}/${rel}` : rel
+                  const isWhitelisted = this.shouldIgnore(fullRel, ignoreList)
+                  
                   if (isWhitelisted) continue
                   await pruneEmptyDirs(abs, rel)
                   try {
@@ -690,10 +851,15 @@ export class SyncManager {
           let childProcess = null
 
           try {
-              // PowerShell Expand-Archive is memory efficient as it runs in a separate process
-              const command = `powershell -NoProfile -NonInteractive -Command "Expand-Archive -Path '${zipPath}' -DestinationPath '${targetDir}' -Force"`
+              // Use double quotes for paths and escape single quotes for PowerShell
+              const escapedZipPath = zipPath.replace(/'/g, "''")
+              const escapedTargetDir = targetDir.replace(/'/g, "''")
               
-              childProcess = exec(command, { maxBuffer: 1024 * 1024 }, (error, stdout, stderr) => {
+              // Use a more robust PowerShell command that handles UTF-8 paths better
+              const psCommand = `Expand-Archive -Path '${escapedZipPath}' -DestinationPath '${escapedTargetDir}' -Force`
+              const command = `powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "${psCommand}"`
+              
+              childProcess = exec(command, { maxBuffer: 1024 * 1024, env: { ...process.env, LANG: 'en_US.UTF-8' } }, (error, stdout, stderr) => {
                   if (signal?.aborted) return // Already handled
                   if (error) {
                       // Fallback to AdmZip if PowerShell fails
@@ -740,7 +906,24 @@ export class SyncManager {
   }
 
   /**
+   * Helper to get zip entries safely with retries
+   */
+  async getZipEntries(zipPath) {
+      for (let i = 0; i < 10; i++) {
+          try {
+              const zip = new AdmZip(zipPath)
+              return zip.getEntries()
+          } catch (e) {
+              if (i === 9) throw e
+              await this.sleep(1000)
+          }
+      }
+      return []
+  }
+
+  /**
    * Extract Zip file with Progress
+   * Enhanced: Returns list of extracted relative paths for cleanup whitelist.
    */
   async extractZip(zipPath, targetDir, options = {}) {
       const { signal = null, ignoreFiles = [] } = options
@@ -748,90 +931,70 @@ export class SyncManager {
 
       this.log(`Extracting ${path.basename(zipPath)}...`)
       
-      // 🚨 Retry logic for opening the Zip file (Common EPERM on Windows after download)
-      let zip = null
-      for (let i = 0; i < 10; i++) {
-          try {
-              zip = new AdmZip(zipPath)
-              zip.getEntries() // Integrity check
-              break
-          } catch (e) {
-              if (i === 9) throw new Error(`Failed to open zip for extraction: ${e.message}`)
-              this.log(`[ZIP-LOCKED] Zip file is busy, retrying in 1s... (${i+1}/10)`)
-              await this.sleep(1000)
-          }
-      }
+      const entries = await this.getZipEntries(zipPath)
+      const zip = new AdmZip(zipPath)
       
-      // Use a temp directory to handle nested folder structures correctly
-      const tempDir = path.join(path.dirname(targetDir), `temp_${Date.now()}`)
+      // Use a temp directory for extraction to ensure atomicity
+      const tempDir = path.join(path.dirname(targetDir), `extract_tmp_${Date.now()}`)
       if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true })
 
       try {
           // ----------------------------------------------------------------
-          // 1. UNZIP with Progress (Using AdmZip entry-by-entry)
+          // 1. UNZIP
           // ----------------------------------------------------------------
-          const entries = zip.getEntries()
-          const totalEntries = entries.length
-          let extractedCount = 0
+          let extractionSuccess = false
+          if (process.platform === 'win32') {
+              try {
+                  await this.nativeUnzip(zipPath, tempDir, signal)
+                  extractionSuccess = true
+              } catch (err) {
+                  this.log(`Native unzip failed: ${err.message}`)
+              }
+          }
 
-          for (const entry of entries) {
-              if (signal?.aborted) throw new Error('Extraction aborted')
-              
-              // Extract individual entry
-              // extractEntryTo(entry, targetPath, maintainEntryPath, overwrite)
-              zip.extractEntryTo(entry, tempDir, true, true)
-              
-              extractedCount++
-              
-              // Throttle progress updates (every 20 files or last one)
-              if (extractedCount % 20 === 0 || extractedCount === totalEntries) {
-                  this.sendProgress('Extracting Modpack...', extractedCount, totalEntries)
-                  // Yield to event loop to prevent UI freeze
-                  await new Promise(resolve => setTimeout(resolve, 1))
+          if (!extractionSuccess) {
+              const totalEntries = entries.length
+              let extractedCount = 0
+              for (const entry of entries) {
+                  if (signal?.aborted) throw new Error('Extraction aborted')
+                  zip.extractEntryTo(entry, tempDir, true, true)
+                  extractedCount++
+                  if (extractedCount % 50 === 0 || extractedCount === totalEntries) {
+                      this.sendProgress('Extracting Modpack...', extractedCount, totalEntries)
+                      await new Promise(resolve => setTimeout(resolve, 1))
+                  }
               }
           }
           
           if (signal?.aborted) throw new Error('Extraction aborted')
 
-          this.log("Extraction complete. Analyzing structure...")
-          
+          // ----------------------------------------------------------------
+          // 2. ANALYZE STRUCTURE & FLATTEN
+          // ----------------------------------------------------------------
           const files = fs.readdirSync(tempDir)
-          // Filter out system files
           const visibleFiles = files.filter(f => !f.startsWith('.'))
-          
           let sourceDir = tempDir
           
-          // Check for GitHub-style nested folder (single directory containing files)
           if (visibleFiles.length === 1) {
               const nestedPath = path.join(tempDir, visibleFiles[0])
               if (fs.statSync(nestedPath).isDirectory()) {
-                  // Don't flatten if it's a standard Minecraft folder (e.g. "mods", "config")
-                  // This prevents issues where a zip just contains "mods/" at root from being flattened into the instance root
                   const standardFolders = ['mods', 'config', 'versions', 'saves', 'resourcepacks', 'shaderpacks', 'screenshots', 'logs']
                   if (!standardFolders.includes(visibleFiles[0].toLowerCase())) {
-                      this.log(`Detected nested root folder: ${visibleFiles[0]}. Flattening...`)
                       sourceDir = nestedPath
-                  } else {
-                      this.log(`Detected standard folder '${visibleFiles[0]}' at root. Preserving structure.`)
                   }
               }
           }
           
           // ----------------------------------------------------------------
-          // 🔄 SMART SYNC (Copy + Cleanup)
+          // 3. ATOMIC SYNC (Source -> Target)
           // ----------------------------------------------------------------
-          
-          if (signal?.aborted) throw new Error('Extraction aborted')
-
-          // Helper for recursive file listing (Async)
           const getAllFiles = async (dir, fileList = []) => {
               if (signal?.aborted) throw new Error('Extraction aborted')
               try {
-                  const files = await fs.promises.readdir(dir)
-                  for (const file of files) {
-                      const filePath = path.join(dir, file)
-                      const stat = await fs.promises.stat(filePath)
-                      if (stat.isDirectory()) {
+                  const entries = await fs.promises.readdir(dir, { withFileTypes: true })
+                  for (const ent of entries) {
+                      const filePath = path.join(dir, ent.name)
+                      if (ent.isDirectory()) {
                           await getAllFiles(filePath, fileList)
                       } else {
                           fileList.push(filePath)
@@ -843,11 +1006,9 @@ export class SyncManager {
 
           if (!fs.existsSync(targetDir)) await fs.promises.mkdir(targetDir, { recursive: true })
 
-          // 1. Get all source files (Relative paths)
           const sourceFiles = await getAllFiles(sourceDir)
-          const sourceRelativePaths = sourceFiles.map(f => path.relative(sourceDir, f))
+          const sourceRelativePaths = sourceFiles.map(f => path.relative(sourceDir, f).replace(/\\/g, '/'))
           
-          // 2. Copy/Update Files (Source -> Target)
           let processedFiles = 0
           const totalFiles = sourceRelativePaths.length
           
@@ -857,92 +1018,44 @@ export class SyncManager {
               const srcFile = path.join(sourceDir, relPath)
               const destFile = path.join(targetDir, relPath)
               
-              // Rule: Don't overwrite User Settings (options.txt, etc)
               const isSettings = relPath.toLowerCase() === 'options.txt' || 
                                (relPath.toLowerCase().startsWith('options') && relPath.endsWith('.txt'))
                                
               if (isSettings && fs.existsSync(destFile)) {
-                  this.log(`Skipping settings file: ${relPath}`)
                   processedFiles++
                   continue
               }
 
-              // Ensure dest dir exists
               const destDir = path.dirname(destFile)
               if (!fs.existsSync(destDir)) await fs.promises.mkdir(destDir, { recursive: true })
 
-              // Overwrite
               if (fs.existsSync(destFile)) {
-                  await fs.promises.rm(destFile, { recursive: true, force: true })
+                  try {
+                      await fs.promises.rm(destFile, { recursive: true, force: true })
+                  } catch (e) {
+                      const trash = `${destFile}.old_${Date.now()}`
+                      try { await fs.promises.rename(destFile, trash) } catch(err) {}
+                  }
               }
               
-              // Rename is faster
               await fs.promises.rename(srcFile, destFile)
               
               processedFiles++
-              // Update progress for installation phase
-              if (processedFiles % 10 === 0 || processedFiles === totalFiles) {
+              if (processedFiles % 25 === 0 || processedFiles === totalFiles) {
                   this.sendProgress('Installing Files...', processedFiles, totalFiles)
                   await new Promise(resolve => setTimeout(resolve, 1))
               }
           }
           
-          // 3. Cleanup Extra Files (Target -> Delete)
-          // User request: "Check Config and Mods" -> Remove extras in these folders
-          const foldersToCheck = ['mods', 'config']
-          let dynamicWhitelist = []
-          if (Array.isArray(ignoreFiles)) {
-              dynamicWhitelist = ignoreFiles
-          } else if (typeof ignoreFiles === 'string' && ignoreFiles.trim()) {
-              dynamicWhitelist = [ignoreFiles]
-          }
-          const whitelist = ['figura', 'fragmentskin', 'emotes', 'options', ...dynamicWhitelist]
-          
-          for (const folder of foldersToCheck) {
-              if (signal?.aborted) throw new Error('Extraction aborted')
-              const targetFolder = path.join(targetDir, folder)
-              if (!fs.existsSync(targetFolder)) continue
-
-              const targetFiles = await getAllFiles(targetFolder)
-              
-              for (const absPath of targetFiles) {
-                  const relPath = path.relative(targetDir, absPath)
-                  
-                  // Normalize paths for comparison (Windows backslashes)
-                  const normRelPath = relPath.split(path.sep).join('/')
-                  
-                  // Check if file existed in source
-                  const inSource = sourceRelativePaths.some(p => p.split(path.sep).join('/') === normRelPath)
-                  
-                  if (!inSource) {
-                      // File is extra. Check Whitelist.
-                      const isWhitelisted = whitelist.some(w => normRelPath.toLowerCase().includes(w.toLowerCase()))
-                      
-                      if (!isWhitelisted) {
-                          this.log(`Removing extra file: ${relPath}`)
-                          try { await fs.promises.rm(absPath, { force: true }) } catch(e) {}
-                      } else {
-                          this.log(`Preserving whitelisted file: ${relPath}`)
-                      }
-                  }
-              }
-          }
-          
           this.log("Files installed successfully.")
-          return true
+          return sourceRelativePaths // Return list of files extracted
 
       } catch (e) {
           this.log(`Extraction/Sync failed: ${e.message}`)
           throw e
       } finally {
-          // Cleanup temp directory
           if (fs.existsSync(tempDir)) {
-              try {
-                  fs.rmSync(tempDir, { recursive: true, force: true })
-                  this.log(`Cleaned up temp directory: ${tempDir}`)
-              } catch (e) {
-                  this.log(`Failed to cleanup temp directory: ${e.message}`)
-              }
+              try { fs.rmSync(tempDir, { recursive: true, force: true }) } catch (e) { }
           }
       }
   }

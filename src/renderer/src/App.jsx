@@ -875,6 +875,7 @@ function App() {
                     user={user}
                     paused={showSettings}
                     t={t}
+                    currentLanguage={language}
                     enableAnimation={enableAnimation}
                     toggleAnimation={toggleAnimation}
                     enableCubes={enableCubes}

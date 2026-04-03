@@ -1,6 +1,6 @@
 import React, { memo, useState, useEffect, useMemo } from 'react'
 
-const MainContent = memo(({ instance, installedVersion, status, progress, onLaunch, onCancel, onOpenSettings, onOpenFolder, onRepair, onOpenConsole, onUninstallInstance, user, paused, t, enableAnimation, toggleAnimation, enableCubes, showToast }) => {
+const MainContent = memo(({ instance, installedVersion, status, progress, onLaunch, onCancel, onOpenSettings, onOpenFolder, onRepair, onOpenConsole, onUninstallInstance, user, paused, t, currentLanguage, enableAnimation, toggleAnimation, enableCubes, showToast }) => {
   const [bgLoaded, setBgLoaded] = useState(false)
   const [staticGif, setStaticGif] = useState(null)
   const [serverStatus, setServerStatus] = useState(null)
@@ -9,7 +9,6 @@ const MainContent = memo(({ instance, installedVersion, status, progress, onLaun
   const [showToolsMenu, setShowToolsMenu] = useState(false)
   const [toolsMenuAnimate, setToolsMenuAnimate] = useState(false)
   
-  // Determine Video Source
   const { videoSrc, isVideoOnly, isBgGif } = useMemo(() => {
       if (!instance) return { videoSrc: null, isVideoOnly: false, isBgGif: false }
       
