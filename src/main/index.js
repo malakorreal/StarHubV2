@@ -152,6 +152,26 @@ app.whenReady().then(() => {
           return null
       }
   })
+
+  ipcMain.handle('get-about-audio-url', async () => {
+      const candidates = [
+          join(process.cwd(), 'resources', 'about.mp3'),
+          join(app.getAppPath(), 'resources', 'about.mp3'),
+          join(process.resourcesPath, 'about.mp3'),
+          join(process.resourcesPath, 'resources', 'about.mp3')
+      ]
+
+      for (const abs of candidates) {
+          try {
+              await fs.access(abs)
+              const buffer = await fs.readFile(abs)
+              const base64 = buffer.toString('base64')
+              return { success: true, url: `data:audio/mpeg;base64,${base64}` }
+          } catch (e) {}
+      }
+
+      return { success: false, error: 'not_found' }
+  })
   
   // Instance Handler needs mainWindow to support cache-first strategy
   // Ensure we don't have duplicates (though launcher.js handler is removed now)

@@ -96,6 +96,7 @@ const api = {
   },
   // Backup
   backupInstanceData: (instance) => ipcRenderer.invoke('backup-instance-data', instance),
+  getAboutAudioUrl: () => ipcRenderer.invoke('get-about-audio-url'),
   // RPC
   updateRPC: (status, instanceName) => ipcRenderer.invoke('update-rpc', { status, instanceName }),
 }

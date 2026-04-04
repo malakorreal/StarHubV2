@@ -10,7 +10,7 @@ import { Transform } from 'stream'
 // 🔧 SYNC CONFIGURATION
 // ----------------------------------------------------------------------
 const MAX_RETRIES = 3
-const CHUNK_SIZE = 10 * 1024 * 1024 // 10MB chunks
+const CHUNK_SIZE = 2 * 1024 * 1024 // 2MB chunks
 
 class Throttle extends Transform {
     constructor(bps) {
@@ -186,7 +186,11 @@ export class SyncManager {
         retries = MAX_RETRIES + 3, // Even more retries for slow connections
         onProgress = () => {},
         checkSize = true,
-        signal = null
+        signal = null,
+        connectTimeoutMs = 60000,
+        stallTimeoutMs = 120000,
+        retryDelayBaseMs = 1500,
+        maxRetryDelayMs = 15000
     } = options
 
     const fileName = path.basename(dest)
@@ -201,6 +205,8 @@ export class SyncManager {
         
         let fd = null
         try {
+            try { if (fs.existsSync(tempDest)) fs.unlinkSync(tempDest) } catch (e) {}
+
             // Pre-check size with timeout
             if (checkSize && fs.existsSync(dest)) {
                 try {
@@ -208,7 +214,8 @@ export class SyncManager {
                     const head = await axios.head(url, {
                         headers: { 'User-Agent': 'Mozilla/5.0' },
                         timeout: 15000,
-                        validateStatus: (status) => status >= 200 && status < 300
+                        validateStatus: (status) => status >= 200 && status < 300,
+                        signal: signal || undefined
                     })
                     const remoteSize = parseInt(head.headers['content-length'], 10)
                     if (remoteSize > 0 && stats.size === remoteSize) {
@@ -218,15 +225,20 @@ export class SyncManager {
                 } catch (e) { /* Fallback to download */ }
             }
             
-            this.log(`[DOWNLOAD] Opening temp file: ${path.basename(tempDest)}`)
+            this.log(`[DOWNLOAD] Requesting URL: ${url}`)
             const response = await axios({
                 method: 'get',
                 url: url,
                 responseType: 'stream',
-                headers: { 'User-Agent': 'Mozilla/5.0' },
-                timeout: 30000, // Connection timeout
+                headers: { 
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'Accept': '*/*'
+                },
+                timeout: connectTimeoutMs, 
                 maxContentLength: Infinity,
-                maxBodyLength: Infinity
+                maxBodyLength: Infinity,
+                maxRedirects: 10,
+                signal: signal || undefined
             })
 
             const totalLength = parseInt(response.headers['content-length'], 10) || 0
@@ -240,18 +252,26 @@ export class SyncManager {
             // Setup response data handling with timeout protection
             let dataReceivedAt = Date.now()
             const dataTimeoutCheck = setInterval(() => {
-                if (Date.now() - dataReceivedAt > 45000) { // 45s no data
+                if (Date.now() - dataReceivedAt > stallTimeoutMs) {
                     response.data.destroy(new Error('Data transfer timeout'))
                     clearInterval(dataTimeoutCheck)
                 }
             }, 5000)
 
+            const abortListener = () => {
+                try { response.data?.destroy(new Error('Download aborted')) } catch (e) {}
+                try { writer.destroy(new Error('Download aborted')) } catch (e) {}
+                try { clearInterval(dataTimeoutCheck) } catch (e) {}
+            }
+            if (signal) signal.addEventListener('abort', abortListener, { once: true })
+
             response.data.on('data', (chunk) => {
                 dataReceivedAt = Date.now()
                 downloaded += chunk.length
                 const now = Date.now()
-                if (totalLength && (now - lastOnProgress > 100 || downloaded === totalLength)) {
-                    onProgress(downloaded, totalLength)
+                // Update progress even if totalLength is 0 (unknown)
+                if (now - lastOnProgress > 150 || (totalLength > 0 && downloaded === totalLength)) {
+                    onProgress(downloaded, totalLength || 0)
                     lastOnProgress = now
                 }
             })
@@ -281,6 +301,10 @@ export class SyncManager {
                     reject(err)
                 })
             })
+
+            if (signal) {
+                try { signal.removeEventListener('abort', abortListener) } catch (e) {}
+            }
 
             if (totalLength > 0) {
                 const stat = await fd.stat()
@@ -316,14 +340,14 @@ export class SyncManager {
                 try { await fd.close() } catch(e) {}
                 fd = null
             }
+            try { if (fs.existsSync(tempDest)) fs.unlinkSync(tempDest) } catch(e) {}
             attempt++
             this.log(`[DOWNLOAD] Error (Attempt ${attempt}/${retries}): ${fileName} - ${error.message}`)
             if (attempt > retries) {
-                try { if (fs.existsSync(tempDest)) fs.unlinkSync(tempDest) } catch(e) {}
                 throw error
             }
-            // Exponential backoff for slow connections
-            await this.sleep(Math.min(2000 * attempt, 10000))
+            const waitTime = Math.min(retryDelayBaseMs * Math.pow(2, Math.max(attempt - 1, 0)), maxRetryDelayMs) + Math.floor(Math.random() * 250)
+            await this.sleep(waitTime)
         }
     }
   }
@@ -333,27 +357,62 @@ export class SyncManager {
    * Enhanced: Supports resuming from partial downloads if internet fails.
    */
   async downloadLargeFile(url, dest, options = {}) {
-     const { signal = null, retries = 7 } = options // Even more retries for large files
+     const { 
+        signal = null, 
+        retries = 7,
+        chunkTimeoutMs = 300000,
+        maxTotalTimeMs = 30 * 60 * 1000,
+        retryDelayBaseMs = 1500,
+        maxRetryDelayMs = 15000
+     } = options
      const fileName = path.basename(dest)
      this.log(`[LARGE-DOWNLOAD] Starting chunked download: ${fileName}`)
      
      // Stable temp filename for resuming
      const tempDest = `${dest}.part`
      const stateFile = `${dest}.state`
+     const startedAt = Date.now()
+     const chunkSize = CHUNK_SIZE
 
      let totalSize = 0
      try {
          if (signal?.aborted) throw new Error('Download aborted')
-         const head = await axios.head(url, {
-             headers: { 'User-Agent': 'Mozilla/5.0' },
-             timeout: 25000, // Increased timeout for slow connections
-             validateStatus: (status) => status >= 200 && status < 300
-         })
-         totalSize = parseInt(head.headers['content-length'], 10)
+         
+         // 🚨 ROBUST HEAD REQUEST: Some servers (like Dropbox) need a specific UA or respond better to a small GET range
+         const getInfo = async (u) => {
+             try {
+                const h = await axios.head(u, {
+                    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' },
+                    timeout: 20000,
+                    validateStatus: (status) => status >= 200 && status < 400,
+                    signal: signal || undefined
+                })
+                return h
+             } catch (e) {
+                // Fallback to a 0-byte GET request if HEAD fails
+                return await axios.get(u, {
+                    headers: { 'Range': 'bytes=0-0', 'User-Agent': 'Mozilla/5.0' },
+                    timeout: 20000,
+                    validateStatus: (status) => status >= 200 && status < 400,
+                    signal: signal || undefined
+                })
+             }
+         }
+
+         const head = await getInfo(url)
+         const contentRange = head.headers['content-range']
+         if (contentRange) {
+             const parts = contentRange.split('/')
+             totalSize = parseInt(parts[parts.length - 1], 10)
+         } else {
+             totalSize = parseInt(head.headers['content-length'], 10) || 0
+         }
          
          const acceptRanges = head.headers['accept-ranges']
-         if (acceptRanges !== 'bytes' && !head.headers['content-range']) {
-             this.log("[LARGE-DOWNLOAD] No range support, falling back to stream.")
+         const hasRangeSupport = (acceptRanges === 'bytes') || !!contentRange
+         
+         if (!hasRangeSupport) {
+             this.log("[LARGE-DOWNLOAD] No range support detected, falling back to stream.")
              return this.downloadFile(url, dest, options)
          }
 
@@ -363,9 +422,12 @@ export class SyncManager {
          return this.downloadFile(url, dest, options)
      }
 
-     if (!totalSize) return this.downloadFile(url, dest, options)
+     if (!totalSize || isNaN(totalSize)) {
+         this.log("[LARGE-DOWNLOAD] Could not determine total size, falling back to stream.")
+         return this.downloadFile(url, dest, options)
+     }
 
-     const chunks = Math.ceil(totalSize / CHUNK_SIZE)
+     const chunks = Math.ceil(totalSize / chunkSize)
      this.log(`Downloading ${fileName} in ${chunks} chunks (${(totalSize/1024/1024).toFixed(2)} MB)`)
 
      // 🔄 RESUME LOGIC: Check if we have a partial state
@@ -375,7 +437,7 @@ export class SyncManager {
              const rawState = fs.readFileSync(stateFile, 'utf8')
              const state = JSON.parse(rawState)
              // Only resume if it's the same file (same size)
-             if (state.totalSize === totalSize) {
+             if (state.totalSize === totalSize && state.chunkSize === chunkSize) {
                  finishedChunks = new Set(state.finished || [])
                  this.log(`[RESUME] Found partial download. Resuming from chunk ${finishedChunks.size}/${chunks}...`)
              } else {
@@ -396,7 +458,7 @@ export class SyncManager {
      const fd = await this.safeOpen(tempDest, mode)
      // If we are starting fresh with 'w', make sure file is allocated (optional but good)
      
-     let downloadedTotal = finishedChunks.size * CHUNK_SIZE 
+     let downloadedTotal = finishedChunks.size * chunkSize 
      // Note: last chunk might be smaller, but this is used for progress UI
      if (finishedChunks.size === chunks) downloadedTotal = totalSize
 
@@ -406,6 +468,7 @@ export class SyncManager {
          try {
              fs.writeFileSync(stateFile, JSON.stringify({
                  totalSize,
+                 chunkSize,
                  finished: Array.from(finishedChunks),
                  updatedAt: Date.now()
              }))
@@ -416,12 +479,13 @@ export class SyncManager {
          if (signal?.aborted || abortError) return
          if (finishedChunks.has(i)) return // Skip already finished chunks
 
-         const start = i * CHUNK_SIZE
-         const end = Math.min(start + CHUNK_SIZE - 1, totalSize - 1)
+         const start = i * chunkSize
+         const end = Math.min(start + chunkSize - 1, totalSize - 1)
          
          let attempt = 0
          while (attempt <= retries) {
              if (signal?.aborted || abortError) return
+             if (Date.now() - startedAt > maxTotalTimeMs) throw new Error('Download timeout')
              try {
                  const startTime = Date.now()
                  const response = await axios({
@@ -429,7 +493,8 @@ export class SyncManager {
                     url: url,
                     headers: { Range: `bytes=${start}-${end}`, 'User-Agent': 'Mozilla/5.0' },
                     responseType: 'arraybuffer',
-                    timeout: 45000 // Individual chunk timeout
+                    timeout: chunkTimeoutMs,
+                    signal: signal || undefined
                  })
                  
                  if (signal?.aborted || abortError) return
@@ -460,8 +525,8 @@ export class SyncManager {
                  this.log(`[CHUNK-ERROR] Chunk ${i} failed (Attempt ${attempt}/${retries}): ${e.message}`)
                  if (attempt > retries) throw e
                  
-                 // Wait longer for each retry (exponential backoff)
-                 const waitTime = Math.min(2000 * attempt, 10000)
+                 this.sendProgress('Downloading Modpack...', downloadedTotal, totalSize, `เครือข่ายไม่เสถียร กำลังลองใหม่ (${attempt}/${retries})`)
+                 const waitTime = Math.min(retryDelayBaseMs * Math.pow(2, Math.max(attempt - 1, 0)), maxRetryDelayMs) + Math.floor(Math.random() * 250)
                  await this.sleep(waitTime)
              }
          }
@@ -706,6 +771,8 @@ export class SyncManager {
       try {
           const normalizeRel = (rel) => rel.split(path.sep).join('/')
           const validSet = new Set(validFilenames)
+          // Create a lowercase map for case-insensitive lookup on Windows
+          const validLowercaseMap = new Map(validFilenames.map(v => [normalizeRel(v).toLowerCase(), v]))
           const lowerValidBasenames = new Set(validFilenames.map(v => path.basename(v).toLowerCase()))
 
           const localFiles = []
@@ -763,14 +830,18 @@ export class SyncManager {
                   result.corrupt.push(f.rel)
               }
 
+              const normalizedRel = f.rel.toLowerCase()
               const isValidExact = validSet.has(f.rel)
-              // We only consider it "valid by name" if it's in a folder that we don't strictly manage via the patch,
-              // OR if it's a known configuration file that might have case differences on Windows.
-              // For most game files (mods, libraries), we want exact path matching.
+              // 🚨 CASE-INSENSITIVE CHECK: On Windows, we should be lenient with case
+              const isValidCaseInsensitive = validLowercaseMap.has(normalizedRel)
+              
+              const isModFile = f.rel.startsWith('mods/')
+              
+              // For config files, we allow minor name mismatches (like case differences)
               const isConfig = f.rel.endsWith('.txt') || f.rel.endsWith('.options') || f.rel.endsWith('.json')
-              const isValidByName = isConfig && lowerValidBasenames.has(f.name.toLowerCase())
+              const isValidByName = !isModFile && isConfig && lowerValidBasenames.has(f.name.toLowerCase())
 
-              if (isValidExact || (isValidByName && f.rel.split('/')[0] === Array.from(validSet).find(v => path.basename(v).toLowerCase() === f.name.toLowerCase())?.split('/')[0])) {
+              if (isValidExact || isValidCaseInsensitive || (isValidByName && f.rel.split('/')[0] === Array.from(validSet).find(v => path.basename(v).toLowerCase() === f.name.toLowerCase())?.split('/')[0])) {
                   if (!isCorrupt) result.kept.push(f.rel)
                   continue
               }
@@ -783,10 +854,12 @@ export class SyncManager {
           for (const valid of validFilenames) {
               const normValid = normalizeRel(valid)
               const existsExact = localRelSet.has(normValid)
+              const existsCaseInsensitive = localFiles.some(f => f.rel.toLowerCase() === normValid.toLowerCase())
               const existsByName = localFiles.some(f => f.name.toLowerCase() === path.basename(valid).toLowerCase())
-              if (!existsExact && !existsByName) {
+              
+              if (!existsExact && !existsCaseInsensitive && !existsByName) {
                   if (!result.added.includes(valid)) result.added.push(valid)
-              } else if (result.corrupt.includes(normValid)) {
+              } else if (result.corrupt.includes(normValid) || (existsCaseInsensitive && result.corrupt.includes(localFiles.find(f => f.rel.toLowerCase() === normValid.toLowerCase()).rel))) {
                   if (!result.added.includes(valid)) result.added.push(valid)
               }
           }

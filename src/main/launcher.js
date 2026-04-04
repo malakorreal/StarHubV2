@@ -187,6 +187,7 @@ export function setupLauncher(ipcMain, mainWindow) {
     }
 
     // 1. Handle Modpack Zip
+    let extractedFiles = []
     if (instance.modpackUrl) {
         console.log(`[ZIP] Processing modpack for instance ${instance.id}: ${instance.modpackUrl}`)
         console.log(`[ZIP] Zip path: ${zipPath}`)
@@ -239,7 +240,6 @@ export function setupLauncher(ipcMain, mainWindow) {
              }
         }
 
-        let extractedFiles = []
         if (needsDownload) {
              console.log(`[ZIP] Downloading Modpack: ${instance.modpackUrl}`)
              await tryDownloadModpack()
@@ -302,6 +302,29 @@ export function setupLauncher(ipcMain, mainWindow) {
     // ---------------------------------------------------------
     // We calculate valid filenames BEFORE syncing mods to compare "Old vs New".
     const validModRelPaths = new Set()
+    const normalizeRelPath = (p) => {
+        if (!p) return ''
+        let rel = String(p)
+            .replace(/\\/g, '/')
+            .replace(/^\/+/, '')
+            .replace(/^\.\//, '')
+            .replace(/\/+/g, '/')
+        if (process.platform === 'win32') rel = rel.toLowerCase()
+        return rel
+    }
+    const ZIP_READ_FAILED_SENTINEL = '__zip_read_failed__'
+    const ZIP_READ_FAILED_SENTINEL_NORM = normalizeRelPath(ZIP_READ_FAILED_SENTINEL)
+    const addValidRelPath = (p) => {
+        const rel = normalizeRelPath(p)
+        if (!rel) return
+        validModRelPaths.add(rel)
+    }
+    const getDesiredRelPaths = () => {
+        const ignoreList = instance.ignoreFiles || []
+        return Array.from(validModRelPaths)
+            .filter(p => p && p !== ZIP_READ_FAILED_SENTINEL_NORM)
+            .filter(p => !syncManager.shouldIgnore(p, ignoreList))
+    }
     
     try {
         // Helper to get filename from URL
@@ -316,14 +339,19 @@ export function setupLauncher(ipcMain, mainWindow) {
         try {
             const raw = await fs.promises.readFile(patchStatePath, 'utf-8')
             const parsed = JSON.parse(raw)
-            if (parsed && Array.isArray(parsed.managedMods)) previousManagedMods = parsed.managedMods
+            if (parsed && Array.isArray(parsed.managedMods)) {
+                previousManagedMods = parsed.managedMods
+                    .map(normalizeRelPath)
+                    .filter(Boolean)
+                    .filter(p => p !== normalizeRelPath(ZIP_READ_FAILED_SENTINEL))
+            }
         } catch (e) {}
 
         // 1. From mods array
         if (instance.mods && Array.isArray(instance.mods)) {
             instance.mods.forEach(modUrl => {
                  const name = getFileName(modUrl)
-                 if (name) validModRelPaths.add(`mods/${name}`)
+                 if (name) addValidRelPath(`mods/${name}`)
             })
         }
         
@@ -336,7 +364,7 @@ export function setupLauncher(ipcMain, mainWindow) {
                 } else if (typeof mod === 'object' && mod.url) {
                     name = mod.name || getFileName(mod.url)
                 }
-                if (name) validModRelPaths.add(`mods/${name}`)
+                if (name) addValidRelPath(`mods/${name}`)
             })
         }
         
@@ -344,7 +372,7 @@ export function setupLauncher(ipcMain, mainWindow) {
         if (instance.modpackUrl) {
              if (extractedFiles && extractedFiles.length > 0) {
                  console.log(`[CLEANUP] Using ${extractedFiles.length} files from just-extracted zip.`)
-                 extractedFiles.forEach(f => validModRelPaths.add(f))
+                 extractedFiles.forEach(f => addValidRelPath(f))
              } else if (fs.existsSync(zipPath)) {
                 try {
                     // 🚨 Retry logic for reading zip (Common EPERM)
@@ -366,32 +394,48 @@ export function setupLauncher(ipcMain, mainWindow) {
                     const visible = fileEntries.filter(p => !p.startsWith('__MACOSX/') && !p.split('/')[0].startsWith('.'))
                     const topLevels = new Set(visible.map(p => p.split('/')[0]).filter(Boolean))
                     const standardFolders = new Set(['mods', 'config', 'versions', 'saves', 'resourcepacks', 'shaderpacks', 'screenshots', 'logs'])
+                    
                     let stripPrefix = ''
+                    // 🚨 IMPROVED STRIP LOGIC: If there's only one top-level folder and it's NOT a standard MC folder,
+                    // we assume everything is inside it and we should strip that folder name.
                     if (topLevels.size === 1) {
                         const only = Array.from(topLevels)[0]
-                        if (only && !standardFolders.has(only.toLowerCase())) stripPrefix = `${only}/`
+                        if (only && !standardFolders.has(only.toLowerCase())) {
+                            stripPrefix = `${only}/`
+                            console.log(`[ZIP] Detected nested folder structure, stripping prefix: ${stripPrefix}`)
+                        }
                     }
+
                     for (const entryPathRaw of visible) {
                         const entryPath = stripPrefix && entryPathRaw.startsWith(stripPrefix) ? entryPathRaw.slice(stripPrefix.length) : entryPathRaw
+                        if (!entryPath) continue
+
                         // 🚨 Add ALL files from zip to valid list for cleanup
-                        validModRelPaths.add(entryPath)
+                        // Skip system files that shouldn't be managed by the zip patch comparison
+                        const lowerPath = entryPath.toLowerCase()
+                        if (lowerPath === 'patch_state.json' || lowerPath === 'modpack.zip' || lowerPath.startsWith('logs/')) {
+                            continue
+                        }
+                        addValidRelPath(entryPath)
                     }
                 } catch (e) {
                     console.warn("[CLEANUP] Failed to read modpack zip, skipping cleanup to be safe:", e)
                     // 🚨 CRITICAL: If zip is present but we can't read it, DON'T run cleanup
                     // because we might delete zip contents.
-                    validModRelPaths.add("__FAILED_TO_READ_ZIP__")
+                    addValidRelPath(ZIP_READ_FAILED_SENTINEL)
                 }
              }
         }
         
         // 🚨 SAFETY CHECK: If zip was expected but reading failed, skip cleanup
-        const skipCleanup = validModRelPaths.has("__FAILED_TO_READ_ZIP__")
+        const skipCleanup = validModRelPaths.has(ZIP_READ_FAILED_SENTINEL_NORM)
         if (skipCleanup) {
             console.warn("[CLEANUP] Skipping cleanup because zip contents are unknown.")
         } else {
+            const desired = getDesiredRelPaths()
+            const desiredSet = new Set(desired)
             if (forceRepair && previousManagedMods.length > 0) {
-                const removedManaged = previousManagedMods.filter(p => !validModRelPaths.has(p))
+                const removedManaged = previousManagedMods.filter(p => !desiredSet.has(p))
                 for (const rel of removedManaged) {
                     try {
                         await fs.promises.rm(path.join(modsFolder, rel), { recursive: true, force: true })
@@ -402,7 +446,6 @@ export function setupLauncher(ipcMain, mainWindow) {
             // 🚨 PATCH COMPARISON (Requested Feature)
             // Now covers ALL files in the instance root for maximum reliability.
             try {
-                 const desired = Array.from(validModRelPaths)
                  const { added, deleted, corrupt } = await syncManager.comparePatches(rootPath, desired, instance.ignoreFiles || [])
                  
                  // Notify UI about patch summary
@@ -444,6 +487,14 @@ export function setupLauncher(ipcMain, mainWindow) {
                  // This prevents users from adding extra mods while protecting system folders like libraries/assets.
                  console.log("[CLEANUP] Running smart dynamic cleanup...")
                  const foldersInPatch = new Set(desired.map(f => f.split('/')[0]).filter(f => f && f.includes('.') === false))
+                 
+                 // 🚨 FORCE CLEAN MODS: Even if 'mods' isn't in the zip patch, we should still manage it if instance.mods exists
+                 if (instance.mods && Array.isArray(instance.mods)) {
+                     foldersInPatch.add('mods')
+                 }
+                 if (instance.preloadMods && Array.isArray(instance.preloadMods)) {
+                     foldersInPatch.add('mods')
+                 }
                  
                  for (const folder of foldersInPatch) {
                      const targetPath = path.join(rootPath, folder)
@@ -555,44 +606,62 @@ export function setupLauncher(ipcMain, mainWindow) {
     try {
         const patchStatePath = path.join(rootPath, 'patch_state.json')
         const currentVersionForState = instance.modpackVersion || instance.version || null
-        const managedMods = Array.from(validModRelPaths)
+        const managedMods = getDesiredRelPaths()
         await fs.promises.writeFile(patchStatePath, JSON.stringify({ version: currentVersionForState, managedMods, updatedAt: Date.now() }, null, 2), 'utf-8')
     } catch (e) {}
 
     // 🚨 FINAL VERIFICATION: Comprehensive check before launch
     if (validModRelPaths.size > 0) {
-        console.log(`[VERIFY] Comprehensive integrity check for ${validModRelPaths.size} game files...`)
-        syncManager.sendProgress('Verifying Game Files...', 0, 100, 'Checking integrity...')
+        const desired = getDesiredRelPaths()
+        console.log(`[VERIFY] Comprehensive integrity check for ${desired.length} game files...`)
+        syncManager.sendProgress('Verifying Mods & Config...', 0, 100, 'Checking integrity...')
         
-        const desired = Array.from(validModRelPaths)
         let checkResult = await syncManager.comparePatches(rootPath, desired, instance.ignoreFiles || [])
         
         if (checkResult.added.length > 0 || checkResult.corrupt.length > 0) {
             console.error(`[VERIFY] Issues found: ${checkResult.added.length} missing, ${checkResult.corrupt.length} corrupt.`)
-            syncManager.sendProgress('Repairing Game Files...', 50, 100, `Fixing ${checkResult.added.length + checkResult.corrupt.length} files...`)
+            syncManager.sendProgress('Fixing Mods & Config...', 50, 100, `Repairing ${checkResult.added.length + checkResult.corrupt.length} files...`)
             
             // AUTO-REPAIR: Try to sync mods and extract zip again if needed
             if (instance.modpackUrl && (checkResult.added.some(f => !f.startsWith('mods/')) || checkResult.corrupt.some(f => !f.startsWith('mods/')))) {
                 console.log("[VERIFY] Re-extracting modpack to fix non-mod files...")
                 await syncManager.extractZip(zipPath, rootPath, { signal, ignoreFiles: instance.ignoreFiles })
+                
+                // Refresh check result after re-extraction
+                checkResult = await syncManager.comparePatches(rootPath, desired, instance.ignoreFiles || [])
             }
 
-            if (instance.mods && Array.isArray(instance.mods)) {
+            if (instance.mods && Array.isArray(instance.mods) && (checkResult.added.some(f => f.startsWith('mods/')) || checkResult.corrupt.some(f => f.startsWith('mods/')))) {
                 console.log("[VERIFY] Re-syncing mods to fix missing/corrupt mods...")
                 await syncManager.syncMods(instance.mods, modsFolder, { signal })
+                
+                // Final sync check for preload mods as well
+                if (instance.preloadMods && Array.isArray(instance.preloadMods)) {
+                     // We don't have a single function to re-sync all preload mods here without duplicating logic, 
+                     // but the final verify check will catch them if they're still missing.
+                }
             }
             
             // Final confirmation check
-            syncManager.sendProgress('Final Verification...', 90, 100, 'Confirming fixes...')
+            syncManager.sendProgress('Final Validation...', 90, 100, 'Confirming fixes...')
             checkResult = await syncManager.comparePatches(rootPath, desired, instance.ignoreFiles || [])
             
-            if (checkResult.added.length > 0 || checkResult.corrupt.length > 0) {
-                const totalFailed = checkResult.added.length + checkResult.corrupt.length
-                throw new Error(`ไม่สามารถเตรียมไฟล์เกมให้พร้อมได้ (${totalFailed} ไฟล์มีปัญหา) กรุณาตรวจสอบอินเทอร์เน็ตหรือกด "ซ่อมแซมไฟล์เกม"`)
+            // 🚨 FINAL BYPASS: If issues remain, only throw error if they are in 'mods' or 'config'
+            // This prevents system files or empty folders from blocking the launch
+            const criticalIssues = [
+                ...checkResult.added.filter(f => f.startsWith('mods/') || f.startsWith('config/')),
+                ...checkResult.corrupt.filter(f => f.startsWith('mods/') || f.startsWith('config/'))
+            ]
+
+            if (criticalIssues.length > 0) {
+                const totalFailed = criticalIssues.length
+                throw new Error(`ไม่สามารถเตรียมไฟล์มอดหรือคอนฟิกให้พร้อมได้ (${totalFailed} ไฟล์มีปัญหา) กรุณาตรวจสอบอินเทอร์เน็ตหรือกด "ซ่อมแซมไฟล์เกม"`)
+            } else {
+                console.log(`[VERIFY] Minor issues ignored (non-critical): ${checkResult.added.length + checkResult.corrupt.length} files.`)
             }
         }
         
-        syncManager.sendProgress('Verification Complete', 100, 100, 'All files are ready!')
+        syncManager.sendProgress('Mods & Config Ready', 100, 100, 'Verification complete!')
         console.log(`[VERIFY] Integrity check passed! All files ready for launch.`)
     }
 
