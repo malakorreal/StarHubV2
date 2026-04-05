@@ -73,6 +73,18 @@ async function fetchAndCache(cacheKey) {
          const clean = (s) => s ? s.replace(/`/g, '').trim() : ""
          
          inst.modpackUrl = clean(inst.modpackUrl) || clean(inst.fileUrl) || clean(inst.modpack_url)
+         inst.version =
+            clean(inst.version) ||
+            clean(inst.minecraftVersion) ||
+            clean(inst.minecraft_version) ||
+            clean(inst.mcVersion) ||
+            clean(inst.mc_version) ||
+            clean(inst.gameVersion)
+         inst.modpackVersion =
+            clean(inst.modpackVersion) ||
+            clean(inst.modpack_version) ||
+            clean(inst.packVersion) ||
+            clean(inst.pack_version)
          inst.loader = clean(inst.loader) || clean(inst.modLoader) || clean(inst.mod_loader) || clean(inst.loader_type) || clean(inst.loaderType)
          if (inst.loader) inst.loader = String(inst.loader).toLowerCase()
          inst.forgeVersion = clean(inst.forgeVersion) || clean(inst.forge_version)

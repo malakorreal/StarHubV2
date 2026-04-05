@@ -1113,11 +1113,17 @@ export class SyncManager {
 
               const srcFile = path.join(sourceDir, relPath)
               const destFile = path.join(targetDir, relPath)
+              const isIgnored = this.shouldIgnore(relPath, ignoreFiles)
               
               const isSettings = relPath.toLowerCase() === 'options.txt' || 
                                (relPath.toLowerCase().startsWith('options') && relPath.endsWith('.txt'))
                                
               if (isSettings && fs.existsSync(destFile)) {
+                  processedFiles++
+                  continue
+              }
+              
+              if (isIgnored) {
                   processedFiles++
                   continue
               }

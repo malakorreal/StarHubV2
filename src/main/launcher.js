@@ -118,7 +118,7 @@ export function setupLauncher(ipcMain, mainWindow) {
     const currentVersion = instance.modpackVersion || instance.version
     
     // If versions mismatch, force an update (re-download/re-extract)
-    if (installedVersion && installedVersion !== currentVersion) {
+    if (installedVersion && currentVersion && installedVersion !== currentVersion) {
          console.log(`[UPDATE] Version mismatch detected for ${instance.id}! Installed: ${installedVersion}, New: ${currentVersion}`)
          forceRepair = true
     }
