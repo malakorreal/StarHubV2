@@ -248,9 +248,15 @@ app.whenReady().then(() => {
 
   ipcMain.handle('get-user-achievements', async () => {
       const store = getStore()
+      const selectedId = store.get('selectedAccountId')
+      const accounts = store.get('accounts', [])
       const auth = store.get('auth')
-      if (!auth || !auth.uuid) return []
-      return await getUserAchievements(auth.uuid)
+      const uuid =
+        (selectedId && accounts.find(a => a.uuid === selectedId)?.uuid) ||
+        auth?.uuid ||
+        null
+      if (!uuid) return []
+      return await getUserAchievements(uuid)
   })
 
   // Backup Instance Data Handler

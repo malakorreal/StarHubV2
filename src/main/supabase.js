@@ -21,6 +21,26 @@ if (supabase) {
     console.error('[SUPABASE] Client failed to initialize.')
 }
 
+const SUPABASE_TIMEOUT_MS = 12000
+
+const withTimeout = async (promise, label) => {
+    let timer = null
+    try {
+        return await Promise.race([
+            promise,
+            new Promise((_, reject) => {
+                timer = setTimeout(() => {
+                    const e = new Error(label ? `Timeout: ${label}` : 'Timeout')
+                    e.code = 'SUPABASE_TIMEOUT'
+                    reject(e)
+                }, SUPABASE_TIMEOUT_MS)
+            })
+        ])
+    } finally {
+        if (timer) clearTimeout(timer)
+    }
+}
+
 /**
  * Helper to sync user to database
  * Table structure: users (uuid: text primary key, username: text, last_seen: timestamp, is_banned: boolean)
@@ -38,14 +58,14 @@ export async function syncUserToDb(profile) {
     console.log(`[SUPABASE] Attempting to sync user: ${profile.name} (${profile.uuid})`)
 
     try {
-        const { data, error } = await supabase
+        const { data, error } = await withTimeout(supabase
             .from('users')
             .upsert({ 
                 uuid: profile.uuid, 
                 username: profile.name, 
                 last_seen: new Date().toISOString(),
             }, { onConflict: 'uuid' })
-            .select()
+            .select(), 'syncUserToDb')
 
         if (error) {
             console.error('[SUPABASE] Upsert Error:', error.code, error.message, error.details)
@@ -68,11 +88,11 @@ export async function checkAndGrantLaunchAchievements(uuid) {
 
     try {
         // 1. Get current unlocked achievements from users table
-        const { data: user, error: userErr } = await supabase
+        const { data: user, error: userErr } = await withTimeout(supabase
             .from('users')
             .select('unlocked_achievements')
             .eq('uuid', uuid)
-            .single()
+            .single(), 'checkAndGrantLaunchAchievements:user')
         
         if (userErr) throw userErr
         
@@ -108,11 +128,11 @@ export async function checkUserBanStatus(uuid) {
     if (!supabase || !uuid) return false
 
     try {
-        const { data, error } = await supabase
+        const { data, error } = await withTimeout(supabase
             .from('users')
             .select('is_banned')
             .eq('uuid', uuid)
-            .single()
+            .single(), 'checkUserBanStatus')
 
         if (error) {
             // If user not found, they are not banned
@@ -135,10 +155,10 @@ export async function getAllAchievements() {
     if (!supabase) return ACHIEVEMENTS
 
     try {
-        const { data, error } = await supabase
+        const { data, error } = await withTimeout(supabase
             .from('achievements')
             .select('*')
-            .order('id', { ascending: true })
+            .order('id', { ascending: true }), 'getAllAchievements')
 
         if (error) {
             console.warn('[SUPABASE] Failed to fetch achievements table, using local fallback:', error.message)
@@ -170,11 +190,11 @@ export async function grantAchievements(uuid, achievementIds) {
 
     try {
         // 1. Get current unlocked list from users table
-        const { data: userData, error: fetchErr } = await supabase
+        const { data: userData, error: fetchErr } = await withTimeout(supabase
             .from('users')
             .select('unlocked_achievements')
             .eq('uuid', uuid)
-            .single()
+            .single(), 'grantAchievements:fetch')
         
         if (fetchErr) throw fetchErr
         
@@ -186,12 +206,12 @@ export async function grantAchievements(uuid, achievementIds) {
         // 2. Update unlocked_achievements list in users table
         const updatedList = Array.from(new Set([...currentList, ...newIds]))
         
-        const { error: updateErr } = await supabase
+        const { error: updateErr } = await withTimeout(supabase
             .from('users')
             .update({ 
                 unlocked_achievements: updatedList 
             })
-            .eq('uuid', uuid)
+            .eq('uuid', uuid), 'grantAchievements:update')
 
         if (updateErr) throw updateErr
 
@@ -211,11 +231,11 @@ export async function getUserAchievements(uuid) {
     if (!supabase || !uuid) return []
 
     try {
-        const { data, error } = await supabase
+        const { data, error } = await withTimeout(supabase
             .from('users')
             .select('unlocked_achievements')
             .eq('uuid', uuid)
-            .single()
+            .single(), 'getUserAchievements')
 
         if (error) throw error
         
@@ -236,11 +256,11 @@ export async function addPlaytime(uuid, minutes) {
 
     try {
         // 1. Get current playtime
-        const { data: user, error: getErr } = await supabase
+        const { data: user, error: getErr } = await withTimeout(supabase
             .from('users')
             .select('playtime_minutes')
             .eq('uuid', uuid)
-            .single()
+            .single(), 'addPlaytime:get')
 
         if (getErr) throw getErr
 
@@ -248,10 +268,10 @@ export async function addPlaytime(uuid, minutes) {
         const newTime = oldTime + minutes
 
         // 2. Update playtime
-        const { error: upErr } = await supabase
+        const { error: upErr } = await withTimeout(supabase
             .from('users')
             .update({ playtime_minutes: newTime })
-            .eq('uuid', uuid)
+            .eq('uuid', uuid), 'addPlaytime:update')
 
         if (upErr) throw upErr
 
@@ -273,4 +293,3 @@ export async function addPlaytime(uuid, minutes) {
         return null
     }
 }
-
