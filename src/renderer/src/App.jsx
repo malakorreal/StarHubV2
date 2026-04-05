@@ -586,6 +586,29 @@ function App() {
       }
   }, [filteredInstances, selectedInstance])
 
+  const normalizeErrorMessage = (err) => {
+      if (!err) return 'Unknown error'
+      if (typeof err === 'string') return err
+      if (typeof err?.message === 'string' && err.message) return err.message
+      try { return JSON.stringify(err) } catch { return String(err) }
+  }
+
+  const getAuthErrorText = (err) => {
+      const code = err?.code || err?.message
+      if (code === 'NO_MINECRAFT') return t('auth.noMinecraft') || "Minecraft Java Edition not found on this account."
+      if (code === 'USER_BANNED') return t('auth.userBanned') || "Your account is banned."
+      if (code === 'LOGIN_RATE_LIMITED') return t('auth.rateLimited') || "Login rate limited. Please wait and try again."
+      if (code === 'LOGIN_TIMEOUT') return t('auth.timeout') || "Login timeout. Please check your connection and try again."
+      if (code === 'LOGIN_NETWORK_ERROR') return t('auth.networkError') || "Network error. Please check your internet and try again."
+      if (code === 'LOGIN_SERVICE_UNAVAILABLE') return t('auth.serviceUnavailable') || "Login service is temporarily unavailable. Please try again later."
+      if (code === 'LOGIN_CANCELLED') return t('auth.cancelled') || "Login cancelled."
+      if (code === 'LOGIN_MFA_REQUIRED') return t('auth.mfaRequired') || "Additional verification required. Please complete MFA and try again."
+      if (code === 'LOGIN_INVALID_CREDENTIALS') return t('auth.invalidCredentials') || "Invalid username or password."
+      if (code === 'LOGIN_ACCOUNT_NOT_FOUND') return t('auth.accountNotFound') || "Account not found."
+      if (code === 'SESSION_EXPIRED') return t('auth.sessionExpired') || "Session expired. Please login again."
+      return normalizeErrorMessage(err)
+  }
+
   const handleLogin = async () => {
         setIsLoggingIn(true)
         try {
@@ -596,16 +619,12 @@ function App() {
                 await preloadAssets(insts, result.profile)
                 setUser(result.profile)
             } else {
-                if (result.error && result.error.message === 'NO_MINECRAFT') {
-                    setErrorMessage(t('auth.noMinecraft') || "Minecraft Java Edition not found on this account.")
-                } else if (result.error && result.error.message === 'USER_BANNED') {
-                    setErrorMessage(t('auth.userBanned') || "Your account is banned.")
-                } else {
-                    setErrorMessage("Login Failed: " + (result.error?.message || "Unknown error"))
-                }
+                const prefix = t('auth.loginFailedPrefix') || "Login Failed: "
+                setErrorMessage(prefix + getAuthErrorText(result.error))
             }
         } catch (err) {
-            setErrorMessage("Login Error: " + err.message)
+            const prefix = t('auth.loginErrorPrefix') || "Login Error: "
+            setErrorMessage(prefix + getAuthErrorText(err))
         } finally {
             setIsLoggingIn(false)
         }
@@ -621,11 +640,11 @@ function App() {
     const auth = await window.api.refreshToken() // Get fresh token
     if (!auth.success) {
         setLaunchStatus('idle')
-        if (auth.error && auth.error.message === 'NO_MINECRAFT') {
+        if (auth.error && (auth.error.code === 'NO_MINECRAFT' || auth.error.message === 'NO_MINECRAFT')) {
             setErrorMessage(t('auth.noMinecraft') || "Minecraft Java Edition not found on this account.")
             return
         }
-        if (auth.error && auth.error.message === 'USER_BANNED') {
+        if (auth.error && (auth.error.code === 'USER_BANNED' || auth.error.message === 'USER_BANNED')) {
             setErrorMessage(t('auth.userBanned') || "Your account is banned.")
             return
         }
@@ -637,7 +656,7 @@ function App() {
     if (!result.success) {
         setLaunchStatus('idle')
         if (result.error !== 'Cancelled') {
-             setErrorMessage("Launch Failed: " + result.error)
+             setErrorMessage("Launch Failed: " + normalizeErrorMessage(result.error))
         }
     }
   }

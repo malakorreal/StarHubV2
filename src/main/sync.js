@@ -178,6 +178,29 @@ export class SyncManager {
       }
   }
 
+  async safeMoveFile(src, dest, retries = 20, baseDelayMs = 200) {
+      for (let i = 0; i < retries; i++) {
+          try {
+              await fs.promises.rename(src, dest)
+              return true
+          } catch (e) {
+              const code = e?.code
+              const isLocked = code === 'EPERM' || code === 'EBUSY' || code === 'EACCES'
+              if (isLocked) {
+                  try {
+                      await fs.promises.copyFile(src, dest)
+                      try { await fs.promises.unlink(src) } catch (e2) {}
+                      return true
+                  } catch (copyErr) {}
+              }
+              if (i === retries - 1) throw e
+              const wait = Math.min(baseDelayMs * Math.pow(2, Math.max(i - 1, 0)), 4000) + Math.floor(Math.random() * 120)
+              await this.sleep(wait)
+          }
+      }
+      return false
+  }
+
   /**
    * Download a file with retry logic and progress tracking
    */
@@ -1111,7 +1134,7 @@ export class SyncManager {
                   }
               }
               
-              await fs.promises.rename(srcFile, destFile)
+              await this.safeMoveFile(srcFile, destFile)
               
               processedFiles++
               if (processedFiles % 25 === 0 || processedFiles === totalFiles) {

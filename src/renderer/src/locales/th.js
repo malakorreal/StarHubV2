@@ -4,7 +4,18 @@ export default {
     loginFailed: "เข้าสู่ระบบไม่สำเร็จ",
     loginError: "เกิดข้อผิดพลาดในการเข้าสู่ระบบ",
     noMinecraft: "ไม่พบ Minecraft Java Edition ในบัญชีนี้",
-    userBanned: "บัญชีของคุณถูกระงับการใช้งาน (Banned)"
+    userBanned: "บัญชีของคุณถูกระงับการใช้งาน (Banned)",
+    loginFailedPrefix: "เข้าสู่ระบบไม่สำเร็จ: ",
+    loginErrorPrefix: "เกิดข้อผิดพลาดในการเข้าสู่ระบบ: ",
+    rateLimited: "พยายามเข้าสู่ระบบถี่เกินไป กรุณารอสักครู่แล้วลองใหม่",
+    networkError: "เน็ตมีปัญหา/หลุด กรุณาตรวจสอบอินเทอร์เน็ตแล้วลองใหม่",
+    timeout: "หมดเวลาเชื่อมต่อ กรุณาลองใหม่อีกครั้ง",
+    serviceUnavailable: "ระบบล็อกอินขัดข้องชั่วคราว กรุณาลองใหม่ภายหลัง",
+    cancelled: "ยกเลิกการเข้าสู่ระบบ",
+    mfaRequired: "บัญชีต้องยืนยันตัวตนเพิ่มเติม (MFA) กรุณายืนยันแล้วลองใหม่",
+    invalidCredentials: "อีเมล/รหัสผ่านไม่ถูกต้อง หรือยืนยันตัวตนไม่สำเร็จ",
+    accountNotFound: "ไม่พบบัญชีนี้ในระบบ Microsoft",
+    sessionExpired: "เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่"
   },
   sidebar: {
     library: "คลัง Instance",

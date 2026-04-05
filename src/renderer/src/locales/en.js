@@ -8,7 +8,16 @@ export default {
     loginFailedPrefix: "Login Failed: ",
     loginErrorPrefix: "Login Error: ",
     launchFailedPrefix: "Launch Failed: ",
-    repairFailedPrefix: "Repair Failed: "
+    repairFailedPrefix: "Repair Failed: ",
+    rateLimited: "Login rate limited. Please wait and try again.",
+    networkError: "Network error. Please check your internet and try again.",
+    timeout: "Request timed out. Please try again.",
+    serviceUnavailable: "Login service is temporarily unavailable. Please try again later.",
+    cancelled: "Login cancelled.",
+    mfaRequired: "Additional verification required (MFA). Please complete it and try again.",
+    invalidCredentials: "Invalid credentials.",
+    accountNotFound: "Account not found.",
+    sessionExpired: "Session expired. Please login again."
   },
   sidebar: {
     library: "Library",

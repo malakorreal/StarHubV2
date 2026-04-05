@@ -5,12 +5,70 @@ import icon from '../../resources/icon.ico?asset'
 import axios from 'axios'
 import { syncUserToDb, checkUserBanStatus } from './supabase'
 
+function toErrorMessage(err) {
+    if (!err) return 'Unknown error'
+    if (typeof err === 'string') return err
+    if (err instanceof Error && typeof err.message === 'string' && err.message) return err.message
+    const axiosMsg =
+        err?.response?.data?.message ||
+        err?.response?.data?.error ||
+        err?.response?.statusText
+    if (typeof axiosMsg === 'string' && axiosMsg) return axiosMsg
+    if (typeof err?.message === 'string' && err.message) return err.message
+    if (typeof err?.error === 'string' && err.error) return err.error
+    try { return JSON.stringify(err) } catch { return String(err) }
+}
+
+function classifyAuthError(err) {
+    const msg = toErrorMessage(err)
+    const lower = msg.toLowerCase()
+    const status = err?.response?.status
+    const code = err?.code
+
+    if (lower.includes('user does not own minecraft') || lower.includes('user does not own the game')) {
+        return { code: 'NO_MINECRAFT', message: 'NO_MINECRAFT' }
+    }
+
+    if (code === 'ERR_CANCELED' || lower.includes('cancel') || lower.includes('aborted') || lower.includes('closed') || lower.includes('window closed')) {
+        return { code: 'LOGIN_CANCELLED', message: 'LOGIN_CANCELLED' }
+    }
+
+    if (status === 429 || lower.includes('too many requests') || lower.includes('rate limit') || lower.includes('too many')) {
+        return { code: 'LOGIN_RATE_LIMITED', message: 'LOGIN_RATE_LIMITED' }
+    }
+
+    if (lower.includes('aadsts50076') || lower.includes('aadsts50079')) {
+        return { code: 'LOGIN_MFA_REQUIRED', message: 'LOGIN_MFA_REQUIRED' }
+    }
+    if (lower.includes('aadsts50126')) {
+        return { code: 'LOGIN_INVALID_CREDENTIALS', message: 'LOGIN_INVALID_CREDENTIALS' }
+    }
+    if (lower.includes('aadsts50034')) {
+        return { code: 'LOGIN_ACCOUNT_NOT_FOUND', message: 'LOGIN_ACCOUNT_NOT_FOUND' }
+    }
+
+    if (code === 'ETIMEDOUT' || code === 'ESOCKETTIMEDOUT' || lower.includes('timeout') || lower.includes('timed out')) {
+        return { code: 'LOGIN_TIMEOUT', message: 'LOGIN_TIMEOUT' }
+    }
+
+    if (code === 'ENOTFOUND' || code === 'ECONNRESET' || code === 'ECONNREFUSED' || code === 'EAI_AGAIN' || lower.includes('network error') || lower.includes('getaddrinfo') || lower.includes('certificate') || lower.includes('dns')) {
+        return { code: 'LOGIN_NETWORK_ERROR', message: 'LOGIN_NETWORK_ERROR' }
+    }
+
+    if ((typeof status === 'number' && status >= 500) || lower.includes('service unavailable') || lower.includes('bad gateway') || lower.includes('gateway timeout')) {
+        return { code: 'LOGIN_SERVICE_UNAVAILABLE', message: 'LOGIN_SERVICE_UNAVAILABLE' }
+    }
+
+    return { code: 'LOGIN_FAILED', message: msg }
+}
+
 async function validateSession(accessToken) {
     try {
         const response = await axios.get('https://api.minecraftservices.com/entitlements/mcstore', {
             headers: {
                 'Authorization': `Bearer ${accessToken}`
-            }
+            },
+            timeout: 15000
         });
         
         // Check if user has Minecraft entitlements
@@ -23,7 +81,8 @@ async function validateSession(accessToken) {
         
         return { valid: true };
     } catch (error) {
-        return { valid: false, error: error.message };
+        const classified = classifyAuthError(error)
+        return { valid: false, error: classified.message };
     }
 }
 
@@ -136,11 +195,8 @@ export function setupAuth(ipcMain, mainWindow) {
         }
     } catch (err) {
         console.error("Login Error:", err)
-        const errStr = String(err)
-        if (errStr.includes("User does not own minecraft") || errStr.includes("User does not own the game")) {
-             return { success: false, error: { message: 'NO_MINECRAFT' } }
-        }
-        return { success: false, error: { message: err.message || errStr } }
+        const classified = classifyAuthError(err)
+        return { success: false, error: { code: classified.code, message: classified.message } }
     }
   })
 
@@ -249,17 +305,19 @@ export function setupAuth(ipcMain, mainWindow) {
                 }
             } catch (refreshErr) {
                 console.error("Auto-refresh failed:", refreshErr)
-                // If refresh fails, we return error so user sees Login screen
+                const classified = classifyAuthError(refreshErr)
+                return { success: false, error: { code: classified.code, message: classified.message } }
             }
         } else {
             console.warn("No MSMC token available for refresh.")
         }
 
-        return { success: false, error: { message: 'Session expired' } }
+        return { success: false, error: { code: 'SESSION_EXPIRED', message: 'SESSION_EXPIRED' } }
 
     } catch (e) {
         console.error("Refresh/Validation Error:", e)
-        return { success: false, error: { message: e.message } }
+        const classified = classifyAuthError(e)
+        return { success: false, error: { code: classified.code, message: classified.message } }
     }
   })
 
