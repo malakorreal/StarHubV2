@@ -1,6 +1,6 @@
 import fs from 'fs'
 import path from 'path'
-import { exec } from 'child_process'
+import { spawn } from 'child_process'
 import axios from 'axios'
 import AdmZip from 'adm-zip'
 import { getStore } from './store'
@@ -344,16 +344,7 @@ export class SyncManager {
             if (fs.existsSync(dest)) {
                  try { fs.chmodSync(dest, 0o666); fs.unlinkSync(dest) } catch(e) {}
             }
-            
-            for (let i = 0; i < 15; i++) {
-                try {
-                    fs.renameSync(tempDest, dest)
-                    break
-                } catch(e) {
-                    if (i === 14) throw e
-                    await this.sleep(1000)
-                }
-            }
+            await this.safeMoveFile(tempDest, dest, 20, 200)
 
             this.log(`[DOWNLOAD] Success: ${fileName}`)
             return true
@@ -456,6 +447,9 @@ export class SyncManager {
      // 🔄 RESUME LOGIC: Check if we have a partial state
      let finishedChunks = new Set()
      try {
+         if (fs.existsSync(stateFile) && !fs.existsSync(tempDest)) {
+             try { fs.unlinkSync(stateFile) } catch(e) {}
+         }
          if (fs.existsSync(stateFile) && fs.existsSync(tempDest)) {
              const rawState = fs.readFileSync(stateFile, 'utf8')
              const state = JSON.parse(rawState)
@@ -473,7 +467,11 @@ export class SyncManager {
      }
 
      // Ensure temp file exists (open with 'a' to avoid truncation, or 'w' if fresh)
-     const mode = finishedChunks.size > 0 ? 'r+' : 'w'
+     if (finishedChunks.size > 0 && !fs.existsSync(tempDest)) {
+         finishedChunks = new Set()
+         try { if (fs.existsSync(stateFile)) fs.unlinkSync(stateFile) } catch(e) {}
+     }
+     const mode = (finishedChunks.size > 0 && fs.existsSync(tempDest)) ? 'r+' : 'w'
      if (mode === 'w' && !fs.existsSync(path.dirname(tempDest))) {
          fs.mkdirSync(path.dirname(tempDest), { recursive: true })
      }
@@ -481,9 +479,14 @@ export class SyncManager {
      const fd = await this.safeOpen(tempDest, mode)
      // If we are starting fresh with 'w', make sure file is allocated (optional but good)
      
-     let downloadedTotal = finishedChunks.size * chunkSize 
-     // Note: last chunk might be smaller, but this is used for progress UI
-     if (finishedChunks.size === chunks) downloadedTotal = totalSize
+     let downloadedTotal = 0
+     if (finishedChunks.size > 0) {
+         for (const i of finishedChunks) {
+             const start = i * chunkSize
+             const end = Math.min(start + chunkSize - 1, totalSize - 1)
+             if (end >= start) downloadedTotal += (end - start + 1)
+         }
+     }
 
      let abortError = null
      
@@ -602,19 +605,8 @@ export class SyncManager {
      if (fs.existsSync(dest)) {
           try { fs.chmodSync(dest, 0o666); fs.unlinkSync(dest) } catch(e) {}
      }
-     
-     for (let i = 0; i < 15; i++) {
-         try {
-             fs.renameSync(tempDest, dest)
-             // SUCCESS: Cleanup state file
-             try { if (fs.existsSync(stateFile)) fs.unlinkSync(stateFile) } catch(e) {}
-             break
-         } catch(e) {
-             if (i === 14) throw e
-             this.log(`[RENAME-LOCKED] Failed to finalize file, retrying... (${i+1}/15)`)
-             await this.sleep(1000)
-         }
-     }
+     await this.safeMoveFile(tempDest, dest, 20, 200)
+     try { if (fs.existsSync(stateFile)) fs.unlinkSync(stateFile) } catch(e) {}
 
      this.log(`[LARGE-DOWNLOAD] Success: ${fileName}`)
      return true
@@ -653,6 +645,7 @@ export class SyncManager {
 
       const queue = [...mods]
       let abortError = null
+      const failures = []
 
       const next = async () => {
           if (queue.length === 0 || abortError || signal?.aborted) return
@@ -748,8 +741,7 @@ export class SyncManager {
                   return
               }
               console.error(`Failed to sync mod: ${modUrl}`, e)
-              abortError = e
-              return
+              failures.push({ url: modUrl, message: e?.message || String(e) })
           }
 
           if (!abortError && !signal?.aborted) await next()
@@ -763,6 +755,10 @@ export class SyncManager {
       
       if (abortError) throw abortError
       if (signal?.aborted) throw new Error('Download aborted')
+      if (failures.length > 0) {
+          const first = failures[0]
+          throw new Error(`Failed to download ${failures.length} mod(s). First: ${first?.message || 'Unknown error'}`)
+      }
 
       // Cache Cleanup
       const CLEANUP_THRESHOLD = 30 * 24 * 60 * 60 * 1000
@@ -831,13 +827,27 @@ export class SyncManager {
                   continue
               }
 
+              const normalizedRel = f.rel.toLowerCase()
+              const isValidExact = validSet.has(f.rel)
+              const isValidCaseInsensitive = validLowercaseMap.has(normalizedRel)
+              const isManaged = isValidExact || isValidCaseInsensitive
+              const isInMods = f.rel.startsWith('mods/')
+              const isInConfig = f.rel.startsWith('config/')
+              const lowerName = f.name.toLowerCase()
+              const isJar = lowerName.endsWith('.jar')
+              const isOptions = lowerName === 'options.txt' || (lowerName.startsWith('options') && lowerName.endsWith('.txt'))
+
               let isCorrupt = false
               try {
                   const stats = await fs.promises.stat(f.abs)
                   if (stats.isFile()) {
-                      if (stats.size === 0) {
-                          isCorrupt = true
-                      } else if (f.name.toLowerCase().endsWith('.jar')) {
+                      if (stats.size === 0 && isManaged) {
+                          if (isInMods || isJar) {
+                              isCorrupt = true
+                          } else if (!isInConfig && !isOptions) {
+                              isCorrupt = true
+                          }
+                      } else if (isManaged && isInMods && isJar) {
                           const handle = await fs.promises.open(f.abs, 'r')
                           const buffer = Buffer.alloc(4)
                           await handle.read(buffer, 0, 4, 0)
@@ -852,11 +862,6 @@ export class SyncManager {
               if (isCorrupt) {
                   result.corrupt.push(f.rel)
               }
-
-              const normalizedRel = f.rel.toLowerCase()
-              const isValidExact = validSet.has(f.rel)
-              // 🚨 CASE-INSENSITIVE CHECK: On Windows, we should be lenient with case
-              const isValidCaseInsensitive = validLowercaseMap.has(normalizedRel)
               
               const isModFile = f.rel.startsWith('mods/')
               
@@ -879,10 +884,12 @@ export class SyncManager {
               const existsExact = localRelSet.has(normValid)
               const existsCaseInsensitive = localFiles.some(f => f.rel.toLowerCase() === normValid.toLowerCase())
               const existsByName = localFiles.some(f => f.name.toLowerCase() === path.basename(valid).toLowerCase())
+              const foundCase = existsCaseInsensitive ? localFiles.find(f => f.rel.toLowerCase() === normValid.toLowerCase()) : null
+              const corruptFoundCase = foundCase ? result.corrupt.includes(foundCase.rel) : false
               
               if (!existsExact && !existsCaseInsensitive && !existsByName) {
                   if (!result.added.includes(valid)) result.added.push(valid)
-              } else if (result.corrupt.includes(normValid) || (existsCaseInsensitive && result.corrupt.includes(localFiles.find(f => f.rel.toLowerCase() === normValid.toLowerCase()).rel))) {
+              } else if (result.corrupt.includes(normValid) || corruptFoundCase) {
                   if (!result.added.includes(valid)) result.added.push(valid)
               }
           }
@@ -945,6 +952,8 @@ export class SyncManager {
           if (signal?.aborted) return reject(new Error('Unzip aborted'))
           
           let childProcess = null
+          let aborted = false
+          let stderrBuf = ''
 
           try {
               // Use double quotes for paths and escape single quotes for PowerShell
@@ -953,21 +962,35 @@ export class SyncManager {
               
               // Use a more robust PowerShell command that handles UTF-8 paths better
               const psCommand = `Expand-Archive -Path '${escapedZipPath}' -DestinationPath '${escapedTargetDir}' -Force`
-              const command = `powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "${psCommand}"`
-              
-              childProcess = exec(command, { maxBuffer: 1024 * 1024, env: { ...process.env, LANG: 'en_US.UTF-8' } }, (error, stdout, stderr) => {
-                  if (signal?.aborted) return // Already handled
-                  if (error) {
-                      // Fallback to AdmZip if PowerShell fails
-                      console.warn("PowerShell unzip failed, falling back to AdmZip:", error.message)
-                      this.fallbackUnzip(zipPath, targetDir, resolve, reject, signal)
-                  } else {
+              childProcess = spawn('powershell', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', psCommand], {
+                  windowsHide: true,
+                  env: { ...process.env, LANG: 'en_US.UTF-8' }
+              })
+
+              childProcess.stderr.on('data', (d) => {
+                  stderrBuf += d.toString()
+                  if (stderrBuf.length > 8000) stderrBuf = stderrBuf.slice(-8000)
+              })
+
+              childProcess.on('error', (error) => {
+                  if (aborted || signal?.aborted) return
+                  console.warn("PowerShell unzip failed to start, falling back to AdmZip:", error.message)
+                  this.fallbackUnzip(zipPath, targetDir, resolve, reject, signal)
+              })
+
+              childProcess.on('exit', (code) => {
+                  if (aborted || signal?.aborted) return
+                  if (code === 0) {
                       resolve(true)
+                      return
                   }
+                  console.warn("PowerShell unzip failed, falling back to AdmZip:", stderrBuf || `exit code ${code}`)
+                  this.fallbackUnzip(zipPath, targetDir, resolve, reject, signal)
               })
               
               if (signal) {
                   signal.addEventListener('abort', () => {
+                      aborted = true
                       if (childProcess) {
                           try {
                               childProcess.kill() 

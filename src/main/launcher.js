@@ -23,6 +23,7 @@ export function setupLauncher(ipcMain, mainWindow) {
 
   let currentLaunchController = null
   let currentLaunchPromise = null
+  let currentOp = null
   let activeLauncherProcess = null
   const getFreeSpaceGB = (targetPath) => {
     try {
@@ -55,6 +56,12 @@ export function setupLauncher(ipcMain, mainWindow) {
     }
     const rootPath = path.join(baseDir, 'instances', id)
     const modsFolder = path.join(rootPath, 'mods')
+    const STEP_DELAY_MS = 5000
+    const stepDelay = async (label) => {
+        if (!STEP_DELAY_MS) return
+        console.log(`[DELAY] ${label} (${STEP_DELAY_MS}ms)`)
+        await syncManager.sleep(STEP_DELAY_MS)
+    }
 
     // 🚨 DISK SPACE CHECK (EARLY)
     const freeGB = getFreeSpaceGB(rootPath)
@@ -116,6 +123,16 @@ export function setupLauncher(ipcMain, mainWindow) {
     const installedVersions = store.get('installed_versions', {})
     const installedVersion = installedVersions[instance.id]
     const currentVersion = instance.modpackVersion || instance.version
+
+    const normalizeVersionKey = (v) => String(v || '')
+        .trim()
+        .replace(/[^\w.-]+/g, '_')
+        .slice(0, 64)
+
+    const versionKey = currentVersion ? normalizeVersionKey(currentVersion) : null
+    const modpackCacheDir = versionKey ? path.join(baseDir, 'modpack_cache', String(instance.id), versionKey) : null
+    const cacheZipPath = modpackCacheDir ? path.join(modpackCacheDir, modpackFileName) : null
+    let activeZipPath = cacheZipPath || zipPath
     
     // If versions mismatch, force an update (re-download/re-extract)
     if (installedVersion && currentVersion && installedVersion !== currentVersion) {
@@ -190,7 +207,7 @@ export function setupLauncher(ipcMain, mainWindow) {
     let extractedFiles = []
     if (instance.modpackUrl) {
         console.log(`[ZIP] Processing modpack for instance ${instance.id}: ${instance.modpackUrl}`)
-        console.log(`[ZIP] Zip path: ${zipPath}`)
+        console.log(`[ZIP] Zip path: ${activeZipPath}`)
         
         // 🚨 Validate File Extension (Must be .zip)
         try {
@@ -204,23 +221,28 @@ export function setupLauncher(ipcMain, mainWindow) {
         }
 
         // Check if we need to download
-        let needsDownload = forceRepair || !fs.existsSync(zipPath)
-        console.log(`[ZIP] needsDownload: ${needsDownload} (forceRepair: ${forceRepair}, zipExists: ${fs.existsSync(zipPath)})`)
+        if (modpackCacheDir && !fs.existsSync(modpackCacheDir)) {
+            try { fs.mkdirSync(modpackCacheDir, { recursive: true }) } catch (e) {}
+        }
+        let needsDownload = !fs.existsSync(activeZipPath)
+        console.log(`[ZIP] needsDownload: ${needsDownload} (forceRepair: ${forceRepair}, zipExists: ${fs.existsSync(activeZipPath)})`)
         
-        const tryDownloadModpack = async () => {
+        const tryDownloadModpack = async (destPath) => {
              try {
-                await syncManager.downloadLargeFile(instance.modpackUrl, zipPath, { signal })
+                await stepDelay('Preparing modpack download')
+                await syncManager.downloadLargeFile(instance.modpackUrl, destPath, { signal })
+                await stepDelay('Preparing extraction')
              } catch (e) {
                 // If failed or aborted, delete partial zip files
                 // Note: unique temp files in sync.js are cleaned up there, 
                 // but we still try to cleanup the main zipPath if it was partially moved.
-                if (fs.existsSync(zipPath)) {
+                if (fs.existsSync(destPath)) {
                     try { 
                         // Retry logic for EPERM deletion
                         for (let i = 0; i < 5; i++) {
                             try {
-                                fs.chmodSync(zipPath, 0o666)
-                                fs.rmSync(zipPath, { force: true })
+                                fs.chmodSync(destPath, 0o666)
+                                fs.rmSync(destPath, { force: true })
                                 break
                             } catch(err) {
                                 if (i === 4) break
@@ -232,7 +254,7 @@ export function setupLauncher(ipcMain, mainWindow) {
 
                 if (instance.modpackMirrorUrl && !signal?.aborted) {
                     console.warn(`[ZIP] Primary modpack download failed: ${e.message}. Trying mirror...`)
-                    await syncManager.downloadLargeFile(instance.modpackMirrorUrl, zipPath, { signal })
+                    await syncManager.downloadLargeFile(instance.modpackMirrorUrl, destPath, { signal })
                 } else {
                     console.error(`[ZIP] Download failed: ${e.message}`)
                     throw e // Re-throw if no mirror is available or if aborted
@@ -242,9 +264,10 @@ export function setupLauncher(ipcMain, mainWindow) {
 
         if (needsDownload) {
              console.log(`[ZIP] Downloading Modpack: ${instance.modpackUrl}`)
-             await tryDownloadModpack()
-             console.log(`[ZIP] Extraction starting: ${zipPath} -> ${rootPath}`)
-             extractedFiles = await syncManager.extractZip(zipPath, rootPath, { signal, ignoreFiles: instance.ignoreFiles }) || []
+             await tryDownloadModpack(activeZipPath)
+             console.log(`[ZIP] Extraction starting: ${activeZipPath} -> ${rootPath}`)
+             extractedFiles = await syncManager.extractZip(activeZipPath, rootPath, { signal, ignoreFiles: instance.ignoreFiles }) || []
+             await stepDelay('Preparing next step after extraction')
         } else {
              // Zip exists. Verify it's not corrupt before skipping download
              let isCorrupt = false
@@ -253,7 +276,7 @@ export function setupLauncher(ipcMain, mainWindow) {
                  let zip = null
                  for (let i = 0; i < 5; i++) {
                      try {
-                         zip = new AdmZip(zipPath)
+                         zip = new AdmZip(activeZipPath)
                          zip.getEntries()
                          break
                      } catch(e) {
@@ -261,7 +284,7 @@ export function setupLauncher(ipcMain, mainWindow) {
                          await new Promise(r => setTimeout(r, 500))
                      }
                  }
-                 console.log(`[ZIP] Existing zip verified: ${zipPath}`)
+                 console.log(`[ZIP] Existing zip verified: ${activeZipPath}`)
              } catch (e) {
                  console.warn("[ZIP] Existing modpack.zip is corrupt, redownloading...")
                  isCorrupt = true
@@ -269,7 +292,7 @@ export function setupLauncher(ipcMain, mainWindow) {
                     // Retry logic for EPERM
                     for (let i = 0; i < 5; i++) {
                         try {
-                            fs.rmSync(zipPath, { force: true })
+                            fs.rmSync(activeZipPath, { force: true })
                             break
                         } catch(err) {
                             if (i === 4) break
@@ -277,9 +300,10 @@ export function setupLauncher(ipcMain, mainWindow) {
                         }
                     }
                  } catch(err) {}
-                 await tryDownloadModpack()
+                 await tryDownloadModpack(activeZipPath)
                  // Need to extract after redownloading!
-                 extractedFiles = await syncManager.extractZip(zipPath, rootPath, { signal, ignoreFiles: instance.ignoreFiles }) || []
+                 extractedFiles = await syncManager.extractZip(activeZipPath, rootPath, { signal, ignoreFiles: instance.ignoreFiles }) || []
+                 await stepDelay('Preparing next step after extraction')
              }
 
              // If not corrupt, check if we need to extract anyway (e.g. mods folder empty)
@@ -287,7 +311,9 @@ export function setupLauncher(ipcMain, mainWindow) {
                  const files = fs.readdirSync(modsFolder)
                  if (files.length === 0) {
                      console.log("[ZIP] Mods folder empty. Extracting existing zip...")
-                     extractedFiles = await syncManager.extractZip(zipPath, rootPath, { signal, ignoreFiles: instance.ignoreFiles }) || []
+                     await stepDelay('Preparing extraction from cache')
+                     extractedFiles = await syncManager.extractZip(activeZipPath, rootPath, { signal, ignoreFiles: instance.ignoreFiles }) || []
+                     await stepDelay('Preparing next step after extraction')
                  }
              }
         }
@@ -373,13 +399,13 @@ export function setupLauncher(ipcMain, mainWindow) {
              if (extractedFiles && extractedFiles.length > 0) {
                  console.log(`[CLEANUP] Using ${extractedFiles.length} files from just-extracted zip.`)
                  extractedFiles.forEach(f => addValidRelPath(f))
-             } else if (fs.existsSync(zipPath)) {
+             } else if (fs.existsSync(activeZipPath)) {
                 try {
                     // 🚨 Retry logic for reading zip (Common EPERM)
                     let zip = null
                     for (let i = 0; i < 5; i++) {
                         try {
-                            zip = new AdmZip(zipPath)
+                            zip = new AdmZip(activeZipPath)
                             zip.getEntries()
                             break
                         } catch(e) {
@@ -625,7 +651,7 @@ export function setupLauncher(ipcMain, mainWindow) {
             // AUTO-REPAIR: Try to sync mods and extract zip again if needed
             if (instance.modpackUrl && (checkResult.added.some(f => !f.startsWith('mods/')) || checkResult.corrupt.some(f => !f.startsWith('mods/')))) {
                 console.log("[VERIFY] Re-extracting modpack to fix non-mod files...")
-                await syncManager.extractZip(zipPath, rootPath, { signal, ignoreFiles: instance.ignoreFiles })
+                await syncManager.extractZip(activeZipPath, rootPath, { signal, ignoreFiles: instance.ignoreFiles })
                 
                 // Refresh check result after re-extraction
                 checkResult = await syncManager.comparePatches(rootPath, desired, instance.ignoreFiles || [])
@@ -682,6 +708,7 @@ export function setupLauncher(ipcMain, mainWindow) {
           console.log("Cancelling launch...")
           currentLaunchController.abort()
           currentLaunchController = null
+          currentOp = null
           return { success: true }
       }
       return { success: false, reason: 'no_active_launch' }
@@ -689,12 +716,18 @@ export function setupLauncher(ipcMain, mainWindow) {
 
   ipcMain.handle('repair-instance', async (event, instance) => {
     try {
+        const instanceId = String(instance?.id || '')
+        if (currentOp?.kind === 'repair' && currentOp?.id === instanceId && currentLaunchPromise) {
+            await currentLaunchPromise
+            return { success: true }
+        }
         if (currentLaunchController) {
             currentLaunchController.abort() // Cancel any previous
             if (currentLaunchPromise) {
                 try { await currentLaunchPromise } catch(e) {} // Wait for previous to stop
             }
         }
+        currentOp = { kind: 'repair', id: instanceId }
         currentLaunchController = new AbortController()
         const signal = currentLaunchController.signal
 
@@ -703,10 +736,12 @@ export function setupLauncher(ipcMain, mainWindow) {
         
         currentLaunchController = null
         currentLaunchPromise = null
+        currentOp = null
         return { success: true }
     } catch (e) {
         currentLaunchController = null
         currentLaunchPromise = null
+        currentOp = null
         console.error("Repair Error:", e)
         if (e.message === 'Launch aborted' || e.message === 'Download aborted' || e.message === 'Unzip aborted' || e.message === 'Extraction aborted') {
              return { success: false, error: 'Cancelled' }
@@ -717,12 +752,22 @@ export function setupLauncher(ipcMain, mainWindow) {
 
   ipcMain.handle('prepare-launch', async (event, instance) => {
     try {
+        const instanceId = String(instance?.id || '')
+        if (currentOp?.kind === 'repair' && currentOp?.id === instanceId && currentLaunchPromise) {
+            await currentLaunchPromise
+            return { success: true }
+        }
+        if (currentOp?.kind === 'prepare' && currentOp?.id === instanceId && currentLaunchPromise) {
+            await currentLaunchPromise
+            return { success: true }
+        }
         if (currentLaunchController) {
             currentLaunchController.abort()
             if (currentLaunchPromise) {
                 try { await currentLaunchPromise } catch(e) {}
             }
         }
+        currentOp = { kind: 'prepare', id: instanceId }
         currentLaunchController = new AbortController()
         const signal = currentLaunchController.signal
 
@@ -731,10 +776,12 @@ export function setupLauncher(ipcMain, mainWindow) {
         
         currentLaunchController = null
         currentLaunchPromise = null
+        currentOp = null
         return { success: true }
     } catch (e) {
         currentLaunchController = null
         currentLaunchPromise = null
+        currentOp = null
         console.error("Prepare Error:", e)
         if (e.message === 'Launch aborted' || e.message === 'Download aborted') {
              return { success: false, error: 'Cancelled' }
@@ -753,12 +800,17 @@ export function setupLauncher(ipcMain, mainWindow) {
     const launcher = new Client()
     
     try {
+        const instanceId = String(instance?.id || '')
+        if ((currentOp?.kind === 'repair' || currentOp?.kind === 'prepare') && currentOp?.id === instanceId && currentLaunchPromise) {
+            await currentLaunchPromise
+        }
         if (currentLaunchController) {
             currentLaunchController.abort()
             if (currentLaunchPromise) {
                 try { await currentLaunchPromise } catch(e) {}
             }
         }
+        currentOp = { kind: 'launch', id: instanceId }
         currentLaunchController = new AbortController()
         const signal = currentLaunchController.signal
 
@@ -1516,11 +1568,17 @@ export function setupLauncher(ipcMain, mainWindow) {
         }
         
         activeLauncherProcess = true // Mark as running
+        currentLaunchController = null
+        currentLaunchPromise = null
+        currentOp = null
 
         return { success: true }
 
     } catch (error) {
         console.error("Launch Error:", error)
+        currentLaunchController = null
+        currentLaunchPromise = null
+        currentOp = null
         if (
             error.message === 'Launch aborted' ||
             error.message === 'Download aborted' ||
