@@ -98,9 +98,14 @@ function App() {
   const [toast, setToast] = useState(null)
   const [repairActionName, setRepairActionName] = useState('Repair')
   const notifiedUpdatesRef = React.useRef(new Set())
+  const updateStatusRef = React.useRef('idle')
   const fetchInstancesInFlightRef = React.useRef(false)
   const instancesRefreshIntervalRef = React.useRef(null)
   const launchStatusRef = React.useRef('idle')
+
+  useEffect(() => {
+      updateStatusRef.current = updateStatus
+  }, [updateStatus])
 
   const [enableAnimation, setEnableAnimation] = useState(false)
   const [enableCubes] = useState(true)
@@ -406,11 +411,27 @@ function App() {
     if (window.api.onUpdaterEvent) {
         const unsub = window.api.onUpdaterEvent((data) => {
             if (isDev) console.log("Updater Event:", data)
-            setUpdateStatus(data.type)
-            if (data.type === 'error' && data.error) {
+            const prev = updateStatusRef.current
+            const next = data?.type
+
+            if (prev === 'downloaded' && (next === 'available' || next === 'downloading' || next === 'checking')) {
+                return
+            }
+
+            if (next === 'checking') {
+                setUpdateError(null)
+                setUpdateProgress(0)
+            }
+
+            if (next === 'available') setUpdateProgress(0)
+            if (next === 'downloaded') setUpdateProgress(100)
+
+            setUpdateStatus(next)
+
+            if (next === 'error' && data?.error) {
                 setUpdateError(data.error)
             }
-            if (data.progress) {
+            if (next === 'downloading' && typeof data?.progress === 'number') {
                 setUpdateProgress(data.progress)
             }
         })

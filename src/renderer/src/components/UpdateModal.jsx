@@ -122,7 +122,12 @@ const UpdateModal = ({ status, progress, error, onInstall, onClose }) => {
             color: '#a9b1d6',
             fontSize: '16px',
             lineHeight: '1.5',
-            marginBottom: '32px'
+            marginBottom: '32px',
+            whiteSpace: 'pre-line',
+            overflowWrap: 'anywhere',
+            maxHeight: '260px',
+            overflowY: 'auto',
+            width: '100%'
             }}>{content.message}</p>
         )}
 

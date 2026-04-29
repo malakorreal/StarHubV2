@@ -49,7 +49,7 @@ function ErrorDialog({ message, onClose }) {
           </div>
 
           {/* Content */}
-          <div style={{ padding: '25px', color: '#e0e0e0', lineHeight: '1.6', fontSize: '0.95em' }}>
+          <div style={{ padding: '25px', color: '#e0e0e0', lineHeight: '1.6', fontSize: '0.95em', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', maxHeight: '50vh', overflowY: 'auto' }}>
               {message}
           </div>
 

@@ -672,16 +672,25 @@ export function setupLauncher(ipcMain, mainWindow) {
             syncManager.sendProgress('Final Validation...', 90, 100, 'Confirming fixes...')
             checkResult = await syncManager.comparePatches(rootPath, desired, instance.ignoreFiles || [])
             
-            // 🚨 FINAL BYPASS: If issues remain, only throw error if they are in 'mods' or 'config'
-            // This prevents system files or empty folders from blocking the launch
-            const criticalIssues = [
-                ...checkResult.added.filter(f => f.startsWith('mods/') || f.startsWith('config/')),
-                ...checkResult.corrupt.filter(f => f.startsWith('mods/') || f.startsWith('config/'))
-            ]
+            const ignoreFiles = instance.ignoreFiles || []
+            const isConfigCachePath = (p) => p.startsWith('config/') && p.includes('/cache/')
+            const isCriticalPath = (p) => p.startsWith('mods/') || (p.startsWith('config/') && !isConfigCachePath(p))
+            const notIgnored = (p) => !syncManager.shouldIgnore(p, ignoreFiles)
 
-            if (criticalIssues.length > 0) {
-                const totalFailed = criticalIssues.length
-                throw new Error(`ไม่สามารถเตรียมไฟล์มอดหรือคอนฟิกให้พร้อมได้ (${totalFailed} ไฟล์มีปัญหา) กรุณาตรวจสอบอินเทอร์เน็ตหรือกด "ซ่อมแซมไฟล์เกม"`)
+            const criticalAdded = checkResult.added.filter(p => isCriticalPath(p) && notIgnored(p))
+            const criticalCorrupt = checkResult.corrupt.filter(p => isCriticalPath(p) && notIgnored(p))
+            const totalFailed = criticalAdded.length + criticalCorrupt.length
+
+            if (totalFailed > 0) {
+                const listed = [...criticalAdded.map(p => `- (หาย) ${p}`), ...criticalCorrupt.map(p => `- (เสีย) ${p}`)]
+                    .slice(0, 8)
+                    .join('\n')
+                const more = totalFailed > 8 ? `\n- ...และอีก ${totalFailed - 8} ไฟล์` : ''
+                throw new Error(
+                    `ไม่สามารถเตรียมไฟล์มอด/คอนฟิกให้พร้อมได้ (${totalFailed} ไฟล์มีปัญหา)\n` +
+                    `ลองทำตามนี้: ปิด Minecraft ให้หมด → ปิด/ยกเว้นแอนตี้ไวรัสโฟลเดอร์เกม → กด "ซ่อมแซมไฟล์เกม"\n` +
+                    `รายละเอียดไฟล์:\n${listed}${more}`
+                )
             } else {
                 console.log(`[VERIFY] Minor issues ignored (non-critical): ${checkResult.added.length + checkResult.corrupt.length} files.`)
             }
