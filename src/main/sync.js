@@ -1155,11 +1155,33 @@ export class SyncManager {
               if (!fs.existsSync(destDir)) await fs.promises.mkdir(destDir, { recursive: true })
 
               if (fs.existsSync(destFile)) {
-                  try {
-                      await fs.promises.rm(destFile, { recursive: true, force: true })
-                  } catch (e) {
-                      const trash = `${destFile}.old_${Date.now()}`
-                      try { await fs.promises.rename(destFile, trash) } catch(err) {}
+                  const trashBase = `${destFile}.old_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`
+                  let removed = false
+                  for (let i = 0; i < 15; i++) {
+                      try {
+                          try { fs.chmodSync(destFile, 0o666) } catch (e) {}
+                          await fs.promises.rm(destFile, { recursive: true, force: true })
+                          if (!fs.existsSync(destFile)) {
+                              removed = true
+                              break
+                          }
+                      } catch (e) {}
+
+                      try {
+                          const trash = `${trashBase}_${i}`
+                          await this.safeMoveFile(destFile, trash, 8, 200)
+                          if (!fs.existsSync(destFile)) {
+                              removed = true
+                              break
+                          }
+                      } catch (e) {}
+
+                      const wait = Math.min(250 * Math.pow(2, Math.max(i - 1, 0)), 4000) + Math.floor(Math.random() * 120)
+                      await this.sleep(wait)
+                  }
+
+                  if (!removed && fs.existsSync(destFile)) {
+                      throw new Error(`ไฟล์ถูกใช้งานหรือถูกล็อก: ${path.basename(destFile)} กรุณาปิด Minecraft/Overlay แล้วลองใหม่อีกครั้ง (แอนตี้ไวรัสอาจกำลังสแกนไฟล์)`)
                   }
               }
               

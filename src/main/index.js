@@ -1,6 +1,7 @@
 import { app, shell, BrowserWindow, ipcMain, Tray, Menu, nativeImage } from 'electron'
 import { join } from 'path'
 import { promises as fs } from 'fs'
+import { spawn, execFileSync } from 'child_process'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.ico?asset'
 import { setupAuth } from './auth'
@@ -19,6 +20,42 @@ let tray = null
 // ----------------------------------------------------------------------
 // 🔒 SINGLE INSTANCE LOCK
 // ----------------------------------------------------------------------
+const shouldForceAdmin = process.platform === 'win32' && app.isPackaged && !process.argv.includes('--elevated') && !process.argv.includes('--no-admin')
+
+const isElevated = () => {
+  const cmds = ['powershell', 'pwsh']
+  const args = ['-NoProfile', '-Command', '([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)']
+  for (const c of cmds) {
+    try {
+      const out = execFileSync(c, args, { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim().toLowerCase()
+      if (out === 'true') return true
+      if (out === 'false') return false
+    } catch (e) {}
+  }
+  return false
+}
+
+const relaunchAsAdmin = () => {
+  const exe = process.execPath
+  const exeEsc = exe.replace(/'/g, "''")
+  const args = process.argv.slice(1).filter(a => a !== '--elevated')
+  args.push('--elevated')
+  const argsEsc = args.map(a => `'${String(a).replace(/'/g, "''")}'`).join(',')
+  const cmd = `Start-Process -FilePath '${exeEsc}' -Verb RunAs -ArgumentList @(${argsEsc})`
+  try {
+    spawn('powershell', ['-NoProfile', '-Command', cmd], { detached: true, stdio: 'ignore' }).unref()
+  } catch (e) {
+    try {
+      spawn('pwsh', ['-NoProfile', '-Command', cmd], { detached: true, stdio: 'ignore' }).unref()
+    } catch (e2) {}
+  }
+}
+
+if (shouldForceAdmin && !isElevated()) {
+  relaunchAsAdmin()
+  app.exit(0)
+}
+
 const gotTheLock = app.requestSingleInstanceLock()
 
 if (!gotTheLock) {

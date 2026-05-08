@@ -677,7 +677,8 @@ function App() {
     if (!result.success) {
         setLaunchStatus('idle')
         if (result.error !== 'Cancelled') {
-             setErrorMessage("Launch Failed: " + normalizeErrorMessage(result.error))
+             const prefix = t('auth.launchFailedPrefix') || (language === 'th' ? 'เริ่มเกมไม่สำเร็จ: ' : 'Launch Failed: ')
+             setErrorMessage(prefix + normalizeErrorMessage(result.error))
         }
     }
   }
@@ -773,7 +774,8 @@ function App() {
         
         if (!result.success) {
             if (result.error !== 'Cancelled') {
-                setErrorMessage(`${actionName} Failed: ` + (result.error || "Unknown Error"))
+                const failedSuffix = language === 'th' ? ' ไม่สำเร็จ: ' : ' Failed: '
+                setErrorMessage(`${actionName}${failedSuffix}` + (result.error || "Unknown Error"))
             }
             setLaunchStatus('idle')
             return
@@ -785,7 +787,8 @@ function App() {
             setInstalledVersions(installed || {})
         }
     } catch (err) {
-        setErrorMessage(`${actionName} failed: ` + err.message)
+        const failedSuffix = language === 'th' ? ' ไม่สำเร็จ: ' : ' failed: '
+        setErrorMessage(`${actionName}${failedSuffix}` + err.message)
     } finally {
         setLaunchStatus('idle')
     }
