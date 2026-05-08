@@ -51,23 +51,104 @@ const relaunchAsAdmin = () => {
   }
 }
 
-if (shouldForceAdmin && !isElevated()) {
-  relaunchAsAdmin()
-  app.exit(0)
-}
+const showAdminPrompt = async () => {
+  const channel = 'admin-prompt-choice'
+  return await new Promise((resolve) => {
+    const win = new BrowserWindow({
+      width: 520,
+      height: 320,
+      resizable: false,
+      minimizable: false,
+      maximizable: false,
+      fullscreenable: false,
+      show: false,
+      frame: false,
+      backgroundColor: '#0b0f1a',
+      title: 'StarHub',
+      icon: icon,
+      webPreferences: {
+        nodeIntegration: true,
+        contextIsolation: false
+      }
+    })
 
-const gotTheLock = app.requestSingleInstanceLock()
-
-if (!gotTheLock) {
-  app.quit()
-} else {
-  app.on('second-instance', (event, commandLine, workingDirectory) => {
-    // Someone tried to run a second instance, we should focus our window.
-    if (mainWindow) {
-      if (mainWindow.isMinimized()) mainWindow.restore()
-      if (!mainWindow.isVisible()) mainWindow.show()
-      mainWindow.focus()
+    let finished = false
+    const done = (choice) => {
+      if (finished) return
+      finished = true
+      try { win.close() } catch (e) {}
+      resolve(choice)
     }
+
+    ipcMain.once(channel, (event, choice) => {
+      done(choice === 'accept' ? 'accept' : 'decline')
+    })
+
+    win.on('closed', () => {
+      done('decline')
+    })
+
+    const html = `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' data:;">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>StarHub</title>
+  <style>
+    :root{--bg:#0b0f1a;--panel:#10182a;--text:#e6eefc;--muted:#9bb0d6;--accent:#ff7a3d;--line:rgba(255,255,255,.08)}
+    *{box-sizing:border-box}
+    html,body{width:100%;height:100%;margin:0;background:var(--bg);font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial}
+    .wrap{height:100%;display:flex;flex-direction:column}
+    .top{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--line);background:rgba(255,255,255,.02)}
+    .brand{display:flex;gap:10px;align-items:center}
+    .logo{width:26px;height:26px;border-radius:8px;background:linear-gradient(135deg,#ff7a3d,#facc15)}
+    .title{color:var(--text);font-weight:700;font-size:14px;letter-spacing:.2px}
+    .x{cursor:pointer;color:var(--muted);font-size:18px;line-height:18px;padding:6px 10px;border-radius:10px}
+    .x:hover{background:rgba(255,255,255,.06);color:var(--text)}
+    .content{flex:1;padding:18px 18px 0}
+    .card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px}
+    h1{margin:0 0 8px;color:var(--text);font-size:18px}
+    p{margin:0;color:var(--muted);font-size:13px;line-height:1.5}
+    .note{margin-top:12px;padding:10px 12px;border-radius:12px;background:rgba(255,122,61,.08);border:1px solid rgba(255,122,61,.25);color:var(--text);font-size:12.5px}
+    .actions{display:flex;gap:10px;justify-content:flex-end;padding:16px 18px 18px}
+    button{border:1px solid var(--line);background:rgba(255,255,255,.04);color:var(--text);padding:10px 14px;border-radius:12px;font-weight:700;cursor:pointer}
+    button:hover{background:rgba(255,255,255,.07)}
+    .primary{border-color:rgba(255,122,61,.45);background:linear-gradient(135deg,rgba(255,122,61,.95),rgba(250,204,21,.85));color:#0b0f1a}
+    .primary:hover{filter:brightness(1.02)}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <div class="brand"><div class="logo"></div><div class="title">StarHub Launcher</div></div>
+      <div class="x" id="close">×</div>
+    </div>
+    <div class="content">
+      <div class="card">
+        <h1>ต้องการสิทธิ์ผู้ดูแลระบบ (Administrator)</h1>
+        <p>เพื่อให้อัปเดต/ติดตั้ง Modpack ได้สมบูรณ์ StarHub จำเป็นต้องรันด้วยสิทธิ์ผู้ดูแลระบบ</p>
+        <div class="note">กด “ยอมรับ” แล้วระบบจะขึ้นหน้าต่างขอสิทธิ์ (UAC) ของ Windows</div>
+      </div>
+    </div>
+    <div class="actions">
+      <button id="decline">ไม่</button>
+      <button class="primary" id="accept">ยอมรับ</button>
+    </div>
+  </div>
+  <script>
+    const { ipcRenderer } = require('electron')
+    const send = (v) => ipcRenderer.send('${channel}', v)
+    document.getElementById('accept').addEventListener('click', () => send('accept'))
+    document.getElementById('decline').addEventListener('click', () => send('decline'))
+    document.getElementById('close').addEventListener('click', () => send('decline'))
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') send('decline') })
+  </script>
+</body>
+</html>`
+
+    win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`)
+    win.once('ready-to-show', () => win.show())
   })
 }
 
@@ -124,11 +205,34 @@ function createWindow() {
   }
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   electronApp.setAppUserModelId('com.starhub.launcher')
 
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
+  })
+
+  if (shouldForceAdmin && !isElevated()) {
+    const choice = await showAdminPrompt()
+    if (choice === 'accept') {
+      relaunchAsAdmin()
+    }
+    app.exit(0)
+    return
+  }
+
+  const gotTheLock = app.requestSingleInstanceLock()
+  if (!gotTheLock) {
+    app.quit()
+    return
+  }
+
+  app.on('second-instance', () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore()
+      if (!mainWindow.isVisible()) mainWindow.show()
+      mainWindow.focus()
+    }
   })
 
   createWindow()
