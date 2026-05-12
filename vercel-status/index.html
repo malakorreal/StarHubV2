@@ -1,0 +1,370 @@
+<!doctype html>
+<html lang="th">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>StarHub Status</title>
+    <style>
+      :root {
+        --bg: #0a0c12;
+        --panel: rgba(255, 215, 0, 0.06);
+        --border: rgba(255, 215, 0, 0.18);
+        --text: rgba(255, 255, 255, 0.92);
+        --muted: rgba(255, 255, 255, 0.68);
+        --good: #2ecc71;
+        --bad: #ff6347;
+        --warn: #f1c40f;
+        --accent: #ffd700;
+        --accent2: rgba(255, 215, 0, 0.12);
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+        background: radial-gradient(900px 520px at 14% 12%, rgba(255,215,0,0.10), transparent 62%),
+                    radial-gradient(720px 520px at 86% 28%, rgba(255,215,0,0.06), transparent 60%),
+                    var(--bg);
+        color: var(--text);
+        min-height: 100vh;
+      }
+      header {
+        padding: 28px 20px 10px;
+        max-width: 1100px;
+        margin: 0 auto;
+      }
+      h1 {
+        margin: 0;
+        font-size: 28px;
+        letter-spacing: 0.5px;
+      }
+      .subtitle {
+        margin-top: 8px;
+        color: var(--muted);
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 10px;
+        border: 1px solid var(--border);
+        background: rgba(0,0,0,0.28);
+        border-radius: 999px;
+        font-size: 13px;
+        color: var(--muted);
+      }
+      .dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 999px;
+        background: var(--warn);
+      }
+      .wrap {
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 10px 20px 30px;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(12, 1fr);
+        gap: 14px;
+      }
+      .card {
+        grid-column: span 4;
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 16px 16px 14px;
+        backdrop-filter: blur(8px);
+      }
+      .card h2 {
+        margin: 0 0 10px;
+        font-size: 14px;
+        font-weight: 650;
+        color: var(--muted);
+        letter-spacing: 0.3px;
+      }
+      .value {
+        font-size: 26px;
+        font-weight: 750;
+        display: flex;
+        align-items: baseline;
+        gap: 10px;
+      }
+      .value small {
+        font-size: 12px;
+        color: var(--muted);
+        font-weight: 600;
+      }
+      .desc {
+        margin-top: 10px;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.45;
+        min-height: 18px;
+        white-space: pre-line;
+        overflow-wrap: anywhere;
+      }
+      .tableWrap {
+        grid-column: span 12;
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 14px;
+        backdrop-filter: blur(8px);
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        overflow: hidden;
+        border-radius: 12px;
+      }
+      thead th {
+        text-align: left;
+        font-size: 12px;
+        color: var(--muted);
+        padding: 12px 12px;
+        border-bottom: 1px solid rgba(255,215,0,0.20);
+        background: rgba(0,0,0,0.30);
+      }
+      tbody td {
+        padding: 12px 12px;
+        border-bottom: 1px solid rgba(255,215,0,0.10);
+        font-size: 13px;
+        color: rgba(255,255,255,0.88);
+      }
+      tbody tr:hover td {
+        background: rgba(255,215,0,0.05);
+      }
+      .tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 4px 10px;
+        border-radius: 999px;
+        border: 1px solid rgba(255,255,255,0.12);
+        background: rgba(0,0,0,0.2);
+        color: rgba(255,255,255,0.85);
+        font-size: 12px;
+        font-weight: 650;
+        white-space: nowrap;
+      }
+      .tag.good { border-color: rgba(46,204,113,0.35); }
+      .tag.bad { border-color: rgba(255,99,71,0.35); }
+      .tag.warn { border-color: rgba(241,196,15,0.35); }
+      .tag .miniDot { width: 8px; height: 8px; border-radius: 999px; background: var(--warn); }
+      .tag.good .miniDot { background: var(--good); }
+      .tag.bad .miniDot { background: var(--bad); }
+      .tag.warn .miniDot { background: var(--warn); }
+
+      .actions {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+      }
+      button {
+        appearance: none;
+        border: 1px solid var(--border);
+        background: rgba(0,0,0,0.28);
+        color: var(--text);
+        border-radius: 12px;
+        padding: 10px 12px;
+        cursor: pointer;
+        font-weight: 650;
+        font-size: 13px;
+      }
+      button:hover { background: rgba(255,215,0,0.08); }
+
+      a { color: var(--accent); }
+      a:hover { color: rgba(255,215,0,0.85); }
+
+      @media (max-width: 880px) {
+        .card { grid-column: span 12; }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>StarHub Status</h1>
+      <div class="subtitle">
+        <span class="pill"><span class="dot" id="dot"></span><span id="headline">กำลังโหลด...</span></span>
+        <span class="pill">อัปเดตล่าสุด: <span id="updatedAt">-</span></span>
+        <span class="actions">
+          <button id="refreshBtn">รีเฟรช</button>
+        </span>
+      </div>
+    </header>
+
+    <div class="wrap">
+      <div class="grid">
+        <div class="card">
+          <h2>ผู้ใช้งาน StarHub</h2>
+          <div class="value"><span id="onlineUsers">-</span><small>ออนไลน์ (โดยประมาณ)</small></div>
+          <div class="desc" id="onlineDesc"></div>
+        </div>
+
+        <div class="card">
+          <h2>สถานะระบบ</h2>
+          <div class="value"><span id="serverStatus">-</span></div>
+          <div class="desc" id="maintenanceMessage"></div>
+        </div>
+
+        <div class="card">
+          <h2>API</h2>
+          <div class="value"><span id="apiStatus">-</span></div>
+          <div class="desc" id="apiDesc"></div>
+        </div>
+
+        <div class="tableWrap">
+          <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; padding:2px 2px 12px;">
+            <div style="font-weight:750; letter-spacing:0.3px;">Instances</div>
+            <div style="color:var(--muted); font-size:12px;">Auto refresh ทุก 5 วินาที</div>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 18%;">ID</th>
+                <th style="width: 24%;">ชื่อ</th>
+                <th style="width: 22%;">Server</th>
+                <th style="width: 12%;">ผู้เล่น</th>
+                <th style="width: 14%;">Modpack</th>
+                <th style="width: 10%;">Manifest</th>
+                <th style="width: 10%;">สถานะ</th>
+              </tr>
+            </thead>
+            <tbody id="instancesTbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const $ = (id) => document.getElementById(id)
+      const fmtTime = (ms) => {
+        try {
+          const d = new Date(ms)
+          return d.toLocaleString('th-TH')
+        } catch (e) {
+          return '-'
+        }
+      }
+
+      const render = (data) => {
+        const maintenance = !!data?.maintenance
+        const serverOnline = data?.serverOnline === true
+        const serverIp = typeof data?.serverIp === 'string' ? data.serverIp : ''
+        const serverPlayers = (typeof data?.server?.playersOnline === 'number' && typeof data?.server?.playersMax === 'number')
+          ? `${data.server.playersOnline}/${data.server.playersMax}`
+          : ''
+        const onlineUsers = typeof data?.onlineUsers === 'number' ? data.onlineUsers : null
+        const updatedAt = typeof data?.updatedAt === 'number' ? data.updatedAt : null
+
+        $('updatedAt').textContent = updatedAt ? fmtTime(updatedAt) : '-'
+
+        if (maintenance) {
+          $('dot').style.background = 'var(--bad)'
+          $('headline').textContent = 'ปิดปรับปรุง'
+        } else if (serverOnline) {
+          $('dot').style.background = 'var(--good)'
+          $('headline').textContent = 'เปิดให้บริการ'
+        } else {
+          $('dot').style.background = 'var(--warn)'
+          $('headline').textContent = 'สถานะไม่ชัดเจน'
+        }
+
+        $('serverStatus').textContent = maintenance
+          ? 'Maintenance'
+          : (serverOnline ? `Online${serverPlayers ? ` (${serverPlayers})` : ''}` : 'Offline')
+        $('maintenanceMessage').textContent = maintenance
+          ? (data?.maintenanceMessage || '')
+          : (serverIp ? `Server: ${serverIp}` : '')
+
+        $('apiStatus').textContent = 'OK'
+        $('apiDesc').textContent = 'GET /api/status'
+
+        $('onlineUsers').textContent = onlineUsers === null ? '-' : String(onlineUsers)
+        $('onlineDesc').textContent = onlineUsers === null
+          ? 'ยังไม่ได้ตั้งค่า Upstash Redis (จึงนับผู้ใช้ออนไลน์ไม่ได้แบบถาวร)'
+          : 'นับจาก heartbeat ในช่วง 5 นาทีล่าสุด'
+
+        if (data?.instancesOk === false && data?.instancesError) {
+          $('apiStatus').textContent = 'Warning'
+          $('apiDesc').textContent = `instances error: ${String(data.instancesError)}`
+        }
+
+        const insts = Array.isArray(data?.instances) ? data.instances : []
+        const sorted = [...insts].sort((a, b) => {
+          const aMaint = a?.maintenance === true ? 1 : 0
+          const bMaint = b?.maintenance === true ? 1 : 0
+          if (aMaint !== bMaint) return aMaint - bMaint
+          const aOn = a?.serverOnline === true ? 1 : 0
+          const bOn = b?.serverOnline === true ? 1 : 0
+          if (aOn !== bOn) return bOn - aOn
+          return String(a?.name || '').localeCompare(String(b?.name || ''), 'th')
+        })
+        const tbody = $('instancesTbody')
+        tbody.innerHTML = ''
+        for (const inst of sorted) {
+          const tr = document.createElement('tr')
+          const manifestUrl = `/api/manifest/${encodeURIComponent(inst.id)}`
+          const ip = typeof inst?.serverIp === 'string' ? inst.serverIp : ''
+          const online = inst?.serverOnline === true
+          const players = (typeof inst?.server?.playersOnline === 'number' && typeof inst?.server?.playersMax === 'number')
+            ? `${inst.server.playersOnline}/${inst.server.playersMax}`
+            : '-'
+          const statusTag = maintenance
+            ? tagHtml('Maintenance', 'bad')
+            : (inst?.maintenance === true ? tagHtml('Maintenance', 'bad') : (ip ? (online ? tagHtml('Online', 'good') : tagHtml('Offline', 'bad')) : tagHtml('No IP', 'warn')))
+          tr.innerHTML = `
+            <td>${escapeHtml(inst.id || '')}</td>
+            <td>${escapeHtml(inst.name || '')}</td>
+            <td>${ip ? escapeHtml(ip) : '-'}</td>
+            <td>${escapeHtml(players)}</td>
+            <td>${escapeHtml(inst.modpackVersion || inst.version || '')}</td>
+            <td><a href="${manifestUrl}" style="color: var(--accent); text-decoration: none;" target="_blank" rel="noreferrer">ดู</a></td>
+            <td>${statusTag}</td>
+          `
+          tbody.appendChild(tr)
+        }
+      }
+
+      const tagHtml = (text, kind) => {
+        const cls = kind === 'bad' ? 'tag bad' : (kind === 'warn' ? 'tag warn' : 'tag good')
+        return `<span class="${cls}"><span class="miniDot"></span>${escapeHtml(text)}</span>`
+      }
+
+      const escapeHtml = (s) => {
+        return String(s)
+          .replaceAll('&', '&amp;')
+          .replaceAll('<', '&lt;')
+          .replaceAll('>', '&gt;')
+          .replaceAll('"', '&quot;')
+          .replaceAll("'", '&#039;')
+      }
+
+      const load = async () => {
+        const started = Date.now()
+        try {
+          const res = await fetch('/api/status', { cache: 'no-store' })
+          if (!res.ok) throw new Error(`HTTP ${res.status}`)
+          const data = await res.json()
+          render(data)
+          $('apiStatus').textContent = 'OK'
+          $('apiDesc').textContent = `GET /api/status (${Date.now() - started}ms)`
+        } catch (e) {
+          $('dot').style.background = 'var(--bad)'
+          $('headline').textContent = 'API Error'
+          $('apiStatus').textContent = 'Error'
+          $('apiDesc').textContent = String(e && e.message ? e.message : e)
+        }
+      }
+
+      $('refreshBtn').addEventListener('click', () => load())
+      load()
+      setInterval(load, 5000)
+    </script>
+  </body>
+</html>
