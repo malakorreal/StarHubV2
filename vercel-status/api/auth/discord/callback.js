@@ -1,4 +1,4 @@
-const { json, allowCors, setCookie, consumeOauthState, getBaseUrl, getAllowedDiscordIds, issueAdminSession, clearAdminSession } = require('../../_utils')
+const { json, allowCors, setCookie, parseCookies, consumeOauthState, getBaseUrl, getAllowedDiscordIds, issueAdminSession, clearAdminSession } = require('../../_utils')
 
 async function exchangeCodeForToken({ clientId, clientSecret, redirectUri, code }) {
   const body = new URLSearchParams()
@@ -55,6 +55,10 @@ module.exports = async (req, res) => {
   const proto = req && req.headers ? req.headers['x-forwarded-proto'] : null
   const secure = typeof proto === 'string' ? proto.toLowerCase().includes('https') : false
   setCookie(res, 'starhub_oauth_state', '', { path: '/', httpOnly: true, secure, sameSite: 'Lax', maxAgeSeconds: 0 })
+  const cookies = parseCookies(req)
+  const nextRaw = typeof cookies.starhub_oauth_next === 'string' ? cookies.starhub_oauth_next.trim().toLowerCase() : ''
+  const next = nextRaw === 'announcements' ? 'announcements' : 'dashboard'
+  setCookie(res, 'starhub_oauth_next', '', { path: '/', httpOnly: true, secure, sameSite: 'Lax', maxAgeSeconds: 0 })
 
   if (!code) return json(res, 400, { ok: false, error: 'Missing code' })
   if (!state) return json(res, 400, { ok: false, error: 'Missing state' })
@@ -73,19 +77,19 @@ module.exports = async (req, res) => {
     if (!allowed || !allowed.has(discordId)) {
       await clearAdminSession(res, req)
       res.statusCode = 302
-      res.setHeader('Location', '/#announcements?auth=denied')
+      res.setHeader('Location', `/#${next}?auth=denied`)
       res.end('')
       return
     }
 
     await issueAdminSession(res, req, discordId)
     res.statusCode = 302
-    res.setHeader('Location', '/#announcements?auth=ok')
+    res.setHeader('Location', `/#${next}?auth=ok`)
     res.end('')
   } catch (e) {
     await clearAdminSession(res, req)
     res.statusCode = 302
-    res.setHeader('Location', `/#announcements?auth=error&msg=${encodeURIComponent(String(e && e.message ? e.message : e))}`)
+    res.setHeader('Location', `/#${next}?auth=error&msg=${encodeURIComponent(String(e && e.message ? e.message : e))}`)
     res.end('')
   }
 }

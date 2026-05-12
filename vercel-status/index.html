@@ -433,20 +433,23 @@
         if (maintenance) {
           $('dot').style.background = 'var(--bad)'
           $('headline').textContent = 'ปิดปรับปรุง'
+        } else if (!serverIp) {
+          $('dot').style.background = 'var(--warn)'
+          $('headline').textContent = 'ยังไม่ได้ตั้งค่าเซิร์ฟเวอร์'
         } else if (serverOnline) {
           $('dot').style.background = 'var(--good)'
           $('headline').textContent = 'เปิดให้บริการ'
         } else {
-          $('dot').style.background = 'var(--warn)'
-          $('headline').textContent = 'สถานะไม่ชัดเจน'
+          $('dot').style.background = 'var(--bad)'
+          $('headline').textContent = 'ออฟไลน์'
         }
 
         $('serverStatus').textContent = maintenance
           ? 'Maintenance'
-          : (serverOnline ? `Online${serverPlayers ? ` (${serverPlayers})` : ''}` : 'Offline')
+          : (!serverIp ? '-' : (serverOnline ? `Online${serverPlayers ? ` (${serverPlayers})` : ''}` : 'Offline'))
         $('maintenanceMessage').textContent = maintenance
           ? (data?.maintenanceMessage || '')
-          : (serverIp ? `Server: ${serverIp}` : '')
+          : (serverIp ? `Server: ${serverIp}` : 'ตั้งค่า STARHUB_SERVER_IP หรือ serverIp ใน instance เพื่อให้เช็คสถานะได้')
 
         $('apiStatus').textContent = 'OK'
         $('apiDesc').textContent = 'GET /api/status'
@@ -791,7 +794,9 @@
       })
 
       $('discordLoginBtn').addEventListener('click', () => {
-        location.href = '/api/auth/discord/start'
+        const { route } = parseHashParams()
+        const next = route === 'announcements' ? 'announcements' : 'dashboard'
+        location.href = `/api/auth/discord/start?next=${encodeURIComponent(next)}`
       })
       $('discordLogoutBtn').addEventListener('click', async () => {
         try {
@@ -834,7 +839,19 @@
 
       initRoute()
       window.addEventListener('hashchange', () => initRoute())
-      refreshAuth()
+
+      const boot = async () => {
+        const { route, params } = parseHashParams()
+        const authParam = params.get('auth')
+        maybeShowAuthMessage()
+        await refreshAuth()
+        if (auth.authenticated) return
+        if (authParam === 'denied' || authParam === 'error') return
+        const next = route === 'announcements' ? 'announcements' : 'dashboard'
+        location.href = `/api/auth/discord/start?next=${encodeURIComponent(next)}`
+      }
+
+      boot()
     </script>
   </body>
 </html>

@@ -1,4 +1,4 @@
-const { json, allowCors, issueOauthState, getBaseUrl } = require('../../_utils')
+const { json, allowCors, issueOauthState, getBaseUrl, setCookie } = require('../../_utils')
 
 module.exports = async (req, res) => {
   if (allowCors(req, res)) return
@@ -11,6 +11,13 @@ module.exports = async (req, res) => {
   const redirectUri = (typeof process.env.DISCORD_REDIRECT_URI === 'string' && process.env.DISCORD_REDIRECT_URI.trim())
     ? process.env.DISCORD_REDIRECT_URI.trim()
     : `${baseUrl}/api/auth/discord/callback`
+
+  const url = new URL(req.url, baseUrl || 'https://example.invalid')
+  const nextRaw = String(url.searchParams.get('next') || '').trim().toLowerCase()
+  const next = nextRaw === 'announcements' ? 'announcements' : 'dashboard'
+  const proto = req && req.headers ? req.headers['x-forwarded-proto'] : null
+  const secure = typeof proto === 'string' ? proto.toLowerCase().includes('https') : false
+  setCookie(res, 'starhub_oauth_next', next, { path: '/', httpOnly: true, secure, sameSite: 'Lax', maxAgeSeconds: 10 * 60 })
 
   const state = issueOauthState(res, req)
   if (!state) return json(res, 500, { ok: false, error: 'Failed to issue OAuth state' })
