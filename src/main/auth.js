@@ -82,6 +82,14 @@ async function validateSession(accessToken) {
         return { valid: true };
     } catch (error) {
         const classified = classifyAuthError(error)
+        if (
+            classified.code === 'LOGIN_TIMEOUT' ||
+            classified.code === 'LOGIN_NETWORK_ERROR' ||
+            classified.code === 'LOGIN_SERVICE_UNAVAILABLE' ||
+            classified.code === 'LOGIN_RATE_LIMITED'
+        ) {
+            return { valid: null, error: classified.code }
+        }
         return { valid: false, error: classified.message };
     }
 }
@@ -94,11 +102,20 @@ function saveAccount(store, mclcToken, msmcToken) {
     // Find existing
     const index = accounts.findIndex(a => a.uuid === uuid)
     
+    let msmcSafe = null
+    if (msmcToken) {
+        try {
+            msmcSafe = JSON.parse(JSON.stringify(msmcToken))
+        } catch (e) {
+            msmcSafe = null
+        }
+    }
+
     const newAccount = {
         uuid: uuid,
         name: mclcToken.name,
         mclc: mclcToken,
-        msmc: msmcToken,
+        msmc: msmcSafe,
         lastUsed: Date.now()
     }
     
@@ -108,13 +125,18 @@ function saveAccount(store, mclcToken, msmcToken) {
         accounts.push(newAccount)
     }
     
-    store.set('accounts', accounts)
+    try {
+        store.set('accounts', accounts)
+    } catch (e) {
+        const fallback = accounts.map(a => ({ ...a, msmc: null }))
+        store.set('accounts', fallback)
+    }
     store.set('selectedAccountId', uuid)
     
     // Sync Legacy 'auth' for compatibility
     store.set('auth', mclcToken)
     try {
-        store.set('msmc_raw', msmcToken)
+        store.set('msmc_raw', msmcSafe)
     } catch (e) {}
     
     return newAccount
@@ -273,6 +295,21 @@ export function setupAuth(ipcMain, mainWindow) {
                     }, 
                     access_token: mclcToken 
                 }
+            }
+        }
+
+        if (validation.valid === null) {
+            console.warn(`Session check unavailable (${validation.error}). Keeping current session without forcing relogin.`)
+            setActivity('Browsing StarHub', 'In Launcher')
+            return {
+                success: true,
+                profile: {
+                    name: currentAccount.name,
+                    id: currentAccount.uuid,
+                    account_type: 'normal'
+                },
+                access_token: mclcToken,
+                warning: validation.error
             }
         }
         

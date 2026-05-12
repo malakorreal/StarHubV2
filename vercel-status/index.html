@@ -4,6 +4,9 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>StarHub Status</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
     <style>
       :root {
         --bg: #0a0c12;
@@ -20,7 +23,7 @@
       * { box-sizing: border-box; }
       body {
         margin: 0;
-        font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+        font-family: Kanit, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
         background: radial-gradient(900px 520px at 14% 12%, rgba(255,215,0,0.10), transparent 62%),
                     radial-gradient(720px 520px at 86% 28%, rgba(255,215,0,0.06), transparent 60%),
                     var(--bg);
@@ -181,8 +184,37 @@
       a { color: var(--accent); }
       a:hover { color: rgba(255,215,0,0.85); }
 
+      input, textarea, select {
+        width: 100%;
+        border: 1px solid var(--border);
+        background: rgba(0,0,0,0.22);
+        color: var(--text);
+        border-radius: 12px;
+        padding: 10px 12px;
+        font: inherit;
+        outline: none;
+      }
+      textarea { min-height: 92px; resize: vertical; }
+      label { display: block; font-size: 12px; color: var(--muted); margin: 10px 0 6px; }
+      .adminRow { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+      .adminTop { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; padding: 2px 2px 10px; }
+      .adminTop .pill { padding: 8px 10px; }
+      .adminStatus { color: var(--muted); font-size: 12px; white-space: pre-line; overflow-wrap: anywhere; }
+      .annItem {
+        margin-top: 10px;
+        padding: 12px;
+        border-radius: 14px;
+        border: 1px solid rgba(255,215,0,0.18);
+        background: rgba(0,0,0,0.20);
+      }
+      .annTitleRow { display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+      .annActions { display: flex; gap: 8px; flex-wrap: wrap; }
+      .miniBtn { padding: 8px 10px; border-radius: 12px; font-size: 12px; }
+      .danger { border-color: rgba(255,99,71,0.35); }
+
       @media (max-width: 880px) {
         .card { grid-column: span 12; }
+        .adminRow { grid-template-columns: 1fr; }
       }
     </style>
   </head>
@@ -231,12 +263,50 @@
                 <th style="width: 22%;">Server</th>
                 <th style="width: 12%;">ผู้เล่น</th>
                 <th style="width: 14%;">Modpack</th>
-                <th style="width: 10%;">Manifest</th>
                 <th style="width: 10%;">สถานะ</th>
               </tr>
             </thead>
             <tbody id="instancesTbody"></tbody>
           </table>
+        </div>
+
+        <div class="tableWrap">
+          <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; padding:2px 2px 10px;">
+            <div style="font-weight:750; letter-spacing:0.3px;">Admin: ประกาศ / Maintenance</div>
+            <div style="color:var(--muted); font-size:12px;">บันทึกลง Supabase ตาราง starhub_settings</div>
+          </div>
+          <div class="adminTop">
+            <span class="pill">Token: <span style="min-width: 240px; display:inline-block;">
+              <input id="adminToken" type="password" placeholder="STARHUB_ADMIN_TOKEN" style="width: 260px; padding: 8px 10px; border-radius: 999px;" />
+            </span></span>
+            <button id="adminLoadBtn" class="miniBtn">โหลดค่า</button>
+            <button id="adminSaveBtn" class="miniBtn">บันทึก</button>
+            <span class="adminStatus" id="adminStatus"></span>
+          </div>
+
+          <div class="adminRow">
+            <div>
+              <label for="adminMaintenance">Maintenance</label>
+              <div style="display:flex; gap:10px; align-items:center;">
+                <input id="adminMaintenance" type="checkbox" style="width:auto;" />
+                <div style="color:var(--muted); font-size:12px;">เปิด = ปิดปรับปรุง</div>
+              </div>
+              <label for="adminMaintenanceMessage">ข้อความ Maintenance</label>
+              <textarea id="adminMaintenanceMessage" placeholder="ข้อความที่จะแสดงเมื่อปิดปรับปรุง"></textarea>
+              <label for="adminMinClose">Announcement Min Close (วินาที)</label>
+              <input id="adminMinClose" type="number" min="0" max="120" step="1" />
+            </div>
+
+            <div>
+              <div class="annTitleRow">
+                <div style="color:var(--muted); font-size:12px;">Announcements</div>
+                <div class="annActions">
+                  <button id="adminAddAnnouncementBtn" class="miniBtn">เพิ่มประกาศ</button>
+                </div>
+              </div>
+              <div id="announcementsEditor"></div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -309,7 +379,6 @@
         tbody.innerHTML = ''
         for (const inst of sorted) {
           const tr = document.createElement('tr')
-          const manifestUrl = `/api/manifest/${encodeURIComponent(inst.id)}`
           const ip = typeof inst?.serverIp === 'string' ? inst.serverIp : ''
           const online = inst?.serverOnline === true
           const players = (typeof inst?.server?.playersOnline === 'number' && typeof inst?.server?.playersMax === 'number')
@@ -324,7 +393,6 @@
             <td>${ip ? escapeHtml(ip) : '-'}</td>
             <td>${escapeHtml(players)}</td>
             <td>${escapeHtml(inst.modpackVersion || inst.version || '')}</td>
-            <td><a href="${manifestUrl}" style="color: var(--accent); text-decoration: none;" target="_blank" rel="noreferrer">ดู</a></td>
             <td>${statusTag}</td>
           `
           tbody.appendChild(tr)
@@ -365,6 +433,226 @@
       $('refreshBtn').addEventListener('click', () => load())
       load()
       setInterval(load, 5000)
+
+      const admin = {
+        loaded: false,
+        announcements: [],
+        announcementMinCloseSeconds: 5,
+        maintenance: false,
+        maintenanceMessage: ''
+      }
+
+      const setAdminStatus = (msg) => {
+        $('adminStatus').textContent = msg || ''
+      }
+
+      const getAdminToken = () => {
+        const inputVal = String($('adminToken').value || '').trim()
+        const stored = String(sessionStorage.getItem('starhub_admin_token') || '').trim()
+        const token = inputVal || stored
+        if (token && token !== stored) sessionStorage.setItem('starhub_admin_token', token)
+        return token
+      }
+
+      const adminFetch = async (path, { method = 'GET', body = null } = {}) => {
+        const token = getAdminToken()
+        if (!token) throw new Error('กรุณาใส่ Token')
+        const res = await fetch(path, {
+          method,
+          headers: {
+            Authorization: `Bearer ${token}`,
+            ...(body ? { 'Content-Type': 'application/json' } : {})
+          },
+          body: body ? JSON.stringify(body) : undefined,
+          cache: 'no-store'
+        })
+        const text = await res.text().catch(() => '')
+        let data = null
+        try { data = text ? JSON.parse(text) : null } catch {}
+        if (!res.ok) {
+          const err = data && data.error ? data.error : `HTTP ${res.status}`
+          throw new Error(err)
+        }
+        return data
+      }
+
+      const renderAnnouncementsEditor = () => {
+        const box = $('announcementsEditor')
+        box.innerHTML = ''
+
+        const list = Array.isArray(admin.announcements) ? admin.announcements : []
+        if (list.length === 0) {
+          const empty = document.createElement('div')
+          empty.className = 'adminStatus'
+          empty.textContent = 'ยังไม่มีประกาศ'
+          box.appendChild(empty)
+          return
+        }
+
+        list.forEach((a, idx) => {
+          const item = document.createElement('div')
+          item.className = 'annItem'
+          item.dataset.idx = String(idx)
+
+          const titleRow = document.createElement('div')
+          titleRow.className = 'annTitleRow'
+
+          const titleLeft = document.createElement('div')
+          titleLeft.style.color = 'var(--muted)'
+          titleLeft.style.fontSize = '12px'
+          titleLeft.textContent = `#${idx + 1} (${a && a.id ? a.id : '-'})`
+
+          const actions = document.createElement('div')
+          actions.className = 'annActions'
+
+          const upBtn = document.createElement('button')
+          upBtn.className = 'miniBtn'
+          upBtn.textContent = 'ขึ้น'
+          upBtn.disabled = idx === 0
+          upBtn.addEventListener('click', () => {
+            const arr = [...admin.announcements]
+            const t = arr[idx - 1]
+            arr[idx - 1] = arr[idx]
+            arr[idx] = t
+            admin.announcements = arr
+            renderAnnouncementsEditor()
+          })
+
+          const downBtn = document.createElement('button')
+          downBtn.className = 'miniBtn'
+          downBtn.textContent = 'ลง'
+          downBtn.disabled = idx === list.length - 1
+          downBtn.addEventListener('click', () => {
+            const arr = [...admin.announcements]
+            const t = arr[idx + 1]
+            arr[idx + 1] = arr[idx]
+            arr[idx] = t
+            admin.announcements = arr
+            renderAnnouncementsEditor()
+          })
+
+          const delBtn = document.createElement('button')
+          delBtn.className = 'miniBtn danger'
+          delBtn.textContent = 'ลบ'
+          delBtn.addEventListener('click', () => {
+            const arr = [...admin.announcements]
+            arr.splice(idx, 1)
+            admin.announcements = arr
+            renderAnnouncementsEditor()
+          })
+
+          actions.appendChild(upBtn)
+          actions.appendChild(downBtn)
+          actions.appendChild(delBtn)
+
+          titleRow.appendChild(titleLeft)
+          titleRow.appendChild(actions)
+          item.appendChild(titleRow)
+
+          const idLabel = document.createElement('label')
+          idLabel.textContent = 'ID'
+          const idInput = document.createElement('input')
+          idInput.value = a && a.id ? String(a.id) : ''
+          idInput.addEventListener('input', () => { a.id = idInput.value })
+
+          const tLabel = document.createElement('label')
+          tLabel.textContent = 'หัวข้อ'
+          const tInput = document.createElement('input')
+          tInput.value = a && a.title ? String(a.title) : ''
+          tInput.addEventListener('input', () => { a.title = tInput.value })
+
+          const mLabel = document.createElement('label')
+          mLabel.textContent = 'คำอธิบาย'
+          const mInput = document.createElement('textarea')
+          mInput.value = a && a.message ? String(a.message) : ''
+          mInput.addEventListener('input', () => { a.message = mInput.value })
+
+          const fLabel = document.createElement('label')
+          fLabel.textContent = 'ข้อความข้างล่าง'
+          const fInput = document.createElement('textarea')
+          fInput.style.minHeight = '70px'
+          fInput.value = a && a.footer ? String(a.footer) : ''
+          fInput.addEventListener('input', () => { a.footer = fInput.value })
+
+          item.appendChild(idLabel)
+          item.appendChild(idInput)
+          item.appendChild(tLabel)
+          item.appendChild(tInput)
+          item.appendChild(mLabel)
+          item.appendChild(mInput)
+          item.appendChild(fLabel)
+          item.appendChild(fInput)
+
+          box.appendChild(item)
+        })
+      }
+
+      const loadAdmin = async () => {
+        setAdminStatus('กำลังโหลด...')
+        try {
+          const data = await adminFetch('/api/admin-settings')
+          const s = data && data.settings ? data.settings : null
+          admin.maintenance = !!(s && s.maintenance)
+          admin.maintenanceMessage = s && typeof s.maintenanceMessage === 'string' ? s.maintenanceMessage : ''
+          admin.announcements = Array.isArray(s && s.announcements) ? s.announcements.map(x => ({ ...x })) : []
+          admin.announcementMinCloseSeconds = typeof s?.announcementMinCloseSeconds === 'number' ? s.announcementMinCloseSeconds : 5
+          admin.loaded = true
+
+          $('adminMaintenance').checked = admin.maintenance
+          $('adminMaintenanceMessage').value = admin.maintenanceMessage
+          $('adminMinClose').value = String(admin.announcementMinCloseSeconds || 0)
+          renderAnnouncementsEditor()
+          setAdminStatus('โหลดแล้ว')
+        } catch (e) {
+          setAdminStatus(String(e && e.message ? e.message : e))
+        }
+      }
+
+      const saveAdmin = async () => {
+        if (!admin.loaded) {
+          await loadAdmin()
+          if (!admin.loaded) return
+        }
+        setAdminStatus('กำลังบันทึก...')
+        try {
+          admin.maintenance = $('adminMaintenance').checked === true
+          admin.maintenanceMessage = String($('adminMaintenanceMessage').value || '')
+          admin.announcementMinCloseSeconds = Math.max(0, Math.min(120, Math.floor(Number($('adminMinClose').value || 0))))
+
+          const payload = {
+            maintenance: admin.maintenance,
+            maintenanceMessage: admin.maintenanceMessage,
+            announcementMinCloseSeconds: admin.announcementMinCloseSeconds,
+            announcements: admin.announcements
+          }
+          const data = await adminFetch('/api/admin-settings', { method: 'PUT', body: payload })
+          const s = data && data.settings ? data.settings : null
+          admin.maintenance = !!(s && s.maintenance)
+          admin.maintenanceMessage = s && typeof s.maintenanceMessage === 'string' ? s.maintenanceMessage : ''
+          admin.announcements = Array.isArray(s && s.announcements) ? s.announcements.map(x => ({ ...x })) : []
+          admin.announcementMinCloseSeconds = typeof s?.announcementMinCloseSeconds === 'number' ? s.announcementMinCloseSeconds : admin.announcementMinCloseSeconds
+
+          $('adminMaintenance').checked = admin.maintenance
+          $('adminMaintenanceMessage').value = admin.maintenanceMessage
+          $('adminMinClose').value = String(admin.announcementMinCloseSeconds || 0)
+          renderAnnouncementsEditor()
+          setAdminStatus('บันทึกแล้ว')
+        } catch (e) {
+          setAdminStatus(String(e && e.message ? e.message : e))
+        }
+      }
+
+      $('adminLoadBtn').addEventListener('click', () => loadAdmin())
+      $('adminSaveBtn').addEventListener('click', () => saveAdmin())
+      $('adminAddAnnouncementBtn').addEventListener('click', () => {
+        const id = `announcement_${Date.now()}`
+        admin.announcements = [...(Array.isArray(admin.announcements) ? admin.announcements : []), { id, title: '', message: '', footer: '' }]
+        admin.loaded = true
+        renderAnnouncementsEditor()
+      })
+
+      const storedToken = String(sessionStorage.getItem('starhub_admin_token') || '').trim()
+      if (storedToken) $('adminToken').value = storedToken
     </script>
   </body>
 </html>

@@ -25,6 +25,7 @@
 
 - `SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY`
+- `STARHUB_SETTINGS_ID` (ไม่ใส่จะใช้ `1`)
 
 SQL (สร้างตาราง):
 ```sql
@@ -37,6 +38,12 @@ create table if not exists public.starhub_settings (
   updated_at timestamptz not null default now()
 );
 ```
+
+### แก้ประกาศผ่านหน้าเว็บ (Admin)
+เพื่อให้แก้ประกาศ/maintenance จากหน้าเว็บได้ ระบบมี endpoint สำหรับอัปเดต `starhub_settings` (ต้องตั้ง token เพื่อความปลอดภัย):
+- `STARHUB_ADMIN_TOKEN` = token สำหรับเข้าโหมด admin
+
+เปิดหน้าเว็บ แล้วใส่ token ในส่วน “Admin: ประกาศ / Maintenance” จากนั้นกด “โหลดค่า” และ “บันทึก”
 
 ### เช็คสถานะเซิร์ฟ Minecraft (ไม่บังคับ)
 - `STARHUB_SERVER_IP` = `host:port` (เช่น `example.com:25565`)
@@ -72,3 +79,5 @@ create index if not exists starhub_online_last_seen_idx
 - `GET /api/instances`
 - `GET /api/manifest/<instanceId>`
 - `POST /api/check` body: `{ "instanceId": "optional", "missing": ["..."], "corrupt": ["..."] }`
+- `GET /api/admin-settings` (ต้องส่ง `Authorization: Bearer <STARHUB_ADMIN_TOKEN>`)
+- `PUT /api/admin-settings` body: `{ maintenance, maintenanceMessage, announcements, announcementMinCloseSeconds }` (ต้องส่ง `Authorization: Bearer <STARHUB_ADMIN_TOKEN>`)

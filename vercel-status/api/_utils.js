@@ -21,7 +21,7 @@ function json(res, statusCode, data) {
 
 function allowCors(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
-  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
   if (req.method === 'OPTIONS') {
     res.statusCode = 204
@@ -207,6 +207,46 @@ async function fetchSupabaseJson(pathWithQuery) {
     throw new Error(`Supabase request failed: HTTP ${res.status}${t ? `: ${t.slice(0, 200)}` : ''}`)
   }
   return await res.json()
+}
+
+async function supabaseRequest(pathWithQuery, { method = 'GET', body = null, headers = {} } = {}) {
+  const supabase = getSupabase()
+  if (!supabase) return null
+  const url = `${supabase.url}${pathWithQuery.startsWith('/') ? '' : '/'}${pathWithQuery}`
+  const hasBody = body !== null && body !== undefined
+  const res = await fetch(url, {
+    method,
+    headers: {
+      apikey: supabase.key,
+      Authorization: `Bearer ${supabase.key}`,
+      Accept: 'application/json',
+      ...(hasBody ? { 'Content-Type': 'application/json' } : {}),
+      ...headers
+    },
+    body: hasBody ? JSON.stringify(body) : undefined,
+    cache: 'no-store'
+  })
+  if (!res.ok) {
+    const t = await res.text().catch(() => '')
+    throw new Error(`Supabase request failed: HTTP ${res.status}${t ? `: ${t.slice(0, 200)}` : ''}`)
+  }
+  const text = await res.text().catch(() => '')
+  if (!text) return null
+  try {
+    return JSON.parse(text)
+  } catch {
+    return null
+  }
+}
+
+async function upsertStarhubSettings(id, patch) {
+  const safeId = typeof id === 'string' && id.trim() ? id.trim() : '1'
+  const payload = { id: safeId, ...(patch && typeof patch === 'object' ? patch : {}) }
+  return await supabaseRequest('/rest/v1/starhub_settings?on_conflict=id', {
+    method: 'POST',
+    body: payload,
+    headers: { Prefer: 'return=representation,resolution=merge-duplicates' }
+  })
 }
 
 async function getStarhubSettings() {
@@ -451,6 +491,7 @@ module.exports = {
   getOnlineUsers,
   bumpOnline,
   getStarhubSettings,
+  upsertStarhubSettings,
   getMinecraftServerStatus,
   getMinecraftServerStatusCached,
   mapLimit

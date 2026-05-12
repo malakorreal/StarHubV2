@@ -523,6 +523,9 @@ export function setupLauncher(ipcMain, mainWindow) {
                  }
                  
                  for (const folder of foldersInPatch) {
+                     if (!forceRepair && folder.toLowerCase() === 'config') {
+                         continue
+                     }
                      const targetPath = path.join(rootPath, folder)
                      if (fs.existsSync(targetPath) && fs.statSync(targetPath).isDirectory()) {
                          // Filter valid filenames for THIS folder and remove the folder prefix

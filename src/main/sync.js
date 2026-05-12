@@ -89,6 +89,19 @@ export class SyncManager {
     
     // Normalize path (Windows backslashes to forward slashes)
     const normPath = relPath.replace(/\\/g, '/').toLowerCase().replace(/^\/+/, '')
+
+    if (
+      normPath === 'cache' ||
+      normPath.startsWith('cache/') ||
+      normPath.endsWith('/cache') ||
+      normPath.includes('/cache/') ||
+      normPath === '.cache' ||
+      normPath.startsWith('.cache/') ||
+      normPath.endsWith('/.cache') ||
+      normPath.includes('/.cache/')
+    ) {
+      return true
+    }
     
     const systemWhitelist = ['figura', 'fragmentskin', 'cache', 'shaderpacks', 'screenshots', 'emotes', 'logs']
     const combined = [...systemWhitelist, ...(Array.isArray(ignoreList) ? ignoreList : [])]

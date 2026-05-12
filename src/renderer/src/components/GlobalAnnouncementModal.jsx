@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 
-const GlobalAnnouncementModal = ({ open, announcement, index, total, minCloseSeconds, sessionStartedAt, onClose, onNext }) => {
+const GlobalAnnouncementModal = ({ open, announcement, index, total, minCloseSeconds, sessionStartedAt, onClose, onNext, onPrev }) => {
   const [animateIn, setAnimateIn] = useState(false)
   const [closing, setClosing] = useState(false)
   const [now, setNow] = useState(Date.now())
@@ -32,6 +32,7 @@ const GlobalAnnouncementModal = ({ open, announcement, index, total, minCloseSec
 
   const title = typeof announcement.title === 'string' ? announcement.title : ''
   const message = typeof announcement.message === 'string' ? announcement.message : (typeof announcement.text === 'string' ? announcement.text : '')
+  const footer = typeof announcement.footer === 'string' ? announcement.footer : (typeof announcement.bottomText === 'string' ? announcement.bottomText : '')
   const imageUrl = typeof announcement.imageUrl === 'string' ? announcement.imageUrl : (typeof announcement.image === 'string' ? announcement.image : '')
 
   const handleClose = () => {
@@ -43,10 +44,17 @@ const GlobalAnnouncementModal = ({ open, announcement, index, total, minCloseSec
   }
 
   const handleNext = () => {
-    if (!canClose) return
     setClosing(true)
     setTimeout(() => {
       onNext && onNext()
+    }, 260)
+  }
+
+  const handlePrev = () => {
+    if (typeof index === 'number' && index <= 0) return
+    setClosing(true)
+    setTimeout(() => {
+      onPrev && onPrev()
     }, 260)
   }
 
@@ -101,15 +109,32 @@ const GlobalAnnouncementModal = ({ open, announcement, index, total, minCloseSec
           <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexShrink: 0 }}>
             {typeof total === 'number' && total > 1 && (
               <button
-                onClick={handleNext}
-                disabled={!canClose}
+                onClick={handlePrev}
+                disabled={typeof index === 'number' ? index <= 0 : true}
                 style={{
                   border: '1px solid rgba(255,215,0,0.22)',
                   background: 'rgba(0,0,0,0.22)',
-                  color: canClose ? 'rgba(255,255,255,0.92)' : 'rgba(255,255,255,0.42)',
+                  color: (typeof index === 'number' && index > 0) ? 'rgba(255,255,255,0.92)' : 'rgba(255,255,255,0.42)',
                   borderRadius: 12,
                   padding: '10px 12px',
-                  cursor: canClose ? 'pointer' : 'not-allowed',
+                  cursor: (typeof index === 'number' && index > 0) ? 'pointer' : 'not-allowed',
+                  fontWeight: 750,
+                  fontSize: 13
+                }}
+              >
+                ย้อนกลับ
+              </button>
+            )}
+            {typeof total === 'number' && total > 1 && (
+              <button
+                onClick={handleNext}
+                style={{
+                  border: '1px solid rgba(255,215,0,0.22)',
+                  background: 'rgba(0,0,0,0.22)',
+                  color: 'rgba(255,255,255,0.92)',
+                  borderRadius: 12,
+                  padding: '10px 12px',
+                  cursor: 'pointer',
                   fontWeight: 750,
                   fontSize: 13
                 }}
@@ -146,6 +171,13 @@ const GlobalAnnouncementModal = ({ open, announcement, index, total, minCloseSec
           {message && (
             <div style={{ color: 'rgba(255,255,255,0.88)', lineHeight: 1.55, whiteSpace: 'pre-line', overflowWrap: 'anywhere' }}>
               {message}
+            </div>
+          )}
+          {footer && (
+            <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid rgba(255,215,0,0.12)' }}>
+              <div style={{ color: 'rgba(255,255,255,0.70)', lineHeight: 1.55, whiteSpace: 'pre-line', overflowWrap: 'anywhere', fontSize: 13 }}>
+                {footer}
+              </div>
             </div>
           )}
         </div>

@@ -72,6 +72,7 @@ function App() {
   const [showGlobalAnnouncement, setShowGlobalAnnouncement] = useState(false)
   const [announcementSessionStartedAt, setAnnouncementSessionStartedAt] = useState(0)
   const dismissedAnnouncementsKeyRef = React.useRef('')
+  const announcementsKeyRef = React.useRef('')
   
   // Track online/offline status
   useEffect(() => {
@@ -340,8 +341,9 @@ function App() {
           if (Number.isFinite(startsAt) && now < startsAt) return false
           if (Number.isFinite(endsAt) && now > endsAt) return false
           const message = typeof a.message === 'string' ? a.message : (typeof a.text === 'string' ? a.text : '')
+          const footer = typeof a.footer === 'string' ? a.footer : (typeof a.bottomText === 'string' ? a.bottomText : '')
           const title = typeof a.title === 'string' ? a.title : ''
-          return !!(title || message)
+          return !!(title || message || footer)
       })
   }
 
@@ -362,12 +364,18 @@ function App() {
           return
       }
 
+      if (activeKey && activeKey === announcementsKeyRef.current) {
+          return
+      }
+
+      announcementsKeyRef.current = activeKey || ''
       setGlobalAnnouncements(active)
       setActiveAnnouncementIndex(0)
       if (active.length > 0) {
           setAnnouncementSessionStartedAt(Date.now())
           setShowGlobalAnnouncement(true)
       } else {
+          announcementsKeyRef.current = ''
           setShowGlobalAnnouncement(false)
       }
   }
@@ -377,10 +385,12 @@ function App() {
       const url = resolveStatusApiUrl(insts)
       statusApiUrlRef.current = url
       if (!url) return
-      const res = await window.api.getStarhubStatus(url)
-      if (res && res.success && res.data) {
-          applyGlobalStatus(res.data)
-      }
+      try {
+          const res = await window.api.getStarhubStatus(url)
+          if (res && res.success && res.data) {
+              applyGlobalStatus(res.data)
+          }
+      } catch (e) {}
   }
 
   const sendHeartbeat = async () => {
@@ -388,9 +398,11 @@ function App() {
       const statusUrl = statusApiUrlRef.current || resolveStatusApiUrl(instancesRef.current)
       if (!statusUrl) return
       const userId = user?.uuid || user?.id || null
-      await window.api.sendStarhubHeartbeat(statusUrl, {
-          userId: typeof userId === 'string' ? userId : null
-      })
+      try {
+          await window.api.sendStarhubHeartbeat(statusUrl, {
+              userId: typeof userId === 'string' ? userId : null
+          })
+      } catch (e) {}
   }
 
   useEffect(() => {
@@ -611,7 +623,7 @@ function App() {
           instancesRefreshIntervalRef.current = setInterval(() => {
               if (launchStatusRef.current === 'running') return
               fetchInstances(false, true)
-          }, 3000)
+          }, 15000)
       }
 
       return () => {}
@@ -1020,6 +1032,14 @@ function App() {
       setActiveAnnouncementIndex(0)
   }
 
+  const prevAnnouncement = () => {
+      const prev = activeAnnouncementIndex - 1
+      if (Array.isArray(globalAnnouncements) && prev >= 0) {
+          setActiveAnnouncementIndex(prev)
+          setShowGlobalAnnouncement(true)
+      }
+  }
+
   if (isOffline) {
       return (
         <div style={{ 
@@ -1186,6 +1206,7 @@ function App() {
             sessionStartedAt={announcementSessionStartedAt}
             onClose={closeAllAnnouncements}
             onNext={nextAnnouncement}
+            onPrev={prevAnnouncement}
         />
 
         {/* Updater Modal */}
