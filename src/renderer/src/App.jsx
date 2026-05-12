@@ -70,6 +70,8 @@ function App() {
   const [announcementMinCloseSeconds, setAnnouncementMinCloseSeconds] = useState(5)
   const [activeAnnouncementIndex, setActiveAnnouncementIndex] = useState(0)
   const [showGlobalAnnouncement, setShowGlobalAnnouncement] = useState(false)
+  const [announcementSessionStartedAt, setAnnouncementSessionStartedAt] = useState(0)
+  const dismissedAnnouncementsKeyRef = React.useRef('')
   
   // Track online/offline status
   useEffect(() => {
@@ -115,6 +117,7 @@ function App() {
   const fetchInstancesInFlightRef = React.useRef(false)
   const instancesRefreshIntervalRef = React.useRef(null)
   const statusRefreshIntervalRef = React.useRef(null)
+  const heartbeatIntervalRef = React.useRef(null)
   const launchStatusRef = React.useRef('idle')
 
   useEffect(() => {
@@ -326,23 +329,6 @@ function App() {
       }
   }
 
-  const loadSeenAnnouncementKeys = () => {
-      try {
-          const raw = localStorage.getItem('starhub_seen_announcements_v1')
-          const arr = raw ? JSON.parse(raw) : []
-          return Array.isArray(arr) ? arr.filter(Boolean).slice(0, 200) : []
-      } catch (e) {
-          return []
-      }
-  }
-
-  const saveSeenAnnouncementKeys = (keys) => {
-      try {
-          const uniq = Array.from(new Set(Array.isArray(keys) ? keys : [])).filter(Boolean).slice(0, 200)
-          localStorage.setItem('starhub_seen_announcements_v1', JSON.stringify(uniq))
-      } catch (e) {}
-  }
-
   const filterActiveAnnouncements = (arr) => {
       const list = Array.isArray(arr) ? arr : []
       const now = Date.now()
@@ -370,11 +356,20 @@ function App() {
       setAnnouncementMinCloseSeconds(minClose)
 
       const active = filterActiveAnnouncements(payload?.announcements)
-      const seen = loadSeenAnnouncementKeys()
-      const unseen = active.filter((a) => !seen.includes(getAnnouncementKey(a)))
-      setGlobalAnnouncements(unseen)
+      const activeKey = active.map(getAnnouncementKey).join('|')
+
+      if (activeKey && activeKey === dismissedAnnouncementsKeyRef.current) {
+          return
+      }
+
+      setGlobalAnnouncements(active)
       setActiveAnnouncementIndex(0)
-      setShowGlobalAnnouncement(unseen.length > 0)
+      if (active.length > 0) {
+          setAnnouncementSessionStartedAt(Date.now())
+          setShowGlobalAnnouncement(true)
+      } else {
+          setShowGlobalAnnouncement(false)
+      }
   }
 
   const refreshGlobalStatus = async (insts) => {
@@ -386,6 +381,16 @@ function App() {
       if (res && res.success && res.data) {
           applyGlobalStatus(res.data)
       }
+  }
+
+  const sendHeartbeat = async () => {
+      if (!window.api || !window.api.sendStarhubHeartbeat) return
+      const statusUrl = statusApiUrlRef.current || resolveStatusApiUrl(instancesRef.current)
+      if (!statusUrl) return
+      const userId = user?.uuid || user?.id || null
+      await window.api.sendStarhubHeartbeat(statusUrl, {
+          userId: typeof userId === 'string' ? userId : null
+      })
   }
 
   useEffect(() => {
@@ -407,6 +412,7 @@ function App() {
         // The background sync will update to the latest data automatically
         const insts = await fetchInstances(false)
         await refreshGlobalStatus(insts)
+        await sendHeartbeat()
         
         // Fetch Installed Versions (Safe check for API availability)
         if (window.api && window.api.getInstalledVersions) {
@@ -580,6 +586,10 @@ function App() {
             clearInterval(statusRefreshIntervalRef.current)
             statusRefreshIntervalRef.current = null
         }
+        if (heartbeatIntervalRef.current) {
+            clearInterval(heartbeatIntervalRef.current)
+            heartbeatIntervalRef.current = null
+        }
         unsubs.forEach(fn => {
             try { fn() } catch (e) {}
         })
@@ -615,7 +625,18 @@ function App() {
               clearInterval(statusRefreshIntervalRef.current)
               statusRefreshIntervalRef.current = null
           }
+          if (heartbeatIntervalRef.current) {
+              clearInterval(heartbeatIntervalRef.current)
+              heartbeatIntervalRef.current = null
+          }
           return
+      }
+
+      if (!heartbeatIntervalRef.current) {
+          heartbeatIntervalRef.current = setInterval(() => {
+              if (launchStatusRef.current === 'running') return
+              sendHeartbeat()
+          }, 30000)
       }
 
       if (!statusRefreshIntervalRef.current) {
@@ -981,20 +1002,13 @@ function App() {
   }, [globalAnnouncements, activeAnnouncementIndex])
 
   const closeAllAnnouncements = () => {
-      const seen = loadSeenAnnouncementKeys()
-      const toAdd = (Array.isArray(globalAnnouncements) ? globalAnnouncements : []).map(getAnnouncementKey)
-      saveSeenAnnouncementKeys([...seen, ...toAdd])
+      dismissedAnnouncementsKeyRef.current = (Array.isArray(globalAnnouncements) ? globalAnnouncements : []).map(getAnnouncementKey).join('|')
       setShowGlobalAnnouncement(false)
       setGlobalAnnouncements([])
       setActiveAnnouncementIndex(0)
   }
 
   const nextAnnouncement = () => {
-      const current = activeAnnouncement
-      if (current) {
-          const seen = loadSeenAnnouncementKeys()
-          saveSeenAnnouncementKeys([...seen, getAnnouncementKey(current)])
-      }
       const next = activeAnnouncementIndex + 1
       if (Array.isArray(globalAnnouncements) && next < globalAnnouncements.length) {
           setActiveAnnouncementIndex(next)
@@ -1169,6 +1183,7 @@ function App() {
             index={activeAnnouncementIndex}
             total={Array.isArray(globalAnnouncements) ? globalAnnouncements.length : 0}
             minCloseSeconds={announcementMinCloseSeconds}
+            sessionStartedAt={announcementSessionStartedAt}
             onClose={closeAllAnnouncements}
             onNext={nextAnnouncement}
         />

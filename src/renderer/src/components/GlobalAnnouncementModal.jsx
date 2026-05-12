@@ -1,14 +1,15 @@
 import React, { useEffect, useMemo, useState } from 'react'
 
-const GlobalAnnouncementModal = ({ open, announcement, index, total, minCloseSeconds, onClose, onNext }) => {
+const GlobalAnnouncementModal = ({ open, announcement, index, total, minCloseSeconds, sessionStartedAt, onClose, onNext }) => {
   const [animateIn, setAnimateIn] = useState(false)
   const [closing, setClosing] = useState(false)
   const [now, setNow] = useState(Date.now())
 
   const lockUntil = useMemo(() => {
     const secs = Number.isFinite(Number(minCloseSeconds)) ? Math.max(0, Math.floor(Number(minCloseSeconds))) : 5
-    return Date.now() + secs * 1000
-  }, [announcement, minCloseSeconds])
+    const start = Number.isFinite(Number(sessionStartedAt)) ? Number(sessionStartedAt) : Date.now()
+    return start + secs * 1000
+  }, [minCloseSeconds, sessionStartedAt])
 
   const secondsLeft = Math.max(0, Math.ceil((lockUntil - now) / 1000))
   const canClose = secondsLeft <= 0

@@ -1,6 +1,7 @@
 import { app, shell, BrowserWindow, ipcMain, Tray, Menu, nativeImage } from 'electron'
 import { join } from 'path'
 import { promises as fs } from 'fs'
+import crypto from 'crypto'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.ico?asset'
 import { setupAuth } from './auth'
@@ -198,6 +199,63 @@ app.whenReady().then(() => {
               return { success: false, error: `HTTP ${res.status}${text ? `: ${text.slice(0, 200)}` : ''}` }
           }
           const data = await res.json()
+          return { success: true, data }
+      } catch (e) {
+          return { success: false, error: e?.name === 'AbortError' ? 'timeout' : (e?.message || String(e)) }
+      } finally {
+          clearTimeout(timer)
+      }
+  })
+
+  ipcMain.handle('send-starhub-heartbeat', async (event, statusUrlHint, payload = {}) => {
+      const envUrl =
+        process.env.STARHUB_STATUS_API_URL ||
+        process.env.VITE_STARHUB_STATUS_API_URL ||
+        process.env.STARHUB_API_URL ||
+        ''
+      const statusUrl =
+        (typeof statusUrlHint === 'string' && statusUrlHint.trim()) ? statusUrlHint.trim() :
+        (typeof envUrl === 'string' && envUrl.trim()) ? envUrl.trim() :
+        ''
+      if (!statusUrl) return { success: false, error: 'missing_url' }
+
+      const hbUrl = statusUrl
+        .replace(/\/+$/, '')
+        .replace(/\/api\/status$/i, '/api/heartbeat')
+        .replace(/\/api\/status\/$/i, '/api/heartbeat')
+
+      const store = getStore()
+      let deviceId = store.get('device_id')
+      if (!deviceId) {
+          try {
+              deviceId = crypto.randomUUID()
+          } catch (e) {
+              deviceId = `${Date.now()}-${Math.random().toString(16).slice(2)}`
+          }
+          store.set('device_id', deviceId)
+      }
+
+      const body = {
+          deviceId,
+          userId: typeof payload?.userId === 'string' ? payload.userId : null,
+          launcherVersion: typeof payload?.launcherVersion === 'string' ? payload.launcherVersion : null
+      }
+
+      const controller = new AbortController()
+      const timer = setTimeout(() => controller.abort(), 8000)
+      try {
+          const res = await fetch(hbUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json; charset=utf-8' },
+              body: JSON.stringify(body),
+              signal: controller.signal,
+              cache: 'no-store'
+          })
+          if (!res.ok) {
+              const text = await res.text().catch(() => '')
+              return { success: false, error: `HTTP ${res.status}${text ? `: ${text.slice(0, 200)}` : ''}` }
+          }
+          const data = await res.json().catch(() => ({}))
           return { success: true, data }
       } catch (e) {
           return { success: false, error: e?.name === 'AbortError' ? 'timeout' : (e?.message || String(e)) }

@@ -11,6 +11,7 @@ const api = {
   refreshToken: () => ipcRenderer.invoke('refresh-token'),
   getInstances: (force = false) => ipcRenderer.invoke('get-instances', force),
   getStarhubStatus: (urlHint = '') => ipcRenderer.invoke('get-starhub-status', urlHint),
+  sendStarhubHeartbeat: (statusUrlHint = '', payload = {}) => ipcRenderer.invoke('send-starhub-heartbeat', statusUrlHint, payload),
   launchGame: (instance, auth) => ipcRenderer.invoke('launch-game', { instance, auth }),
   cancelLaunch: () => ipcRenderer.invoke('cancel-launch'),
   prepareLaunch: (instance) => ipcRenderer.invoke('prepare-launch', instance),
