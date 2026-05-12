@@ -10,6 +10,7 @@ const api = {
   removeAccount: (uuid) => ipcRenderer.invoke('remove-account', uuid),
   refreshToken: () => ipcRenderer.invoke('refresh-token'),
   getInstances: (force = false) => ipcRenderer.invoke('get-instances', force),
+  getStarhubStatus: (urlHint = '') => ipcRenderer.invoke('get-starhub-status', urlHint),
   launchGame: (instance, auth) => ipcRenderer.invoke('launch-game', { instance, auth }),
   cancelLaunch: () => ipcRenderer.invoke('cancel-launch'),
   prepareLaunch: (instance) => ipcRenderer.invoke('prepare-launch', instance),

@@ -14,6 +14,7 @@ import UpdateModal from './components/UpdateModal'
 import ConsoleModal from './components/ConsoleModal'
 import RepairConfirmationModal from './components/RepairConfirmationModal'
 import ToastNotification from './components/ToastNotification'
+import GlobalAnnouncementModal from './components/GlobalAnnouncementModal'
 import { useLanguage } from './contexts/LanguageContext'
 
 import { themes } from './themes'
@@ -53,6 +54,8 @@ function App() {
   const [errorMessage, setErrorMessage] = useState(null)
   const [notification, setNotification] = useState(null)
   const notificationQueueRef = React.useRef([])
+  const statusApiUrlRef = React.useRef('')
+  const instancesRef = React.useRef([])
   const [showRepairConfirmation, setShowRepairConfirmation] = useState(false)
   const [repairTargetInstance, setRepairTargetInstance] = useState(null)
   const [isRefreshing, setIsRefreshing] = useState(false)
@@ -61,6 +64,12 @@ function App() {
   const [isLoggingIn, setIsLoggingIn] = useState(false)
   const [isVisible, setIsVisible] = useState(true)
   const [isOffline, setIsOffline] = useState(!navigator.onLine)
+  const [globalMaintenance, setGlobalMaintenance] = useState(false)
+  const [globalMaintenanceMessage, setGlobalMaintenanceMessage] = useState('')
+  const [globalAnnouncements, setGlobalAnnouncements] = useState([])
+  const [announcementMinCloseSeconds, setAnnouncementMinCloseSeconds] = useState(5)
+  const [activeAnnouncementIndex, setActiveAnnouncementIndex] = useState(0)
+  const [showGlobalAnnouncement, setShowGlobalAnnouncement] = useState(false)
   
   // Track online/offline status
   useEffect(() => {
@@ -75,6 +84,10 @@ function App() {
       window.removeEventListener('offline', handleOffline)
     }
   }, [])
+
+  useEffect(() => {
+      instancesRef.current = instances
+  }, [instances])
   
   // Initialize theme from localStorage
   useEffect(() => {
@@ -101,6 +114,7 @@ function App() {
   const updateStatusRef = React.useRef('idle')
   const fetchInstancesInFlightRef = React.useRef(false)
   const instancesRefreshIntervalRef = React.useRef(null)
+  const statusRefreshIntervalRef = React.useRef(null)
   const launchStatusRef = React.useRef('idle')
 
   useEffect(() => {
@@ -272,6 +286,108 @@ function App() {
       }
   }
 
+  const DEFAULT_STATUS_API_URL = 'https://starhubapi.vercel.app/api/status'
+
+  const normalizeStatusApiUrl = (value) => {
+      const raw = typeof value === 'string' ? value.trim() : ''
+      if (!raw) return ''
+
+      const v = raw.replace(/\/+$/, '/')
+      if (/\/api\/status\/?$/i.test(raw)) return raw.replace(/\/+$/, '')
+      if (/\/api\/status\/?$/i.test(v)) return v.replace(/\/+$/, '')
+
+      if (/\/api\/?$/i.test(raw)) return raw.replace(/\/+$/, '') + '/status'
+      if (/\/api\/?$/i.test(v)) return v.replace(/\/+$/, '') + '/status'
+
+      if (raw.endsWith('/')) return raw + 'api/status'
+      return raw + '/api/status'
+  }
+
+  const resolveStatusApiUrl = (insts) => {
+      const fromInstances =
+        Array.isArray(insts)
+          ? (insts.find(i => typeof i?.statusApiUrl === 'string' && i.statusApiUrl.trim())?.statusApiUrl || '')
+          : ''
+      const fromEnv = import.meta?.env?.VITE_STARHUB_STATUS_API_URL || ''
+      return normalizeStatusApiUrl(fromInstances || fromEnv || statusApiUrlRef.current || DEFAULT_STATUS_API_URL)
+  }
+
+  const getAnnouncementKey = (a) => {
+      const id = typeof a?.id === 'string' ? a.id.trim() : ''
+      if (id) return id
+      const title = typeof a?.title === 'string' ? a.title : ''
+      const message = typeof a?.message === 'string' ? a.message : (typeof a?.text === 'string' ? a.text : '')
+      const imageUrl = typeof a?.imageUrl === 'string' ? a.imageUrl : (typeof a?.image === 'string' ? a.image : '')
+      const base = `${title}\n${message}\n${imageUrl}`.trim()
+      try {
+          return btoa(unescape(encodeURIComponent(base))).slice(0, 64)
+      } catch (e) {
+          return base.slice(0, 64) || String(Date.now())
+      }
+  }
+
+  const loadSeenAnnouncementKeys = () => {
+      try {
+          const raw = localStorage.getItem('starhub_seen_announcements_v1')
+          const arr = raw ? JSON.parse(raw) : []
+          return Array.isArray(arr) ? arr.filter(Boolean).slice(0, 200) : []
+      } catch (e) {
+          return []
+      }
+  }
+
+  const saveSeenAnnouncementKeys = (keys) => {
+      try {
+          const uniq = Array.from(new Set(Array.isArray(keys) ? keys : [])).filter(Boolean).slice(0, 200)
+          localStorage.setItem('starhub_seen_announcements_v1', JSON.stringify(uniq))
+      } catch (e) {}
+  }
+
+  const filterActiveAnnouncements = (arr) => {
+      const list = Array.isArray(arr) ? arr : []
+      const now = Date.now()
+      return list.filter((a) => {
+          if (!a || typeof a !== 'object') return false
+          if (a.enabled === false) return false
+          const startsAt = typeof a.startsAt === 'string' ? Date.parse(a.startsAt) : null
+          const endsAt = typeof a.endsAt === 'string' ? Date.parse(a.endsAt) : null
+          if (Number.isFinite(startsAt) && now < startsAt) return false
+          if (Number.isFinite(endsAt) && now > endsAt) return false
+          const message = typeof a.message === 'string' ? a.message : (typeof a.text === 'string' ? a.text : '')
+          const title = typeof a.title === 'string' ? a.title : ''
+          return !!(title || message)
+      })
+  }
+
+  const applyGlobalStatus = (payload) => {
+      const maintenance = payload?.maintenance === true
+      const maintenanceMessage = typeof payload?.maintenanceMessage === 'string' ? payload.maintenanceMessage : ''
+      const minClose = Number.isFinite(Number(payload?.announcementMinCloseSeconds))
+        ? Math.max(0, Math.floor(Number(payload.announcementMinCloseSeconds)))
+        : 5
+      setGlobalMaintenance(maintenance)
+      setGlobalMaintenanceMessage(maintenanceMessage)
+      setAnnouncementMinCloseSeconds(minClose)
+
+      const active = filterActiveAnnouncements(payload?.announcements)
+      const seen = loadSeenAnnouncementKeys()
+      const unseen = active.filter((a) => !seen.includes(getAnnouncementKey(a)))
+      setGlobalAnnouncements(unseen)
+      setActiveAnnouncementIndex(0)
+      setShowGlobalAnnouncement(unseen.length > 0)
+  }
+
+  const refreshGlobalStatus = async (insts) => {
+      if (!window.api || !window.api.getStarhubStatus) return
+      const url = resolveStatusApiUrl(insts)
+      statusApiUrlRef.current = url
+      if (!url) return
+      const res = await window.api.getStarhubStatus(url)
+      if (res && res.success && res.data) {
+          applyGlobalStatus(res.data)
+      }
+  }
+
   useEffect(() => {
     // Initial Load
     const init = async () => {
@@ -290,6 +406,7 @@ function App() {
         // Use force=false to load from cache immediately (Fast Startup)
         // The background sync will update to the latest data automatically
         const insts = await fetchInstances(false)
+        await refreshGlobalStatus(insts)
         
         // Fetch Installed Versions (Safe check for API availability)
         if (window.api && window.api.getInstalledVersions) {
@@ -459,6 +576,10 @@ function App() {
             clearInterval(instancesRefreshIntervalRef.current)
             instancesRefreshIntervalRef.current = null
         }
+        if (statusRefreshIntervalRef.current) {
+            clearInterval(statusRefreshIntervalRef.current)
+            statusRefreshIntervalRef.current = null
+        }
         unsubs.forEach(fn => {
             try { fn() } catch (e) {}
         })
@@ -481,6 +602,27 @@ function App() {
               if (launchStatusRef.current === 'running') return
               fetchInstances(false, true)
           }, 3000)
+      }
+
+      return () => {}
+  }, [launchStatus])
+
+  useEffect(() => {
+      const shouldRun = launchStatus !== 'running'
+
+      if (!shouldRun) {
+          if (statusRefreshIntervalRef.current) {
+              clearInterval(statusRefreshIntervalRef.current)
+              statusRefreshIntervalRef.current = null
+          }
+          return
+      }
+
+      if (!statusRefreshIntervalRef.current) {
+          statusRefreshIntervalRef.current = setInterval(() => {
+              if (launchStatusRef.current === 'running') return
+              refreshGlobalStatus(instancesRef.current)
+          }, 10000)
       }
 
       return () => {}
@@ -832,6 +974,38 @@ function App() {
       }
   }
 
+  const activeAnnouncement = useMemo(() => {
+      if (!Array.isArray(globalAnnouncements) || globalAnnouncements.length === 0) return null
+      const idx = Math.max(0, Math.min(globalAnnouncements.length - 1, activeAnnouncementIndex))
+      return globalAnnouncements[idx] || null
+  }, [globalAnnouncements, activeAnnouncementIndex])
+
+  const closeAllAnnouncements = () => {
+      const seen = loadSeenAnnouncementKeys()
+      const toAdd = (Array.isArray(globalAnnouncements) ? globalAnnouncements : []).map(getAnnouncementKey)
+      saveSeenAnnouncementKeys([...seen, ...toAdd])
+      setShowGlobalAnnouncement(false)
+      setGlobalAnnouncements([])
+      setActiveAnnouncementIndex(0)
+  }
+
+  const nextAnnouncement = () => {
+      const current = activeAnnouncement
+      if (current) {
+          const seen = loadSeenAnnouncementKeys()
+          saveSeenAnnouncementKeys([...seen, getAnnouncementKey(current)])
+      }
+      const next = activeAnnouncementIndex + 1
+      if (Array.isArray(globalAnnouncements) && next < globalAnnouncements.length) {
+          setActiveAnnouncementIndex(next)
+          setShowGlobalAnnouncement(true)
+          return
+      }
+      setShowGlobalAnnouncement(false)
+      setGlobalAnnouncements([])
+      setActiveAnnouncementIndex(0)
+  }
+
   if (isOffline) {
       return (
         <div style={{ 
@@ -908,6 +1082,8 @@ function App() {
                     installedVersion={installedVersions[selectedInstance?.id]}
                     status={launchStatus}
                     progress={launchProgress}
+                    globalMaintenance={globalMaintenance}
+                    globalMaintenanceMessage={globalMaintenanceMessage}
                     onLaunch={handleLaunch}
                     onCancel={handleCancelLaunch}
                     onOpenSettings={() => setShowSettings(true)}
@@ -986,6 +1162,16 @@ function App() {
                 t={t}
             />
         )}
+
+        <GlobalAnnouncementModal
+            open={showGlobalAnnouncement}
+            announcement={activeAnnouncement}
+            index={activeAnnouncementIndex}
+            total={Array.isArray(globalAnnouncements) ? globalAnnouncements.length : 0}
+            minCloseSeconds={announcementMinCloseSeconds}
+            onClose={closeAllAnnouncements}
+            onNext={nextAnnouncement}
+        />
 
         {/* Updater Modal */}
         <UpdateModal 

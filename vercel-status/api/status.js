@@ -1,13 +1,14 @@
-const { boolFromEnv, json, allowCors, loadInstances, getOnlineUsers, getMinecraftServerStatusCached, mapLimit } = require('./_utils')
+const { boolFromEnv, json, allowCors, loadInstances, getOnlineUsers, getMinecraftServerStatusCached, mapLimit, getStarhubSettings } = require('./_utils')
 
 module.exports = async (req, res) => {
   if (allowCors(req, res)) return
   if (req.method !== 'GET') return json(res, 405, { ok: false, error: 'Method Not Allowed' })
 
-  const maintenance = boolFromEnv(process.env.STARHUB_MAINTENANCE, false)
-  const maintenanceMessage = typeof process.env.STARHUB_MAINTENANCE_MESSAGE === 'string'
-    ? process.env.STARHUB_MAINTENANCE_MESSAGE
-    : ''
+  const settings = await getStarhubSettings()
+  const maintenance = settings ? settings.maintenance : boolFromEnv(process.env.STARHUB_MAINTENANCE, false)
+  const maintenanceMessage = settings
+    ? (settings.maintenanceMessage || '')
+    : (typeof process.env.STARHUB_MAINTENANCE_MESSAGE === 'string' ? process.env.STARHUB_MAINTENANCE_MESSAGE : '')
 
   let instances = []
   let instancesOk = true
@@ -66,6 +67,8 @@ module.exports = async (req, res) => {
     ok: true,
     maintenance,
     maintenanceMessage,
+    announcements: settings ? (Array.isArray(settings.announcements) ? settings.announcements : []) : [],
+    announcementMinCloseSeconds: settings ? settings.announcementMinCloseSeconds : 5,
     serverOnline,
     serverIp: serverIp || null,
     primaryInstanceId,

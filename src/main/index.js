@@ -177,6 +177,35 @@ app.whenReady().then(() => {
       return await getInstances(mainWindow, force)
   })
 
+  ipcMain.handle('get-starhub-status', async (event, urlHint) => {
+      const envUrl =
+        process.env.STARHUB_STATUS_API_URL ||
+        process.env.VITE_STARHUB_STATUS_API_URL ||
+        process.env.STARHUB_API_URL ||
+        ''
+      const url =
+        (typeof urlHint === 'string' && urlHint.trim()) ? urlHint.trim() :
+        (typeof envUrl === 'string' && envUrl.trim()) ? envUrl.trim() :
+        ''
+      if (!url) return { success: false, error: 'missing_url' }
+
+      const controller = new AbortController()
+      const timer = setTimeout(() => controller.abort(), 8000)
+      try {
+          const res = await fetch(url, { signal: controller.signal, cache: 'no-store' })
+          if (!res.ok) {
+              const text = await res.text().catch(() => '')
+              return { success: false, error: `HTTP ${res.status}${text ? `: ${text.slice(0, 200)}` : ''}` }
+          }
+          const data = await res.json()
+          return { success: true, data }
+      } catch (e) {
+          return { success: false, error: e?.name === 'AbortError' ? 'timeout' : (e?.message || String(e)) }
+      } finally {
+          clearTimeout(timer)
+      }
+  })
+
   // Auto Update (Check immediately on startup)
   // Ensure we don't try to auto-update in dev mode
   if (!is.dev) {

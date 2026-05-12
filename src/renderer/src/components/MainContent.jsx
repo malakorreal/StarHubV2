@@ -1,6 +1,6 @@
 import React, { memo, useState, useEffect, useMemo } from 'react'
 
-const MainContent = memo(({ instance, installedVersion, status, progress, onLaunch, onCancel, onOpenSettings, onOpenFolder, onRepair, onOpenConsole, onUninstallInstance, user, paused, t, currentLanguage, enableAnimation, toggleAnimation, enableCubes, showToast }) => {
+const MainContent = memo(({ instance, installedVersion, status, progress, globalMaintenance, globalMaintenanceMessage, onLaunch, onCancel, onOpenSettings, onOpenFolder, onRepair, onOpenConsole, onUninstallInstance, user, paused, t, currentLanguage, enableAnimation, toggleAnimation, enableCubes, showToast }) => {
   const [bgLoaded, setBgLoaded] = useState(false)
   const [staticGif, setStaticGif] = useState(null)
   const [serverStatus, setServerStatus] = useState(null)
@@ -52,7 +52,7 @@ const MainContent = memo(({ instance, installedVersion, status, progress, onLaun
       return installedVersion !== currentRemoteVersion
   }, [instance, installedVersion])
 
-  const isMaintenance = instance?.maintenance === true
+  const isMaintenance = globalMaintenance === true || instance?.maintenance === true
   const canModifyInstance = status === 'idle'
 
   useEffect(() => {
@@ -581,7 +581,7 @@ const MainContent = memo(({ instance, installedVersion, status, progress, onLaun
                                     <path d="M8 5V19L19 12L8 5Z" fill="black"/>
                                 </svg>
                             )}
-                            {isMaintenance ? (instance.maintenance_message || t('main.maintenance') || "Maintenance") : isUpdateAvailable ? t('main.update') : t('main.play')}
+                            {isMaintenance ? ((globalMaintenanceMessage || instance.maintenance_message) || t('main.maintenance') || "Maintenance") : isUpdateAvailable ? t('main.update') : t('main.play')}
                         </>
                     ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>

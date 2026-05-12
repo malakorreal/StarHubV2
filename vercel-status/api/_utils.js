@@ -3,6 +3,7 @@ const path = require('path')
 
 const DEFAULT_NPOINT_INSTANCES_URL = 'https://api.npoint.io/e941143771dfcea29992'
 const memoryServerStatusCache = new Map()
+const memoryOnlineCache = new Map()
 
 function boolFromEnv(value, fallback = false) {
   if (typeof value !== 'string') return fallback
@@ -182,6 +183,64 @@ function getUpstash() {
   return { url: String(url).replace(/\/+$/, ''), token: String(token) }
 }
 
+function getSupabase() {
+  const url = process.env.SUPABASE_URL
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!url || !key) return null
+  return { url: String(url).replace(/\/+$/, ''), key: String(key) }
+}
+
+async function fetchSupabaseJson(pathWithQuery) {
+  const supabase = getSupabase()
+  if (!supabase) return null
+  const url = `${supabase.url}${pathWithQuery.startsWith('/') ? '' : '/'}${pathWithQuery}`
+  const res = await fetch(url, {
+    headers: {
+      apikey: supabase.key,
+      Authorization: `Bearer ${supabase.key}`,
+      Accept: 'application/json'
+    },
+    cache: 'no-store'
+  })
+  if (!res.ok) {
+    const t = await res.text().catch(() => '')
+    throw new Error(`Supabase request failed: HTTP ${res.status}${t ? `: ${t.slice(0, 200)}` : ''}`)
+  }
+  return await res.json()
+}
+
+async function getStarhubSettings() {
+  const supabase = getSupabase()
+  if (!supabase) return null
+  try {
+    const data = await fetchSupabaseJson('/rest/v1/starhub_settings?select=id,maintenance,maintenance_message,announcements,announcement_min_close_seconds&order=updated_at.desc&limit=1')
+    const row = Array.isArray(data) ? data[0] : null
+    if (!row) return null
+
+    const announcementsRaw = row.announcements
+    const announcements = Array.isArray(announcementsRaw) ? announcementsRaw : []
+    const minCloseSecondsRaw = row.announcement_min_close_seconds
+    const minCloseSeconds = Number.isFinite(Number(minCloseSecondsRaw)) ? Math.max(0, Math.floor(Number(minCloseSecondsRaw))) : 5
+
+    return {
+      maintenance: row.maintenance === true,
+      maintenanceMessage: typeof row.maintenance_message === 'string' ? row.maintenance_message : '',
+      announcements,
+      announcementMinCloseSeconds: minCloseSeconds
+    }
+  } catch (e) {
+    return null
+  }
+}
+
+function cleanupMemoryOnline(now, ttlMs) {
+  for (const [k, v] of memoryOnlineCache.entries()) {
+    if (!v || typeof v.lastSeen !== 'number' || v.lastSeen <= now - ttlMs) {
+      memoryOnlineCache.delete(k)
+    }
+  }
+}
+
 async function upstashGet(key) {
   const cfg = getUpstash()
   if (!cfg) return null
@@ -228,24 +287,85 @@ async function upstashCommand(commandPath) {
 }
 
 async function bumpOnline(deviceId) {
-  const now = Date.now()
+  const id = typeof deviceId === 'string' ? deviceId.trim() : ''
+  if (!id) return null
+
   const ttlMs = 5 * 60 * 1000
-  const key = 'starhub:online'
-  await upstashCommand(`/zadd/${encodeURIComponent(key)}/${now}/${encodeURIComponent(deviceId)}`)
-  await upstashCommand(`/zremrangebyscore/${encodeURIComponent(key)}/-inf/${now - ttlMs}`)
-  const count = await upstashCommand(`/zcard/${encodeURIComponent(key)}`)
-  return typeof count === 'number' ? count : (typeof count === 'string' ? Number(count) : null)
+  const now = Date.now()
+
+  const upstash = getUpstash()
+  if (upstash) {
+    const key = 'starhub:online'
+    await upstashCommand(`/zadd/${encodeURIComponent(key)}/${now}/${encodeURIComponent(id)}`)
+    await upstashCommand(`/zremrangebyscore/${encodeURIComponent(key)}/-inf/${now - ttlMs}`)
+    const count = await upstashCommand(`/zcard/${encodeURIComponent(key)}`)
+    return typeof count === 'number' ? count : (typeof count === 'string' ? Number(count) : null)
+  }
+
+  const supabase = getSupabase()
+  if (supabase) {
+    const table = 'starhub_online'
+    const upsertUrl = `${supabase.url}/rest/v1/${table}?on_conflict=device_id`
+    const res = await fetch(upsertUrl, {
+      method: 'POST',
+      headers: {
+        apikey: supabase.key,
+        Authorization: `Bearer ${supabase.key}`,
+        'Content-Type': 'application/json; charset=utf-8',
+        Prefer: 'resolution=merge-duplicates,return=minimal'
+      },
+      body: JSON.stringify({ device_id: id, last_seen: new Date(now).toISOString() })
+    })
+    if (!res.ok) {
+      const t = await res.text().catch(() => '')
+      throw new Error(`Supabase upsert failed: HTTP ${res.status}${t ? `: ${t.slice(0, 200)}` : ''}`)
+    }
+    return await getOnlineUsers()
+  }
+
+  memoryOnlineCache.set(id, { lastSeen: now })
+  cleanupMemoryOnline(now, ttlMs)
+  return memoryOnlineCache.size
 }
 
 async function getOnlineUsers() {
-  const cfg = getUpstash()
-  if (!cfg) return null
-  const now = Date.now()
   const ttlMs = 5 * 60 * 1000
-  const key = 'starhub:online'
-  await upstashCommand(`/zremrangebyscore/${encodeURIComponent(key)}/-inf/${now - ttlMs}`)
-  const count = await upstashCommand(`/zcard/${encodeURIComponent(key)}`)
-  return typeof count === 'number' ? count : (typeof count === 'string' ? Number(count) : null)
+  const now = Date.now()
+
+  const upstash = getUpstash()
+  if (upstash) {
+    const key = 'starhub:online'
+    await upstashCommand(`/zremrangebyscore/${encodeURIComponent(key)}/-inf/${now - ttlMs}`)
+    const count = await upstashCommand(`/zcard/${encodeURIComponent(key)}`)
+    return typeof count === 'number' ? count : (typeof count === 'string' ? Number(count) : null)
+  }
+
+  const supabase = getSupabase()
+  if (supabase) {
+    const table = 'starhub_online'
+    const cutoffIso = new Date(now - ttlMs).toISOString()
+    const url = `${supabase.url}/rest/v1/${table}?select=device_id&last_seen=gt.${encodeURIComponent(cutoffIso)}`
+    const res = await fetch(url, {
+      headers: {
+        apikey: supabase.key,
+        Authorization: `Bearer ${supabase.key}`,
+        Prefer: 'count=exact'
+      },
+      cache: 'no-store'
+    })
+    if (!res.ok) {
+      const t = await res.text().catch(() => '')
+      throw new Error(`Supabase select failed: HTTP ${res.status}${t ? `: ${t.slice(0, 200)}` : ''}`)
+    }
+    const contentRange = res.headers.get('content-range') || ''
+    const m = contentRange.match(/\/(\d+)\s*$/)
+    if (m) return Number(m[1])
+    const data = await res.json().catch(() => null)
+    return Array.isArray(data) ? data.length : null
+  }
+
+  cleanupMemoryOnline(now, ttlMs)
+  return memoryOnlineCache.size
 }
 
 async function getMinecraftServerStatus(ip) {
@@ -330,6 +450,7 @@ module.exports = {
   matchGlob,
   getOnlineUsers,
   bumpOnline,
+  getStarhubSettings,
   getMinecraftServerStatus,
   getMinecraftServerStatusCached,
   mapLimit

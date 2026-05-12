@@ -287,7 +287,7 @@
 
         $('onlineUsers').textContent = onlineUsers === null ? '-' : String(onlineUsers)
         $('onlineDesc').textContent = onlineUsers === null
-          ? 'ยังไม่ได้ตั้งค่า Upstash Redis (จึงนับผู้ใช้ออนไลน์ไม่ได้แบบถาวร)'
+          ? 'ยังไม่ได้ตั้งค่า (Upstash หรือ Supabase) จึงนับผู้ใช้ออนไลน์ไม่ได้'
           : 'นับจาก heartbeat ในช่วง 5 นาทีล่าสุด'
 
         if (data?.instancesOk === false && data?.instancesError) {
