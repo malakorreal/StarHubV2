@@ -40,10 +40,31 @@ create table if not exists public.starhub_settings (
 ```
 
 ### แก้ประกาศผ่านหน้าเว็บ (Admin)
-เพื่อให้แก้ประกาศ/maintenance จากหน้าเว็บได้ ระบบมี endpoint สำหรับอัปเดต `starhub_settings` (ต้องตั้ง token เพื่อความปลอดภัย):
-- `STARHUB_ADMIN_TOKEN` = token สำหรับเข้าโหมด admin
+เพื่อให้แก้ประกาศ/maintenance จากหน้าเว็บได้ ระบบรองรับ “เข้าสู่ระบบด้วย Discord” แล้วตรวจสิทธิ์จากรายชื่อ Discord ID (ดึงจาก npoint)
 
-เปิดหน้าเว็บ ไปที่เมนู “ประกาศ” แล้วกด “ตั้งค่า Key” (ระบบจะจำค่าไว้ใน browser) จากนั้นกด “โหลดค่า” และ “บันทึก”
+Environment Variables:
+- `DISCORD_CLIENT_ID`
+- `DISCORD_CLIENT_SECRET`
+- `DISCORD_ALLOWED_IDS_URL` (default: `https://api.npoint.io/6d71db871d844b9ec40f`)
+
+วิธีใช้:
+- เปิดหน้าเว็บ ไปที่เมนู “ประกาศ” แล้วกด “เข้าสู่ระบบ Discord”
+- ถ้า Discord ID ของคุณอยู่ใน `DISCORD_ALLOWED_IDS_URL` จะสามารถกด “โหลดค่า” และ “บันทึก” ได้
+
+ตั้งค่าใน Discord Developer Portal:
+- OAuth2 Redirects: `https://<โปรเจกต์ของคุณ>.vercel.app/api/auth/discord/callback`
+
+ต้องสร้างตาราง session ใน Supabase:
+```sql
+create table if not exists public.starhub_admin_sessions (
+  session_id text primary key,
+  discord_id text not null,
+  expires_at timestamptz not null
+);
+
+create index if not exists starhub_admin_sessions_expires_at_idx
+  on public.starhub_admin_sessions (expires_at);
+```
 
 ### เช็คสถานะเซิร์ฟ Minecraft (ไม่บังคับ)
 - `STARHUB_SERVER_IP` = `host:port` (เช่น `example.com:25565`)
@@ -79,5 +100,9 @@ create index if not exists starhub_online_last_seen_idx
 - `GET /api/instances`
 - `GET /api/manifest/<instanceId>`
 - `POST /api/check` body: `{ "instanceId": "optional", "missing": ["..."], "corrupt": ["..."] }`
-- `GET /api/admin-settings` (ต้องส่ง `Authorization: Bearer <STARHUB_ADMIN_TOKEN>`)
-- `PUT /api/admin-settings` body: `{ maintenance, maintenanceMessage, announcements, announcementMinCloseSeconds }` (ต้องส่ง `Authorization: Bearer <STARHUB_ADMIN_TOKEN>`)
+- `GET /api/admin-settings` (ต้อง login Discord ก่อน)
+- `PUT /api/admin-settings` body: `{ maintenance, maintenanceMessage, announcements, announcementMinCloseSeconds }` (ต้อง login Discord ก่อน)
+- `GET /api/auth/discord/start`
+- `GET /api/auth/discord/callback`
+- `GET /api/auth/me`
+- `POST /api/auth/logout`

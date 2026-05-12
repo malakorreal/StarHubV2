@@ -1,11 +1,4 @@
-const { json, allowCors, readJsonBody, getStarhubSettings, upsertStarhubSettings } = require('./_utils')
-
-function getBearerToken(req) {
-  const auth = req && req.headers ? req.headers.authorization : null
-  if (typeof auth !== 'string') return ''
-  const m = auth.match(/^Bearer\s+(.+)$/i)
-  return m ? String(m[1] || '').trim() : ''
-}
+const { json, allowCors, readJsonBody, getStarhubSettings, upsertStarhubSettings, resolveAdminUserId, getAllowedDiscordIds } = require('./_utils')
 
 function toCleanString(v, { max = 5000 } = {}) {
   if (typeof v !== 'string') return ''
@@ -40,11 +33,10 @@ function normalizeAnnouncements(raw) {
 module.exports = async (req, res) => {
   if (allowCors(req, res)) return
 
-  const expected = typeof process.env.STARHUB_ADMIN_TOKEN === 'string' ? process.env.STARHUB_ADMIN_TOKEN.trim() : ''
-  if (!expected) return json(res, 500, { ok: false, error: 'STARHUB_ADMIN_TOKEN is not configured' })
-
-  const token = getBearerToken(req)
-  if (!token || token !== expected) return json(res, 401, { ok: false, error: 'Unauthorized' })
+  const userId = await resolveAdminUserId(req)
+  if (!userId) return json(res, 401, { ok: false, error: 'Unauthorized' })
+  const allowed = await getAllowedDiscordIds().catch(() => null)
+  if (!allowed || !allowed.has(userId)) return json(res, 403, { ok: false, error: 'Forbidden' })
 
   if (req.method === 'GET') {
     const settings = await getStarhubSettings()
@@ -87,4 +79,3 @@ module.exports = async (req, res) => {
   const settings = await getStarhubSettings()
   return json(res, 200, { ok: true, settings: settings || null })
 }
-

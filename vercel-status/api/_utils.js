@@ -1,9 +1,12 @@
 const fs = require('fs')
 const path = require('path')
+const crypto = require('crypto')
 
 const DEFAULT_NPOINT_INSTANCES_URL = 'https://api.npoint.io/e941143771dfcea29992'
+const DEFAULT_DISCORD_ALLOWED_IDS_URL = 'https://api.npoint.io/6d71db871d844b9ec40f'
 const memoryServerStatusCache = new Map()
 const memoryOnlineCache = new Map()
+const memoryAllowedDiscordIds = { value: null, expiresAt: 0 }
 
 function boolFromEnv(value, fallback = false) {
   if (typeof value !== 'string') return fallback
@@ -65,6 +68,162 @@ async function fetchJson(url, { timeoutMs = 8000 } = {}) {
   } finally {
     clearTimeout(timer)
   }
+}
+
+function parseCookies(req) {
+  const raw = req && req.headers ? req.headers.cookie : null
+  if (typeof raw !== 'string' || !raw.trim()) return {}
+  const out = {}
+  const parts = raw.split(';')
+  for (const part of parts) {
+    const idx = part.indexOf('=')
+    if (idx <= 0) continue
+    const k = part.slice(0, idx).trim()
+    const v = part.slice(idx + 1).trim()
+    if (!k) continue
+    try {
+      out[k] = decodeURIComponent(v)
+    } catch {
+      out[k] = v
+    }
+  }
+  return out
+}
+
+function isHttps(req) {
+  const proto = req && req.headers ? req.headers['x-forwarded-proto'] : null
+  if (typeof proto === 'string') return proto.toLowerCase().includes('https')
+  return true
+}
+
+function setCookie(res, name, value, opts = {}) {
+  const parts = [`${name}=${encodeURIComponent(String(value))}`]
+  parts.push(`Path=${opts.path || '/'}`)
+  if (typeof opts.maxAgeSeconds === 'number') parts.push(`Max-Age=${Math.max(0, Math.floor(opts.maxAgeSeconds))}`)
+  if (opts.httpOnly !== false) parts.push('HttpOnly')
+  if (opts.sameSite) parts.push(`SameSite=${opts.sameSite}`)
+  if (opts.secure) parts.push('Secure')
+
+  const existing = res.getHeader('Set-Cookie')
+  if (!existing) {
+    res.setHeader('Set-Cookie', parts.join('; '))
+  } else if (Array.isArray(existing)) {
+    res.setHeader('Set-Cookie', [...existing, parts.join('; ')])
+  } else {
+    res.setHeader('Set-Cookie', [String(existing), parts.join('; ')])
+  }
+}
+
+function base64urlEncode(buf) {
+  return Buffer.from(buf).toString('base64').replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_')
+}
+
+function base64urlDecode(str) {
+  const s = String(str || '').replace(/-/g, '+').replace(/_/g, '/')
+  const pad = s.length % 4 === 0 ? '' : '='.repeat(4 - (s.length % 4))
+  return Buffer.from(s + pad, 'base64')
+}
+
+function signHmac(data, secret) {
+  return crypto.createHmac('sha256', secret).update(data).digest()
+}
+
+function createSignedToken(payload, secret) {
+  const jsonPayload = JSON.stringify(payload || {})
+  const data = base64urlEncode(Buffer.from(jsonPayload, 'utf8'))
+  const sig = base64urlEncode(signHmac(data, secret))
+  return `${data}.${sig}`
+}
+
+function verifySignedToken(token, secret) {
+  if (typeof token !== 'string') return null
+  const parts = token.split('.')
+  if (parts.length !== 2) return null
+  const [data, sig] = parts
+  if (!data || !sig) return null
+  const expected = base64urlEncode(signHmac(data, secret))
+  try {
+    const a = Buffer.from(expected)
+    const b = Buffer.from(sig)
+    if (a.length !== b.length) return null
+    if (!crypto.timingSafeEqual(a, b)) return null
+  } catch {
+    return null
+  }
+  try {
+    const payload = JSON.parse(base64urlDecode(data).toString('utf8'))
+    if (!payload || typeof payload !== 'object') return null
+    if (typeof payload.exp === 'number' && Date.now() > payload.exp) return null
+    return payload
+  } catch {
+    return null
+  }
+}
+
+function getSessionSecret() {
+  const s = typeof process.env.STARHUB_SESSION_SECRET === 'string' ? process.env.STARHUB_SESSION_SECRET.trim() : ''
+  return s || null
+}
+
+function issueOauthState(res, req, { ttlSeconds = 10 * 60 } = {}) {
+  const secret = getSessionSecret()
+  const state = base64urlEncode(crypto.randomBytes(16))
+  const value = secret
+    ? createSignedToken({ state, exp: Date.now() + ttlSeconds * 1000 }, secret)
+    : state
+  setCookie(res, 'starhub_oauth_state', value, {
+    path: '/',
+    httpOnly: true,
+    secure: isHttps(req),
+    sameSite: 'Lax',
+    maxAgeSeconds: ttlSeconds
+  })
+  return state
+}
+
+function consumeOauthState(req, state) {
+  const secret = getSessionSecret()
+  const cookies = parseCookies(req)
+  const token = cookies.starhub_oauth_state
+  if (secret) {
+    const payload = verifySignedToken(token, secret)
+    const expected = payload && typeof payload.state === 'string' ? payload.state : ''
+    return !!expected && expected === String(state || '')
+  }
+  return !!token && token === String(state || '')
+}
+
+function getBaseUrl(req) {
+  const host = req && req.headers ? req.headers.host : null
+  const proto = req && req.headers && typeof req.headers['x-forwarded-proto'] === 'string' ? req.headers['x-forwarded-proto'] : null
+  const scheme = proto ? proto.split(',')[0].trim() : 'https'
+  if (typeof host !== 'string' || !host.trim()) return ''
+  return `${scheme}://${host.trim()}`
+}
+
+async function getAllowedDiscordIds() {
+  const now = Date.now()
+  if (memoryAllowedDiscordIds.value && memoryAllowedDiscordIds.expiresAt > now) return memoryAllowedDiscordIds.value
+  const url = (typeof process.env.DISCORD_ALLOWED_IDS_URL === 'string' && process.env.DISCORD_ALLOWED_IDS_URL.trim())
+    ? process.env.DISCORD_ALLOWED_IDS_URL.trim()
+    : DEFAULT_DISCORD_ALLOWED_IDS_URL
+  let data = []
+  try {
+    const raw = await fetchJson(url, { timeoutMs: 8000 })
+    if (Array.isArray(raw)) data = raw
+    else if (raw && Array.isArray(raw.discordIds)) data = raw.discordIds
+    else if (raw && Array.isArray(raw.ids)) data = raw.ids
+  } catch {
+    data = []
+  }
+  const set = new Set(
+    data
+      .map((x) => (x === null || x === undefined ? '' : String(x).trim()))
+      .filter(Boolean)
+  )
+  memoryAllowedDiscordIds.value = set
+  memoryAllowedDiscordIds.expiresAt = now + 60_000
+  return set
 }
 
 function resolveDataPath(...parts) {
@@ -246,6 +405,113 @@ async function upsertStarhubSettings(id, patch) {
     method: 'POST',
     body: payload,
     headers: { Prefer: 'return=representation,resolution=merge-duplicates' }
+  })
+}
+
+function toIso(tsMs) {
+  return new Date(tsMs).toISOString()
+}
+
+async function upsertAdminSession(sessionId, discordId, expiresAtMs) {
+  const payload = {
+    session_id: String(sessionId),
+    discord_id: String(discordId),
+    expires_at: toIso(expiresAtMs)
+  }
+  return await supabaseRequest('/rest/v1/starhub_admin_sessions?on_conflict=session_id', {
+    method: 'POST',
+    body: payload,
+    headers: { Prefer: 'return=representation,resolution=merge-duplicates' }
+  })
+}
+
+async function getAdminSessionRow(sessionId) {
+  const sid = typeof sessionId === 'string' ? sessionId.trim() : ''
+  if (!sid) return null
+  try {
+    const rows = await fetchSupabaseJson(`/rest/v1/starhub_admin_sessions?select=session_id,discord_id,expires_at&session_id=eq.${encodeURIComponent(sid)}&limit=1`)
+    return Array.isArray(rows) ? rows[0] : null
+  } catch {
+    return null
+  }
+}
+
+async function deleteAdminSession(sessionId) {
+  const sid = typeof sessionId === 'string' ? sessionId.trim() : ''
+  if (!sid) return null
+  try {
+    await supabaseRequest(`/rest/v1/starhub_admin_sessions?session_id=eq.${encodeURIComponent(sid)}`, { method: 'DELETE' })
+  } catch {}
+  return true
+}
+
+async function resolveAdminUserId(req) {
+  const secret = getSessionSecret()
+  const cookies = parseCookies(req)
+  const token = cookies.starhub_admin_session
+  if (!token) return null
+
+  if (secret) {
+    const payload = verifySignedToken(token, secret)
+    const userId = payload && typeof payload.sub === 'string' ? payload.sub.trim() : ''
+    return userId || null
+  }
+
+  const row = await getAdminSessionRow(token)
+  if (!row) return null
+  const exp = row.expires_at ? Date.parse(String(row.expires_at)) : NaN
+  if (!Number.isFinite(exp) || exp <= Date.now()) return null
+  const userId = typeof row.discord_id === 'string' ? row.discord_id.trim() : ''
+  return userId || null
+}
+
+async function issueAdminSession(res, req, userId, { ttlSeconds = 60 * 60 * 24 * 7 } = {}) {
+  const secret = getSessionSecret()
+  const expiresAt = Date.now() + ttlSeconds * 1000
+
+  if (secret) {
+    const payload = { sub: String(userId), exp: expiresAt }
+    const token = createSignedToken(payload, secret)
+    setCookie(res, 'starhub_admin_session', token, {
+      path: '/',
+      httpOnly: true,
+      secure: isHttps(req),
+      sameSite: 'Lax',
+      maxAgeSeconds: ttlSeconds
+    })
+    return token
+  }
+
+  const supabase = getSupabase()
+  if (!supabase) {
+    throw new Error('SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY is not configured')
+  }
+
+  const sid = base64urlEncode(crypto.randomBytes(24))
+  await upsertAdminSession(sid, String(userId), expiresAt)
+  setCookie(res, 'starhub_admin_session', sid, {
+    path: '/',
+    httpOnly: true,
+    secure: isHttps(req),
+    sameSite: 'Lax',
+    maxAgeSeconds: ttlSeconds
+  })
+  return sid
+}
+
+async function clearAdminSession(res, req) {
+  const secret = getSessionSecret()
+  const cookies = parseCookies(req)
+  const token = cookies.starhub_admin_session
+  if (!secret && token) {
+    await deleteAdminSession(token)
+  }
+  setCookie(res, 'starhub_admin_session', '', {
+    path: '/',
+    httpOnly: true,
+    secure: isHttps(req),
+    sameSite: 'Lax',
+    maxAgeSeconds: 0
   })
 }
 
@@ -478,6 +744,7 @@ async function mapLimit(items, limit, mapper) {
 
 module.exports = {
   DEFAULT_NPOINT_INSTANCES_URL,
+  DEFAULT_DISCORD_ALLOWED_IDS_URL,
   boolFromEnv,
   json,
   allowCors,
@@ -492,6 +759,15 @@ module.exports = {
   bumpOnline,
   getStarhubSettings,
   upsertStarhubSettings,
+  parseCookies,
+  setCookie,
+  getBaseUrl,
+  getAllowedDiscordIds,
+  resolveAdminUserId,
+  issueAdminSession,
+  clearAdminSession,
+  issueOauthState,
+  consumeOauthState,
   getMinecraftServerStatus,
   getMinecraftServerStatusCached,
   mapLimit
