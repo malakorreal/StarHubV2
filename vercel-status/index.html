@@ -30,6 +30,44 @@
         color: var(--text);
         min-height: 100vh;
       }
+      .layout {
+        display: flex;
+        min-height: 100vh;
+      }
+      .sidebar {
+        width: 240px;
+        padding: 18px 14px;
+        border-right: 1px solid var(--border);
+        background: rgba(0,0,0,0.20);
+        position: sticky;
+        top: 0;
+        height: 100vh;
+      }
+      .brand {
+        font-weight: 850;
+        letter-spacing: 0.7px;
+        font-size: 16px;
+        margin: 4px 8px 14px;
+      }
+      .nav {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        padding: 0 6px;
+      }
+      .navBtn {
+        width: 100%;
+        text-align: left;
+      }
+      .navBtn.active {
+        background: rgba(255,215,0,0.10);
+        border-color: rgba(255,215,0,0.30);
+        color: rgba(255,255,255,0.94);
+      }
+      .content {
+        flex: 1;
+        min-width: 0;
+      }
       header {
         padding: 28px 20px 10px;
         max-width: 1100px;
@@ -216,99 +254,128 @@
         .card { grid-column: span 12; }
         .adminRow { grid-template-columns: 1fr; }
       }
+      @media (max-width: 980px) {
+        .layout { flex-direction: column; }
+        .sidebar {
+          width: 100%;
+          height: auto;
+          position: static;
+          border-right: none;
+          border-bottom: 1px solid var(--border);
+        }
+        .nav { flex-direction: row; flex-wrap: wrap; }
+        .navBtn { width: auto; }
+      }
     </style>
   </head>
   <body>
-    <header>
-      <h1>StarHub Status</h1>
-      <div class="subtitle">
-        <span class="pill"><span class="dot" id="dot"></span><span id="headline">กำลังโหลด...</span></span>
-        <span class="pill">อัปเดตล่าสุด: <span id="updatedAt">-</span></span>
-        <span class="actions">
-          <button id="refreshBtn">รีเฟรช</button>
-        </span>
-      </div>
-    </header>
-
-    <div class="wrap">
-      <div class="grid">
-        <div class="card">
-          <h2>ผู้ใช้งาน StarHub</h2>
-          <div class="value"><span id="onlineUsers">-</span><small>ออนไลน์ (โดยประมาณ)</small></div>
-          <div class="desc" id="onlineDesc"></div>
+    <div class="layout">
+      <aside class="sidebar">
+        <div class="brand">StarHub</div>
+        <div class="nav">
+          <button id="navDashboard" class="navBtn active">Dashboard</button>
+          <button id="navAnnouncements" class="navBtn">ประกาศ</button>
         </div>
+      </aside>
 
-        <div class="card">
-          <h2>สถานะระบบ</h2>
-          <div class="value"><span id="serverStatus">-</span></div>
-          <div class="desc" id="maintenanceMessage"></div>
-        </div>
-
-        <div class="card">
-          <h2>API</h2>
-          <div class="value"><span id="apiStatus">-</span></div>
-          <div class="desc" id="apiDesc"></div>
-        </div>
-
-        <div class="tableWrap">
-          <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; padding:2px 2px 12px;">
-            <div style="font-weight:750; letter-spacing:0.3px;">Instances</div>
-            <div style="color:var(--muted); font-size:12px;">Auto refresh ทุก 5 วินาที</div>
+      <main class="content">
+        <header>
+          <h1>StarHub Status</h1>
+          <div class="subtitle">
+            <span class="pill"><span class="dot" id="dot"></span><span id="headline">กำลังโหลด...</span></span>
+            <span class="pill">อัปเดตล่าสุด: <span id="updatedAt">-</span></span>
+            <span class="actions">
+              <button id="refreshBtn">รีเฟรช</button>
+            </span>
           </div>
-          <table>
-            <thead>
-              <tr>
-                <th style="width: 18%;">ID</th>
-                <th style="width: 24%;">ชื่อ</th>
-                <th style="width: 22%;">Server</th>
-                <th style="width: 12%;">ผู้เล่น</th>
-                <th style="width: 14%;">Modpack</th>
-                <th style="width: 10%;">สถานะ</th>
-              </tr>
-            </thead>
-            <tbody id="instancesTbody"></tbody>
-          </table>
-        </div>
+        </header>
 
-        <div class="tableWrap">
-          <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; padding:2px 2px 10px;">
-            <div style="font-weight:750; letter-spacing:0.3px;">Admin: ประกาศ / Maintenance</div>
-            <div style="color:var(--muted); font-size:12px;">บันทึกลง Supabase ตาราง starhub_settings</div>
-          </div>
-          <div class="adminTop">
-            <span class="pill">Token: <span style="min-width: 240px; display:inline-block;">
-              <input id="adminToken" type="password" placeholder="STARHUB_ADMIN_TOKEN" style="width: 260px; padding: 8px 10px; border-radius: 999px;" />
-            </span></span>
-            <button id="adminLoadBtn" class="miniBtn">โหลดค่า</button>
-            <button id="adminSaveBtn" class="miniBtn">บันทึก</button>
-            <span class="adminStatus" id="adminStatus"></span>
-          </div>
-
-          <div class="adminRow">
-            <div>
-              <label for="adminMaintenance">Maintenance</label>
-              <div style="display:flex; gap:10px; align-items:center;">
-                <input id="adminMaintenance" type="checkbox" style="width:auto;" />
-                <div style="color:var(--muted); font-size:12px;">เปิด = ปิดปรับปรุง</div>
+        <div class="wrap">
+          <section id="viewDashboard">
+            <div class="grid">
+              <div class="card">
+                <h2>ผู้ใช้งาน StarHub</h2>
+                <div class="value"><span id="onlineUsers">-</span><small>ออนไลน์ (โดยประมาณ)</small></div>
+                <div class="desc" id="onlineDesc"></div>
               </div>
-              <label for="adminMaintenanceMessage">ข้อความ Maintenance</label>
-              <textarea id="adminMaintenanceMessage" placeholder="ข้อความที่จะแสดงเมื่อปิดปรับปรุง"></textarea>
-              <label for="adminMinClose">Announcement Min Close (วินาที)</label>
-              <input id="adminMinClose" type="number" min="0" max="120" step="1" />
-            </div>
 
-            <div>
-              <div class="annTitleRow">
-                <div style="color:var(--muted); font-size:12px;">Announcements</div>
-                <div class="annActions">
-                  <button id="adminAddAnnouncementBtn" class="miniBtn">เพิ่มประกาศ</button>
+              <div class="card">
+                <h2>สถานะระบบ</h2>
+                <div class="value"><span id="serverStatus">-</span></div>
+                <div class="desc" id="maintenanceMessage"></div>
+              </div>
+
+              <div class="card">
+                <h2>API</h2>
+                <div class="value"><span id="apiStatus">-</span></div>
+                <div class="desc" id="apiDesc"></div>
+              </div>
+
+              <div class="tableWrap">
+                <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; padding:2px 2px 12px;">
+                  <div style="font-weight:750; letter-spacing:0.3px;">Instances</div>
+                  <div style="color:var(--muted); font-size:12px;">Auto refresh ทุก 5 วินาที</div>
+                </div>
+                <table>
+                  <thead>
+                    <tr>
+                      <th style="width: 18%;">ID</th>
+                      <th style="width: 24%;">ชื่อ</th>
+                      <th style="width: 22%;">Server</th>
+                      <th style="width: 12%;">ผู้เล่น</th>
+                      <th style="width: 14%;">Modpack</th>
+                      <th style="width: 10%;">สถานะ</th>
+                    </tr>
+                  </thead>
+                  <tbody id="instancesTbody"></tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          <section id="viewAnnouncements" style="display:none;">
+            <div class="grid">
+              <div class="tableWrap">
+                <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; padding:2px 2px 10px;">
+                  <div style="font-weight:750; letter-spacing:0.3px;">ประกาศ / Maintenance</div>
+                  <div style="color:var(--muted); font-size:12px;">บันทึกลง Supabase ตาราง starhub_settings</div>
+                </div>
+                <div class="adminTop">
+                  <button id="adminSetKeyBtn" class="miniBtn">ตั้งค่า Key</button>
+                  <button id="adminClearKeyBtn" class="miniBtn danger">ล้าง Key</button>
+                  <button id="adminLoadBtn" class="miniBtn">โหลดค่า</button>
+                  <button id="adminSaveBtn" class="miniBtn">บันทึก</button>
+                  <span class="adminStatus" id="adminStatus"></span>
+                </div>
+
+                <div class="adminRow">
+                  <div>
+                    <label for="adminMaintenance">Maintenance</label>
+                    <div style="display:flex; gap:10px; align-items:center;">
+                      <input id="adminMaintenance" type="checkbox" style="width:auto;" />
+                      <div style="color:var(--muted); font-size:12px;">เปิด = ปิดปรับปรุง</div>
+                    </div>
+                    <label for="adminMaintenanceMessage">ข้อความ Maintenance</label>
+                    <textarea id="adminMaintenanceMessage" placeholder="ข้อความที่จะแสดงเมื่อปิดปรับปรุง"></textarea>
+                    <label for="adminMinClose">Announcement Min Close (วินาที)</label>
+                    <input id="adminMinClose" type="number" min="0" max="120" step="1" />
+                  </div>
+
+                  <div>
+                    <div class="annTitleRow">
+                      <div style="color:var(--muted); font-size:12px;">Announcements</div>
+                      <div class="annActions">
+                        <button id="adminAddAnnouncementBtn" class="miniBtn">เพิ่มประกาศ</button>
+                      </div>
+                    </div>
+                    <div id="announcementsEditor"></div>
+                  </div>
                 </div>
               </div>
-              <div id="announcementsEditor"></div>
             </div>
-          </div>
+          </section>
         </div>
-      </div>
+      </main>
     </div>
 
     <script>
@@ -434,6 +501,20 @@
       load()
       setInterval(load, 5000)
 
+      const setView = (view) => {
+        const isDash = view === 'dashboard'
+        $('viewDashboard').style.display = isDash ? '' : 'none'
+        $('viewAnnouncements').style.display = isDash ? 'none' : ''
+        $('navDashboard').classList.toggle('active', isDash)
+        $('navAnnouncements').classList.toggle('active', !isDash)
+        try { history.replaceState(null, '', `#${isDash ? 'dashboard' : 'announcements'}`) } catch (e) {}
+      }
+
+      $('navDashboard').addEventListener('click', () => setView('dashboard'))
+      $('navAnnouncements').addEventListener('click', () => setView('announcements'))
+      const initialHash = String(location.hash || '').replace('#', '').trim().toLowerCase()
+      setView(initialHash === 'announcements' ? 'announcements' : 'dashboard')
+
       const admin = {
         loaded: false,
         announcements: [],
@@ -447,15 +528,20 @@
       }
 
       const getAdminToken = () => {
-        const inputVal = String($('adminToken').value || '').trim()
-        const stored = String(sessionStorage.getItem('starhub_admin_token') || '').trim()
-        const token = inputVal || stored
-        if (token && token !== stored) sessionStorage.setItem('starhub_admin_token', token)
+        return String(localStorage.getItem('starhub_admin_token') || '').trim()
+      }
+
+      const ensureAdminToken = () => {
+        const existing = getAdminToken()
+        if (existing) return existing
+        const t = prompt('ใส่ Admin Key')
+        const token = typeof t === 'string' ? t.trim() : ''
+        if (token) localStorage.setItem('starhub_admin_token', token)
         return token
       }
 
       const adminFetch = async (path, { method = 'GET', body = null } = {}) => {
-        const token = getAdminToken()
+        const token = ensureAdminToken()
         if (!token) throw new Error('กรุณาใส่ Token')
         const res = await fetch(path, {
           method,
@@ -651,8 +737,17 @@
         renderAnnouncementsEditor()
       })
 
-      const storedToken = String(sessionStorage.getItem('starhub_admin_token') || '').trim()
-      if (storedToken) $('adminToken').value = storedToken
+      $('adminSetKeyBtn').addEventListener('click', () => {
+        const t = prompt('ใส่ Admin Key')
+        const token = typeof t === 'string' ? t.trim() : ''
+        if (!token) return
+        localStorage.setItem('starhub_admin_token', token)
+        setAdminStatus('ตั้งค่า Key แล้ว')
+      })
+      $('adminClearKeyBtn').addEventListener('click', () => {
+        localStorage.removeItem('starhub_admin_token')
+        setAdminStatus('ล้าง Key แล้ว')
+      })
     </script>
   </body>
 </html>

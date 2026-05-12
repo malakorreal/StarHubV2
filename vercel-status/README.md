@@ -43,7 +43,7 @@ create table if not exists public.starhub_settings (
 เพื่อให้แก้ประกาศ/maintenance จากหน้าเว็บได้ ระบบมี endpoint สำหรับอัปเดต `starhub_settings` (ต้องตั้ง token เพื่อความปลอดภัย):
 - `STARHUB_ADMIN_TOKEN` = token สำหรับเข้าโหมด admin
 
-เปิดหน้าเว็บ แล้วใส่ token ในส่วน “Admin: ประกาศ / Maintenance” จากนั้นกด “โหลดค่า” และ “บันทึก”
+เปิดหน้าเว็บ ไปที่เมนู “ประกาศ” แล้วกด “ตั้งค่า Key” (ระบบจะจำค่าไว้ใน browser) จากนั้นกด “โหลดค่า” และ “บันทึก”
 
 ### เช็คสถานะเซิร์ฟ Minecraft (ไม่บังคับ)
 - `STARHUB_SERVER_IP` = `host:port` (เช่น `example.com:25565`)
