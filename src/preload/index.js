@@ -31,6 +31,7 @@ const api = {
   uninstallInstance: (instance) => ipcRenderer.invoke('uninstall-instance', instance),
   getUserAchievements: () => ipcRenderer.invoke('get-user-achievements'),
   getAllAchievements: () => ipcRenderer.invoke('get-all-achievements'),
+  getDbStatus: () => ipcRenderer.invoke('get-db-status'),
   onLaunchProgress: (callback) => {
     ipcRenderer.removeAllListeners('launch-progress')
     const listener = (event, value) => callback(value)

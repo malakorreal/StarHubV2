@@ -17,7 +17,7 @@ import { autoUpdater } from 'electron-updater'
 let mainWindow
 let tray = null
 
-import { getUserAchievements, getAllAchievements, checkAndGrantLaunchAchievements } from './supabase'
+import { getUserAchievements, getAllAchievements, checkAndGrantLaunchAchievements, getSupabaseHealth } from './supabase'
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -100,6 +100,14 @@ app.whenReady().then(() => {
   setupStatus(ipcMain)
   setupRPC(mainWindow)
   
+  ipcMain.handle('get-db-status', async () => {
+    try {
+      return await getSupabaseHealth()
+    } catch (e) {
+      return { ok: false, error: String(e && e.message ? e.message : e) }
+    }
+  })
+
   // RPC Status Handler
   ipcMain.handle('update-rpc', (event, { status, instanceName }) => {
       setActivity(status, instanceName)

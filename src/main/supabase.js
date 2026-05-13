@@ -41,6 +41,36 @@ const withTimeout = async (promise, label) => {
     }
 }
 
+export async function getSupabaseHealth() {
+    if (!supabaseUrl || !supabaseKey) {
+        return { ok: false, error: 'Missing Supabase credentials (SUPABASE_URL / SUPABASE_KEY)' }
+    }
+    if (!supabase) {
+        return { ok: false, error: 'Supabase client not initialized' }
+    }
+    try {
+        const { error } = await withTimeout(
+            supabase.from('users').select('uuid').limit(1),
+            'supabase:health'
+        )
+        if (error) {
+            const msg = [error.code, error.message].filter(Boolean).join(': ')
+            return { ok: false, error: msg || 'Supabase error' }
+        }
+        return { ok: true }
+    } catch (e) {
+        const name = e && e.name ? String(e.name) : 'Error'
+        const msg = e && e.message ? String(e.message) : String(e)
+        const code = e && e.code ? String(e.code) : ''
+        let hint = ''
+        if (/fetch failed/i.test(msg) || /network/i.test(msg) || /ECONN/i.test(msg) || /ENOTFOUND/i.test(msg)) {
+            hint = 'Network blocked/unavailable (check Windows Firewall for StarHub)'
+        }
+        const detail = [name, code].filter(Boolean).join(' ')
+        return { ok: false, error: `${detail ? detail + ': ' : ''}${msg}${hint ? ` | ${hint}` : ''}`.trim() }
+    }
+}
+
 /**
  * Helper to sync user to database
  * Table structure: users (uuid: text primary key, username: text, last_seen: timestamp, is_banned: boolean)

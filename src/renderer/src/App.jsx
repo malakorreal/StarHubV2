@@ -73,6 +73,7 @@ function App() {
   const [announcementSessionStartedAt, setAnnouncementSessionStartedAt] = useState(0)
   const dismissedAnnouncementsKeyRef = React.useRef('')
   const announcementsKeyRef = React.useRef('')
+  const dbStatusCheckedRef = React.useRef(false)
   
   // Track online/offline status
   useEffect(() => {
@@ -425,6 +426,24 @@ function App() {
         const insts = await fetchInstances(false)
         await refreshGlobalStatus(insts)
         await sendHeartbeat()
+
+        if (!dbStatusCheckedRef.current && window.api && window.api.getDbStatus) {
+          dbStatusCheckedRef.current = true
+          try {
+            const st = await window.api.getDbStatus()
+            if (st && st.ok === false) {
+              const msg = currentLanguage === 'th'
+                ? `เชื่อมต่อฐานข้อมูลไม่สำเร็จ${st.error ? `: ${st.error}` : ''}`
+                : `Database connection failed${st.error ? `: ${st.error}` : ''}`
+              showToast(msg, 'error', 6500)
+            }
+          } catch (e) {
+            const msg = currentLanguage === 'th'
+              ? `เชื่อมต่อฐานข้อมูลไม่สำเร็จ: ${e?.message || String(e)}`
+              : `Database connection failed: ${e?.message || String(e)}`
+            showToast(msg, 'error', 6500)
+          }
+        }
         
         // Fetch Installed Versions (Safe check for API availability)
         if (window.api && window.api.getInstalledVersions) {
