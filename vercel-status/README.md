@@ -49,7 +49,11 @@ Environment Variables:
 
 วิธีใช้:
 - เปิดหน้าเว็บ ไปที่เมนู “ประกาศ” แล้วกด “เข้าสู่ระบบ Discord”
-- ถ้า Discord ID ของคุณอยู่ใน `DISCORD_ALLOWED_IDS_URL` จะสามารถกด “โหลดค่า” และ “บันทึก” ได้
+- ถ้า Discord ID ของคุณอยู่ใน `DISCORD_ALLOWED_IDS_URL` ระบบจะโหลดค่ามาให้อัตโนมัติ และสามารถกด “บันทึก” ได้
+
+รูปแบบข้อมูลประกาศ (ใน `starhub_settings.announcements`):
+- `enabled`: true/false (ปิด = ไม่แสดงใน Launcher)
+- `imageUrl`: ลิงก์รูปภาพ (แสดงบน Launcher)
 
 ตั้งค่าใน Discord Developer Portal:
 - OAuth2 Redirects: `https://<โปรเจกต์ของคุณ>.vercel.app/api/auth/discord/callback`

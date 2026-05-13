@@ -19,9 +19,15 @@ function normalizeAnnouncements(raw) {
     const footer =
       toCleanString(a.footer, { max: 2000 }) ||
       toCleanString(a.bottomText, { max: 2000 })
+    const imageUrl =
+      toCleanString(a.imageUrl, { max: 1200 }) ||
+      toCleanString(a.image, { max: 1200 })
+    const enabled = a.enabled === false ? false : true
 
     const item = { id }
+    item.enabled = enabled
     if (title) item.title = title
+    if (imageUrl) item.imageUrl = imageUrl
     if (message) item.message = message
     if (footer) item.footer = footer
 

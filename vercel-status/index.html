@@ -372,7 +372,6 @@
                 <div class="adminTop">
                   <button id="discordLoginBtn" class="miniBtn">เข้าสู่ระบบ Discord</button>
                   <button id="discordLogoutBtn" class="miniBtn danger" style="display:none;">ออกจากระบบ</button>
-                  <button id="adminLoadBtn" class="miniBtn">โหลดค่า</button>
                   <button id="adminSaveBtn" class="miniBtn">บันทึก</button>
                   <span class="adminStatus" id="adminStatus"></span>
                 </div>
@@ -433,23 +432,13 @@
         if (maintenance) {
           $('dot').style.background = 'var(--bad)'
           $('headline').textContent = 'ปิดปรับปรุง'
-        } else if (!serverIp) {
-          $('dot').style.background = 'var(--warn)'
-          $('headline').textContent = 'ยังไม่ได้ตั้งค่าเซิร์ฟเวอร์'
-        } else if (serverOnline) {
+        } else {
           $('dot').style.background = 'var(--good)'
           $('headline').textContent = 'เปิดให้บริการ'
-        } else {
-          $('dot').style.background = 'var(--bad)'
-          $('headline').textContent = 'ออฟไลน์'
         }
 
-        $('serverStatus').textContent = maintenance
-          ? 'Maintenance'
-          : (!serverIp ? '-' : (serverOnline ? `Online${serverPlayers ? ` (${serverPlayers})` : ''}` : 'Offline'))
-        $('maintenanceMessage').textContent = maintenance
-          ? (data?.maintenanceMessage || '')
-          : (serverIp ? `Server: ${serverIp}` : 'ตั้งค่า STARHUB_SERVER_IP หรือ serverIp ใน instance เพื่อให้เช็คสถานะได้')
+        $('serverStatus').textContent = maintenance ? 'ปิดปรับปรุง' : 'ปกติ'
+        $('maintenanceMessage').textContent = maintenance ? (data?.maintenanceMessage || '') : 'ระบบพร้อมใช้งาน'
 
         $('apiStatus').textContent = 'OK'
         $('apiDesc').textContent = 'GET /api/status'
@@ -573,7 +562,6 @@
       const auth = { authenticated: false, userId: null }
 
       const setAdminEnabled = (enabled) => {
-        $('adminLoadBtn').disabled = !enabled
         $('adminSaveBtn').disabled = !enabled
         $('adminAddAnnouncementBtn').disabled = !enabled
         $('adminMaintenance').disabled = !enabled
@@ -697,11 +685,56 @@
           idInput.value = a && a.id ? String(a.id) : ''
           idInput.addEventListener('input', () => { a.id = idInput.value })
 
+          const enLabel = document.createElement('label')
+          enLabel.textContent = 'แสดงประกาศ'
+          const enRow = document.createElement('div')
+          enRow.style.display = 'flex'
+          enRow.style.gap = '10px'
+          enRow.style.alignItems = 'center'
+          const enInput = document.createElement('input')
+          enInput.type = 'checkbox'
+          enInput.style.width = 'auto'
+          enInput.checked = a && a.enabled === false ? false : true
+          enInput.addEventListener('change', () => { a.enabled = enInput.checked })
+          const enHint = document.createElement('div')
+          enHint.style.color = 'var(--muted)'
+          enHint.style.fontSize = '12px'
+          enHint.textContent = 'ปิด = ไม่แสดงใน Launcher'
+          enRow.appendChild(enInput)
+          enRow.appendChild(enHint)
+
           const tLabel = document.createElement('label')
           tLabel.textContent = 'หัวข้อ'
           const tInput = document.createElement('input')
           tInput.value = a && a.title ? String(a.title) : ''
           tInput.addEventListener('input', () => { a.title = tInput.value })
+
+          const imgLabel = document.createElement('label')
+          imgLabel.textContent = 'รูป (Image URL)'
+          const imgInput = document.createElement('input')
+          imgInput.placeholder = 'https://...'
+          imgInput.value = a && a.imageUrl ? String(a.imageUrl) : ''
+          const imgPreview = document.createElement('div')
+          imgPreview.style.marginTop = '10px'
+          imgPreview.style.border = '1px solid rgba(255,215,0,0.14)'
+          imgPreview.style.borderRadius = '14px'
+          imgPreview.style.overflow = 'hidden'
+          imgPreview.style.display = 'none'
+          const imgEl = document.createElement('img')
+          imgEl.alt = ''
+          imgEl.style.width = '100%'
+          imgEl.style.display = 'block'
+          imgEl.addEventListener('error', () => { imgPreview.style.display = 'none' })
+          imgPreview.appendChild(imgEl)
+          const applyImg = () => {
+            const v = String(imgInput.value || '').trim()
+            a.imageUrl = v
+            if (!v) { imgPreview.style.display = 'none'; return }
+            imgEl.src = v
+            imgPreview.style.display = ''
+          }
+          imgInput.addEventListener('input', applyImg)
+          setTimeout(applyImg, 0)
 
           const mLabel = document.createElement('label')
           mLabel.textContent = 'คำอธิบาย'
@@ -718,8 +751,13 @@
 
           item.appendChild(idLabel)
           item.appendChild(idInput)
+          item.appendChild(enLabel)
+          item.appendChild(enRow)
           item.appendChild(tLabel)
           item.appendChild(tInput)
+          item.appendChild(imgLabel)
+          item.appendChild(imgInput)
+          item.appendChild(imgPreview)
           item.appendChild(mLabel)
           item.appendChild(mInput)
           item.appendChild(fLabel)
@@ -784,11 +822,10 @@
         }
       }
 
-      $('adminLoadBtn').addEventListener('click', () => loadAdmin())
       $('adminSaveBtn').addEventListener('click', () => saveAdmin())
       $('adminAddAnnouncementBtn').addEventListener('click', () => {
         const id = `announcement_${Date.now()}`
-        admin.announcements = [...(Array.isArray(admin.announcements) ? admin.announcements : []), { id, title: '', message: '', footer: '' }]
+        admin.announcements = [...(Array.isArray(admin.announcements) ? admin.announcements : []), { id, enabled: true, title: '', imageUrl: '', message: '', footer: '' }]
         admin.loaded = true
         renderAnnouncementsEditor()
       })
@@ -833,7 +870,12 @@
       const _oldSetView = setView
       const setViewWithAuth = (view) => {
         _oldSetView(view)
-        if (view === 'announcements') refreshAuth().then(() => maybeShowAuthMessage())
+        if (view === 'announcements') {
+          refreshAuth().then(async () => {
+            maybeShowAuthMessage()
+            if (auth.authenticated) await loadAdmin()
+          })
+        }
       }
       setView = setViewWithAuth
 

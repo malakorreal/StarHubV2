@@ -10,6 +10,9 @@ module.exports = async (req, res) => {
     ? (settings.maintenanceMessage || '')
     : (typeof process.env.STARHUB_MAINTENANCE_MESSAGE === 'string' ? process.env.STARHUB_MAINTENANCE_MESSAGE : '')
 
+  const rawAnnouncements = settings ? (Array.isArray(settings.announcements) ? settings.announcements : []) : []
+  const announcements = rawAnnouncements.filter((a) => a && typeof a === 'object' && a.enabled !== false)
+
   let instances = []
   let instancesOk = true
   let instancesError = null
@@ -67,7 +70,7 @@ module.exports = async (req, res) => {
     ok: true,
     maintenance,
     maintenanceMessage,
-    announcements: settings ? (Array.isArray(settings.announcements) ? settings.announcements : []) : [],
+    announcements,
     announcementMinCloseSeconds: settings ? settings.announcementMinCloseSeconds : 5,
     serverOnline,
     serverIp: serverIp || null,
