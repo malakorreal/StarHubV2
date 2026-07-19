@@ -1,3 +1,65 @@
+// Helper functions to adjust colors
+function hexToRgb(hex) {
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex)
+  return result ? {
+    r: parseInt(result[1], 16),
+    g: parseInt(result[2], 16),
+    b: parseInt(result[3], 16)
+  } : null
+}
+
+function rgbToHex(r, g, b) {
+  return '#' + [r, g, b].map(x => {
+    const hex = Math.round(Math.max(0, Math.min(255, x))).toString(16)
+    return hex.length === 1 ? '0' + hex : hex
+  }).join('')
+}
+
+function lightenDarkenColor(hex, percent) {
+  const rgb = hexToRgb(hex)
+  if (!rgb) return hex
+  const amount = Math.round(255 * (percent / 100))
+  return rgbToHex(
+    rgb.r + amount,
+    rgb.g + amount,
+    rgb.b + amount
+  )
+}
+
+// Generate a complete theme from an accent color
+export function generateCustomTheme(accentColor) {
+  const accentHover = lightenDarkenColor(accentColor, -15)
+  const isDarkAccent = isColorDark(accentColor)
+  const textOnAccent = isDarkAccent ? '#ffffff' : '#000000'
+  
+  return {
+    id: 'custom',
+    name: 'Custom',
+    colors: {
+      '--sidebar-bg': '#1a1b1e',
+      '--main-bg': '#121212',
+      '--accent': accentColor,
+      '--accent-hover': accentHover,
+      '--text-primary': '#ffffff',
+      '--text-secondary': '#aaaaaa',
+      '--input-bg': '#25262b',
+      '--border-color': '#373a40',
+      '--modal-bg': '#1a1b1e',
+      '--card-bg': '#25262b',
+      '--danger': '#ff4d4d',
+      '--success': '#4caf50'
+    }
+  }
+}
+
+// Check if a color is dark (for text contrast)
+function isColorDark(hex) {
+  const rgb = hexToRgb(hex)
+  if (!rgb) return true
+  const luminance = (0.299 * rgb.r + 0.587 * rgb.g + 0.114 * rgb.b) / 255
+  return luminance < 0.5
+}
+
 export const themes = {
   gold: {
     id: 'gold',

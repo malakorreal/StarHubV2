@@ -1,6 +1,6 @@
 import React, { memo, useState, useEffect, useMemo } from 'react'
 
-const MainContent = memo(({ instance, installedVersion, status, progress, globalMaintenance, globalMaintenanceMessage, onLaunch, onCancel, onOpenSettings, onOpenFolder, onRepair, onOpenConsole, onUninstallInstance, user, paused, t, currentLanguage, enableAnimation, toggleAnimation, enableCubes, showToast }) => {
+const MainContent = memo(({ instance, installedVersion, status, progress, globalMaintenance, globalMaintenanceMessage, adminonline, onLaunch, onCancel, onOpenSettings, onOpenFolder, onRepair, onOpenConsole, onUninstallInstance, user, paused, t, currentLanguage, enableAnimation, toggleAnimation, enableCubes, showToast }) => {
   const [bgLoaded, setBgLoaded] = useState(false)
   const [staticGif, setStaticGif] = useState(null)
   const [serverStatus, setServerStatus] = useState(null)
@@ -52,7 +52,18 @@ const MainContent = memo(({ instance, installedVersion, status, progress, global
       return installedVersion !== currentRemoteVersion
   }, [instance, installedVersion])
 
-  const isMaintenance = globalMaintenance === true || instance?.maintenance === true
+  const isAdminOnline = adminonline === true || instance?.adminonline === true
+  const isAdminBypass = isAdminOnline && user?.account_type === 'admin'
+  console.log('[MainContent] Debug:', { 
+    adminonline,
+    instanceAdminOnline: instance?.adminonline, 
+    userAccountType: user?.account_type,
+    isAdminOnline, 
+    isAdminBypass, 
+    globalMaintenance, 
+    instanceMaintenance: instance?.maintenance 
+  })
+  const isMaintenance = (globalMaintenance === true || instance?.maintenance === true) && !isAdminBypass
   const canModifyInstance = status === 'idle'
 
   useEffect(() => {

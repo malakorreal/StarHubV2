@@ -519,7 +519,7 @@ async function getStarhubSettings() {
   const supabase = getSupabase()
   if (!supabase) return null
   try {
-    const data = await fetchSupabaseJson('/rest/v1/starhub_settings?select=id,maintenance,maintenance_message,announcements,announcement_min_close_seconds&order=updated_at.desc&limit=1')
+    const data = await fetchSupabaseJson('/rest/v1/starhub_settings?select=id,maintenance,maintenance_message,announcements,announcement_min_close_seconds,adminonline&order=updated_at.desc&limit=1')
     const row = Array.isArray(data) ? data[0] : null
     if (!row) return null
 
@@ -532,7 +532,8 @@ async function getStarhubSettings() {
       maintenance: row.maintenance === true,
       maintenanceMessage: typeof row.maintenance_message === 'string' ? row.maintenance_message : '',
       announcements,
-      announcementMinCloseSeconds: minCloseSeconds
+      announcementMinCloseSeconds: minCloseSeconds,
+      adminonline: row.adminonline === true
     }
   } catch (e) {
     return null

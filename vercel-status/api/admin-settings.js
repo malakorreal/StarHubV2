@@ -64,12 +64,14 @@ module.exports = async (req, res) => {
 
   const maintenance = typeof body.maintenance === 'boolean' ? body.maintenance : undefined
   const maintenanceMessage = typeof body.maintenanceMessage === 'string' ? toCleanString(body.maintenanceMessage, { max: 8000 }) : undefined
+  const adminonline = typeof body.adminonline === 'boolean' ? body.adminonline : undefined
 
   const patch = {
     ...(typeof maintenance === 'boolean' ? { maintenance } : {}),
     ...(typeof maintenanceMessage === 'string' ? { maintenance_message: maintenanceMessage } : {}),
     announcements,
-    ...(typeof announcementMinCloseSeconds === 'number' ? { announcement_min_close_seconds: announcementMinCloseSeconds } : {})
+    ...(typeof announcementMinCloseSeconds === 'number' ? { announcement_min_close_seconds: announcementMinCloseSeconds } : {}),
+    ...(typeof adminonline === 'boolean' ? { adminonline } : {})
   }
 
   const settingsId = typeof process.env.STARHUB_SETTINGS_ID === 'string' && process.env.STARHUB_SETTINGS_ID.trim()

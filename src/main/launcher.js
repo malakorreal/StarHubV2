@@ -1479,7 +1479,7 @@ export function setupLauncher(ipcMain, mainWindow) {
                  }
              }, 500)
              
-             setActivity('playing', instance.name, Date.now())
+             setActivity('playing', instance.name, Date.now(), instance.icon || instance.iconUrl)
          })
 
         launcher.on('close', async (code) => {

@@ -1,8 +1,8 @@
 {
   "name": "starhub-v2",
-  "version": "1.0.100",
+  "version": "3.0.1",
   "author": "Malakor",
-  "description": "StarHub Launcher - A modern Minecraft launcher for StarHub community.",
+  "description": "StarHub Launcher",
   "main": "out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
@@ -38,7 +38,7 @@
   },
   "build": {
     "directories": {
-      "output": "dist_v1.0.70_build"
+      "output": "dist"
     },
     "asar": true,
     "compression": "maximum",

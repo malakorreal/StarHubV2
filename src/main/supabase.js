@@ -73,7 +73,7 @@ export async function getSupabaseHealth() {
 
 /**
  * Helper to sync user to database
- * Table structure: users (uuid: text primary key, username: text, last_seen: timestamp, is_banned: boolean)
+ * Table structure: users (uuid: text primary key, username: text, last_seen: timestamp, is_banned: boolean, account_type: text)
  */
 export async function syncUserToDb(profile) {
     if (!supabase) {
@@ -95,7 +95,7 @@ export async function syncUserToDb(profile) {
                 username: profile.name, 
                 last_seen: new Date().toISOString(),
             }, { onConflict: 'uuid' })
-            .select(), 'syncUserToDb')
+            .select('uuid, username, is_banned, account_type'), 'syncUserToDb')
 
         if (error) {
             console.error('[SUPABASE] Upsert Error:', error.code, error.message, error.details)

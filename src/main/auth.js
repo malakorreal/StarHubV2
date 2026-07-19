@@ -256,9 +256,15 @@ export function setupAuth(ipcMain, mainWindow) {
 
         // 1. Validate the current session against Mojang API
         console.log(`Validating session for ${currentAccount.name}...`)
-        const validation = await validateSession(accessToken)
+        let validation = null
+        try {
+            validation = await validateSession(accessToken)
+        } catch (validateErr) {
+            console.warn("Session validation failed due to error, continuing anyway...", validateErr)
+            validation = { valid: null, error: 'NETWORK_ERROR' }
+        }
 
-        if (validation.valid) {
+        if (validation.valid === true) {
             console.log("Session is valid.")
             
             // 🟢 SYNC TO SUPABASE & CHECK BAN ON REFRESH
@@ -341,20 +347,69 @@ export function setupAuth(ipcMain, mainWindow) {
                     access_token: newMclc 
                 }
             } catch (refreshErr) {
-                console.error("Auto-refresh failed:", refreshErr)
-                const classified = classifyAuthError(refreshErr)
-                return { success: false, error: { code: classified.code, message: classified.message } }
+                console.error("Auto-refresh failed, but we'll keep the current session anyway:", refreshErr)
+                // If refresh fails, just keep using the existing token instead of forcing relogin
+                setActivity('Browsing StarHub', 'In Launcher')
+                return {
+                    success: true,
+                    profile: {
+                        name: currentAccount.name,
+                        id: currentAccount.uuid,
+                        account_type: 'normal'
+                    },
+                    access_token: mclcToken,
+                    warning: 'REFRESH_FAILED'
+                }
             }
         } else {
-            console.warn("No MSMC token available for refresh.")
+            console.warn("No MSMC token available for refresh. Keeping current session anyway.")
+            // No refresh token, but still try to use existing session
+            setActivity('Browsing StarHub', 'In Launcher')
+            return {
+                success: true,
+                profile: {
+                    name: currentAccount.name,
+                    id: currentAccount.uuid,
+                    account_type: 'normal'
+                },
+                access_token: mclcToken,
+                warning: 'NO_REFRESH_TOKEN'
+            }
         }
 
-        return { success: false, error: { code: 'SESSION_EXPIRED', message: 'SESSION_EXPIRED' } }
-
     } catch (e) {
-        console.error("Refresh/Validation Error:", e)
-        const classified = classifyAuthError(e)
-        return { success: false, error: { code: classified.code, message: classified.message } }
+        console.error("Refresh/Validation Error, but we'll keep the current session anyway:", e)
+        // If anything fails, just use the existing token instead of forcing relogin
+        const selectedId = store.get('selectedAccountId')
+        const accounts = store.get('accounts', [])
+        let currentAccount = null
+        if (selectedId) {
+            currentAccount = accounts.find(a => a.uuid === selectedId)
+        }
+        if (!currentAccount) {
+            const legacyAuth = store.get('auth')
+            if (legacyAuth) {
+                currentAccount = {
+                    uuid: legacyAuth.uuid,
+                    name: legacyAuth.name,
+                    mclc: legacyAuth.access_token || legacyAuth
+                }
+            }
+        }
+        if (currentAccount && currentAccount.mclc) {
+            setActivity('Browsing StarHub', 'In Launcher')
+            return {
+                success: true,
+                profile: {
+                    name: currentAccount.name,
+                    id: currentAccount.uuid,
+                    account_type: 'normal'
+                },
+                access_token: currentAccount.mclc,
+                warning: 'GENERAL_ERROR'
+            }
+        }
+        return { success: false, error: { message: 'No token found' } }
     }
   })
 

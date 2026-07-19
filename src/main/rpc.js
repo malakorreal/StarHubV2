@@ -46,7 +46,7 @@ export function setupRPC(mainWindow) {
   rpc.login({ clientId }).catch(console.error)
 }
 
-export function setActivity(status, instanceName = null, startTimestamp = null) {
+export function setActivity(status, instanceName = null, startTimestamp = null, instanceIcon = null) {
   const t = translations[currentLang] || translations.en
 
   let details = t.using
@@ -97,7 +97,10 @@ export function setActivity(status, instanceName = null, startTimestamp = null) 
     ]
   }
 
-  if (auth && auth.name) {
+  if (instanceIcon) {
+    activity.smallImageKey = instanceIcon
+    activity.smallImageText = instanceName || 'Playing'
+  } else if (auth && auth.name) {
     activity.smallImageKey = `https://minotar.net/avatar/${auth.name}`
     activity.smallImageText = auth.name
   }

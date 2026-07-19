@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { themes as availableThemes } from '../themes'
+import { themes as availableThemes, generateCustomTheme } from '../themes'
 import RepairConfirmationModal from './RepairConfirmationModal'
 import AchievementsView from './AchievementsView'
 
@@ -21,6 +21,7 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
   const [autoCheckUpdates, setAutoCheckUpdates] = useState(true)
   const [checkingForUpdates, setCheckingForUpdates] = useState(false)
   const [themeId, setThemeId] = useState(localStorage.getItem('theme_id') || 'gold')
+  const [customAccentColor, setCustomAccentColor] = useState(localStorage.getItem('custom_accent_color') || '#ffd700')
   const [closeBehavior, setCloseBehavior] = useState('ask')
   const [onLaunchBehavior, setOnLaunchBehavior] = useState('tray')
   const [bgAnimation, setBgAnimation] = useState(!!enableAnimation)
@@ -198,6 +199,18 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
       }
   }
 
+  const handleCustomColorChange = (color) => {
+      setCustomAccentColor(color)
+      localStorage.setItem('custom_accent_color', color)
+      localStorage.setItem('theme_id', 'custom')
+      setThemeId('custom')
+      
+      const theme = generateCustomTheme(color)
+      Object.entries(theme.colors).forEach(([key, value]) => {
+          document.documentElement.style.setProperty(key, value)
+      })
+  }
+
   useEffect(() => {
       const handleTrayRepair = () => {
           setActiveTab('general')
@@ -331,7 +344,9 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
                       {/* Theme Selector */}
                       <div style={{ marginBottom: '25px' }}>
                           <label style={{ display: 'block', marginBottom: '10px', color: 'var(--text-secondary)' }}>{t('settings.theme') || 'Theme'}</label>
-                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
+                          
+                          {/* Predefined Themes */}
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', marginBottom: '15px' }}>
                               {Object.values(availableThemes).map(theme => (
                                   <div 
                                       key={theme.id}
@@ -360,6 +375,35 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
                                       <div style={{ fontSize: '0.85em', color: theme.colors['--text-primary'], fontWeight: 'bold' }}>{theme.name}</div>
                                   </div>
                               ))}
+                          </div>
+                          
+                          {/* Custom Color Picker */}
+                          <div style={{ 
+                              display: 'flex', 
+                              flexDirection: 'column', 
+                              gap: '10px', 
+                              padding: '15px', 
+                              background: 'var(--card-bg)', 
+                              borderRadius: '8px',
+                              border: `2px solid ${themeId === 'custom' ? 'var(--accent)' : 'var(--border-color)'}`
+                          }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                  <label style={{ color: 'var(--text-secondary)', margin: 0 }}>Custom Accent Color:</label>
+                                  <input
+                                      type="color"
+                                      value={customAccentColor}
+                                      onChange={(e) => handleCustomColorChange(e.target.value)}
+                                      style={{
+                                          width: '50px',
+                                          height: '35px',
+                                          border: 'none',
+                                          borderRadius: '6px',
+                                          cursor: 'pointer',
+                                          padding: 0
+                                      }}
+                                  />
+                                  <span style={{ color: 'var(--text-primary)', fontFamily: 'monospace' }}>{customAccentColor}</span>
+                              </div>
                           </div>
                       </div>
 
@@ -1244,39 +1288,7 @@ function Settings({ onClose, onLogout, onSwitchAccount, user, redeemedCodes = []
 
           </div>
        </div>
-       <style>{`
-         @keyframes fadeIn {
-             from { opacity: 0; transform: scale(0.95); }
-             to { opacity: 1; transform: scale(1); }
-         }
-         
-         /* Custom Range Slider */
-         .ram-slider {
-            -webkit-appearance: none;
-            width: 100%;
-            height: 6px;
-            border-radius: 5px;
-            background: var(--input-bg);
-            outline: none;
-            transition: background 0.2s;
-         }
-         
-         .ram-slider::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            appearance: none;
-            width: 20px;
-            height: 20px;
-            border-radius: 50%;
-            background: var(--accent);
-            cursor: pointer;
-            border: 2px solid var(--card-bg);
-            transition: transform 0.1s;
-         }
-         
-         .ram-slider::-webkit-slider-thumb:hover {
-            transform: scale(1.2);
-         }
-       `}</style>
+
     </div>
   )
 }

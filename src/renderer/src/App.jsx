@@ -17,7 +17,7 @@ import ToastNotification from './components/ToastNotification'
 import GlobalAnnouncementModal from './components/GlobalAnnouncementModal'
 import { useLanguage } from './contexts/LanguageContext'
 
-import { themes } from './themes'
+import { themes, generateCustomTheme } from './themes'
 
 // Preload Helper
 const preloadImages = (urls) => {
@@ -66,6 +66,7 @@ function App() {
   const [isOffline, setIsOffline] = useState(!navigator.onLine)
   const [globalMaintenance, setGlobalMaintenance] = useState(false)
   const [globalMaintenanceMessage, setGlobalMaintenanceMessage] = useState('')
+  const [adminonline, setAdminonline] = useState(false)
   const [globalAnnouncements, setGlobalAnnouncements] = useState([])
   const [announcementMinCloseSeconds, setAnnouncementMinCloseSeconds] = useState(5)
   const [activeAnnouncementIndex, setActiveAnnouncementIndex] = useState(0)
@@ -96,7 +97,14 @@ function App() {
   // Initialize theme from localStorage
   useEffect(() => {
       const savedThemeId = localStorage.getItem('theme_id') || 'gold'
-      const theme = themes[savedThemeId] || themes.gold
+      let theme
+      
+      if (savedThemeId === 'custom') {
+          const savedAccent = localStorage.getItem('custom_accent_color') || '#ffd700'
+          theme = generateCustomTheme(savedAccent)
+      } else {
+          theme = themes[savedThemeId] || themes.gold
+      }
       
       if (theme && theme.colors) {
           Object.entries(theme.colors).forEach(([key, value]) => {
@@ -351,11 +359,13 @@ function App() {
   const applyGlobalStatus = (payload) => {
       const maintenance = payload?.maintenance === true
       const maintenanceMessage = typeof payload?.maintenanceMessage === 'string' ? payload.maintenanceMessage : ''
+      const adminonline = payload?.adminonline === true
       const minClose = Number.isFinite(Number(payload?.announcementMinCloseSeconds))
-        ? Math.max(0, Math.floor(Number(payload.announcementMinCloseSeconds)))
+        ? Math.max(0, Math.min(120, Math.floor(Number(payload.announcementMinCloseSeconds))))
         : 5
       setGlobalMaintenance(maintenance)
       setGlobalMaintenanceMessage(maintenanceMessage)
+      setAdminonline(adminonline)
       setAnnouncementMinCloseSeconds(minClose)
 
       const active = filterActiveAnnouncements(payload?.announcements)
@@ -1137,6 +1147,7 @@ function App() {
                     progress={launchProgress}
                     globalMaintenance={globalMaintenance}
                     globalMaintenanceMessage={globalMaintenanceMessage}
+                    adminonline={adminonline}
                     onLaunch={handleLaunch}
                     onCancel={handleCancelLaunch}
                     onOpenSettings={() => setShowSettings(true)}
