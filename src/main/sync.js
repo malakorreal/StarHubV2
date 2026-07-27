@@ -10,7 +10,7 @@ import { Transform } from 'stream'
 // 🔧 SYNC CONFIGURATION
 // ----------------------------------------------------------------------
 const MAX_RETRIES = 3
-const CHUNK_SIZE = 2 * 1024 * 1024 // 2MB chunks
+const CHUNK_SIZE = 8 * 1024 * 1024 // 8MB chunks (was 2MB — too many small requests hurt throughput, esp. on higher-latency connections)
 
 class Throttle extends Transform {
     constructor(bps) {
@@ -573,8 +573,8 @@ export class SyncManager {
 
      const queue = Array.from({ length: chunks }, (_, i) => i).filter(i => !finishedChunks.has(i))
      const workers = []
-     // Reduce concurrency for slow internet if needed, but 3-5 is usually fine
-     const concurrency = Math.min(getStore().get('maxConcurrentDownloads', 5), 3) 
+     // Respect the user's configured concurrency (was hardcoded-capped at 3, throttling large modpack downloads)
+     const concurrency = Math.max(1, getStore().get('maxConcurrentDownloads', 5))
 
      for (let w = 0; w < concurrency; w++) {
          workers.push((async () => {

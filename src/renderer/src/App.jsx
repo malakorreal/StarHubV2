@@ -299,7 +299,7 @@ function App() {
       }
   }
 
-  const DEFAULT_STATUS_API_URL = 'https://starhubapi.vercel.app/api/status'
+  const DEFAULT_STATUS_API_URL = 'https://starhubapi.malakor.online/api/status'
 
   const normalizeStatusApiUrl = (value) => {
       const raw = typeof value === 'string' ? value.trim() : ''
