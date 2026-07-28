@@ -347,33 +347,21 @@ export function setupAuth(ipcMain, mainWindow) {
                     access_token: newMclc 
                 }
             } catch (refreshErr) {
-                console.error("Auto-refresh failed, but we'll keep the current session anyway:", refreshErr)
-                // If refresh fails, just keep using the existing token instead of forcing relogin
-                setActivity('Browsing StarHub', 'In Launcher')
+                console.error("Auto-refresh failed. Session is confirmed invalid, forcing re-login:", refreshErr)
+                // Session was confirmed invalid (validation.valid === false) and refresh also failed.
+                // Reusing the dead token here is exactly what causes "Invalid session" crashes in-game.
                 return {
-                    success: true,
-                    profile: {
-                        name: currentAccount.name,
-                        id: currentAccount.uuid,
-                        account_type: 'normal'
-                    },
-                    access_token: mclcToken,
-                    warning: 'REFRESH_FAILED'
+                    success: false,
+                    error: { code: 'SESSION_EXPIRED', message: 'SESSION_EXPIRED' }
                 }
             }
         } else {
-            console.warn("No MSMC token available for refresh. Keeping current session anyway.")
-            // No refresh token, but still try to use existing session
-            setActivity('Browsing StarHub', 'In Launcher')
+            console.warn("Session confirmed invalid and no MSMC token available for refresh. Forcing re-login.")
+            // No refresh token AND the session was confirmed invalid (not a network hiccup) —
+            // do NOT keep using the existing token, it will fail in-game with "Invalid session".
             return {
-                success: true,
-                profile: {
-                    name: currentAccount.name,
-                    id: currentAccount.uuid,
-                    account_type: 'normal'
-                },
-                access_token: mclcToken,
-                warning: 'NO_REFRESH_TOKEN'
+                success: false,
+                error: { code: 'SESSION_EXPIRED', message: 'SESSION_EXPIRED' }
             }
         }
 
