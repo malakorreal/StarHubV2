@@ -369,6 +369,16 @@ export class SyncManager {
             }
             try { if (fs.existsSync(tempDest)) fs.unlinkSync(tempDest) } catch(e) {}
             attempt++
+
+            // Non-retryable HTTP errors: retrying the same URL will never succeed,
+            // so fail fast instead of burning the full retry budget (helps mirror fallback trigger sooner).
+            const status = error?.response?.status
+            const nonRetryableStatuses = [401, 403, 404]
+            if (status && nonRetryableStatuses.includes(status)) {
+                this.log(`[DOWNLOAD] Non-retryable error (${status}): ${fileName} - ${error.message}`)
+                throw error
+            }
+
             this.log(`[DOWNLOAD] Error (Attempt ${attempt}/${retries}): ${fileName} - ${error.message}`)
             if (attempt > retries) {
                 throw error
@@ -502,7 +512,11 @@ export class SyncManager {
      }
 
      let abortError = null
-     
+
+     // Shared across all concurrent chunk workers so maxDownloadSpeed limits
+     // the TOTAL throughput, not each worker independently.
+     const throttleState = { totalSent: 0, startTime: Date.now() }
+
      const saveState = () => {
          try {
              fs.writeFileSync(stateFile, JSON.stringify({
@@ -526,7 +540,6 @@ export class SyncManager {
              if (signal?.aborted || abortError) return
              if (Date.now() - startedAt > maxTotalTimeMs) throw new Error('Download timeout')
              try {
-                 const startTime = Date.now()
                  const response = await axios({
                     method: 'get',
                     url: url,
@@ -544,9 +557,10 @@ export class SyncManager {
                  const maxSpeed = getStore().get('maxDownloadSpeed', 0)
                  if (maxSpeed > 0) {
                      const bps = maxSpeed * 1024 * 1024
-                     const expectedTime = (buffer.length / bps) * 1000
-                     const actualTime = Date.now() - startTime
-                     if (actualTime < expectedTime) await this.sleep(expectedTime - actualTime)
+                     throttleState.totalSent += buffer.length
+                     const elapsed = Date.now() - throttleState.startTime
+                     const expected = (throttleState.totalSent / bps) * 1000
+                     if (elapsed < expected) await this.sleep(expected - elapsed)
                  }
 
                  finishedChunks.add(i)

@@ -152,6 +152,34 @@ export async function checkAndGrantLaunchAchievements(uuid) {
 }
 
 /**
+ * Get a user's account_type (role) from the users table.
+ * Returns null (unknown) if Supabase can't be reached, so callers don't
+ * silently downgrade an admin to 'normal' on a network hiccup.
+ */
+export async function getAccountType(uuid) {
+    if (!supabase || !uuid) return 'normal'
+
+    try {
+        const { data, error } = await withTimeout(supabase
+            .from('users')
+            .select('account_type')
+            .eq('uuid', uuid)
+            .single(), 'getAccountType')
+
+        if (error) {
+            if (error.code === 'PGRST116') return 'normal' // no row found
+            console.error('[SUPABASE] getAccountType error:', error.message)
+            return null // unknown
+        }
+
+        return data?.account_type || 'normal'
+    } catch (e) {
+        console.error('[SUPABASE] getAccountType exception:', e.message)
+        return null // unknown - network/timeout
+    }
+}
+
+/**
  * Check if user is banned
  */
 export async function checkUserBanStatus(uuid) {

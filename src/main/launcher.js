@@ -459,7 +459,7 @@ export function setupLauncher(ipcMain, mainWindow) {
             console.warn("[CLEANUP] Skipping cleanup because zip contents are unknown.")
         } else {
             const desired = getDesiredRelPaths()
-            const desiredSet = new Set(desired)
+            csiredSet = new Set(desired)
             if (forceRepair && previousManagedMods.length > 0) {
                 const removedManaged = previousManagedMods.filter(p => !desiredSet.has(p))
                 for (const rel of removedManaged) {
@@ -1135,9 +1135,9 @@ export function setupLauncher(ipcMain, mainWindow) {
                              syncManager.sendProgress('Downloading Forge Installer...', 0, 1)
                              
                              const mirrors = [
-                                 `https://bmclapi2.bangbang93.com/maven/net/minecraftforge/forge/${forgeFullVersion}/forge-${forgeFullVersion}-installer.jar`,
                                  `https://maven.minecraftforge.net/net/minecraftforge/forge/${forgeFullVersion}/forge-${forgeFullVersion}-installer.jar`,
-                                 `https://files.minecraftforge.net/maven/net/minecraftforge/forge/${forgeFullVersion}/forge-${forgeFullVersion}-installer.jar`
+                                 `https://files.minecraftforge.net/maven/net/minecraftforge/forge/${forgeFullVersion}/forge-${forgeFullVersion}-installer.jar`,
+                                 `https://bmclapi2.bangbang93.com/maven/net/minecraftforge/forge/${forgeFullVersion}/forge-${forgeFullVersion}-installer.jar`
                              ]
 
                              let success = false

@@ -34,7 +34,7 @@ export function setupStore(ipcMain) {
 
   ipcMain.handle('reset-settings', () => {
     store.delete('ram')
-    store.delete('javaArgs')
+    store.delete('javaPath')
     store.delete('autoJoin')
     store.delete('resolution')
     store.delete('fullscreen')
@@ -43,14 +43,16 @@ export function setupStore(ipcMain) {
     store.delete('autoCheckUpdates')
     store.delete('closeBehavior')
     store.delete('bgAnimation')
+    store.delete('onLaunchBehavior')
     
     // Return default values
     return {
       ram: 4096,
       systemRam: Math.round(os.totalmem() / 1024 / 1024),
       closeBehavior: 'ask',
+      onLaunchBehavior: 'tray',
       bgAnimation: false,
-      javaArgs: '',
+      javaPath: '',
       autoJoin: false,
       resolution: { width: 854, height: 480 },
       fullscreen: false,

@@ -43,7 +43,11 @@ async function fetchAndCache(cacheKey) {
 
     if (typeof data === 'string') {
       // Remove comments if any
-      data = data.replace(/\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "").trim()
+      // NOTE: negative lookbehind for ':' so we don't destroy "http://" / "https://"
+      // inside string values (e.g. modpackUrl/fileUrl). The old regex matched the
+      // first "//" anywhere on a line and stripped everything after it, which
+      // truncated any URL field in the JSON (e.g. "https://host/pack.zip" -> "https:").
+      data = data.replace(/(?<!:)\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "").trim()
     }
 
     let instances = []

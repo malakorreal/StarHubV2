@@ -1,6 +1,6 @@
 {
   "name": "starhub-v2",
-  "version": "3.0.3",
+  "version": "3.0.5",
   "author": "Malakor",
   "description": "StarHub Launcher",
   "main": "out/main/index.js",
@@ -8,6 +8,7 @@
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "dist": "npm run build && electron-builder",
+    "update": "git add . && npm version patch && npm run dist && git push origin main && git push origin --tags",
     "release": "npm version patch && git push origin main && git push origin --tags",
     "preview": "electron-vite preview",
     "start": "electron ."

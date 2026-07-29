@@ -3,7 +3,27 @@ import { getStore } from './store'
 import { setActivity } from './rpc'
 import icon from '../../resources/icon.ico?asset'
 import axios from 'axios'
-import { syncUserToDb, checkUserBanStatus } from './supabase'
+import { syncUserToDb, checkUserBanStatus, getAccountType } from './supabase'
+
+// Cache the last known role per-account so that transient failures (network
+// hiccups, timeouts) never silently downgrade an admin to 'normal'.
+function getCachedRole(store, uuid) {
+    if (!uuid) return 'normal'
+    return store.get(`role_${uuid}`, 'normal')
+}
+function setCachedRole(store, uuid, accountType) {
+    if (!uuid || !accountType) return
+    store.set(`role_${uuid}`, accountType)
+}
+// Resolve the role to actually return: prefer a fresh DB value, fall back to
+// the cached one (not a hardcoded 'normal') when the DB call failed/timed out.
+function resolveRole(store, uuid, dbAccountType) {
+    if (dbAccountType) {
+        setCachedRole(store, uuid, dbAccountType)
+        return dbAccountType
+    }
+    return getCachedRole(store, uuid)
+}
 
 function toErrorMessage(err) {
     if (!err) return 'Unknown error'
@@ -198,19 +218,20 @@ export function setupAuth(ipcMain, mainWindow) {
                 profile: { 
                     name: mclcToken.name, 
                     id: mclcToken.uuid,
-                    account_type: dbUser?.account_type || 'normal'
+                    account_type: resolveRole(store, mclcToken.uuid, dbUser?.account_type)
                 }, 
                 access_token: mclcToken 
             }
         } catch (dbErr) {
             console.error(`[AUTH] Database sync error:`, dbErr)
-            // Still allow login even if DB fails, but log it
+            // Still allow login even if DB fails, but log it — keep the
+            // last known role instead of silently downgrading to 'normal'
             return { 
                 success: true, 
                 profile: { 
                     name: mclcToken.name, 
                     id: mclcToken.uuid,
-                    account_type: 'normal'
+                    account_type: getCachedRole(store, mclcToken.uuid)
                 }, 
                 access_token: mclcToken 
             }
@@ -286,18 +307,19 @@ export function setupAuth(ipcMain, mainWindow) {
                     profile: { 
                         name: currentAccount.name, 
                         id: currentAccount.uuid,
-                        account_type: dbUser?.account_type || 'normal'
+                        account_type: resolveRole(store, currentAccount.uuid, dbUser?.account_type)
                     }, 
                     access_token: mclcToken 
                 }
             } catch (dbErr) {
                 console.error(`[AUTH] Refresh DB sync error:`, dbErr)
+                // DB sync failed - keep the last known role instead of resetting to 'normal'
                 return { 
                     success: true, 
                     profile: { 
                         name: currentAccount.name, 
                         id: currentAccount.uuid,
-                        account_type: 'normal'
+                        account_type: getCachedRole(store, currentAccount.uuid)
                     }, 
                     access_token: mclcToken 
                 }
@@ -306,13 +328,15 @@ export function setupAuth(ipcMain, mainWindow) {
 
         if (validation.valid === null) {
             console.warn(`Session check unavailable (${validation.error}). Keeping current session without forcing relogin.`)
+            // Try a lightweight direct fetch of the role; fall back to cache if that also fails
+            const freshRole = await getAccountType(currentAccount.uuid)
             setActivity('Browsing StarHub', 'In Launcher')
             return {
                 success: true,
                 profile: {
                     name: currentAccount.name,
                     id: currentAccount.uuid,
-                    account_type: 'normal'
+                    account_type: resolveRole(store, currentAccount.uuid, freshRole)
                 },
                 access_token: mclcToken,
                 warning: validation.error
@@ -339,11 +363,24 @@ export function setupAuth(ipcMain, mainWindow) {
                 
                 // Update Storage
                 saveAccount(store, newMclc, newToken)
+
+                // Re-sync + fetch role so it doesn't come back as undefined/normal
+                let freshRole = null
+                try {
+                    await syncUserToDb({ uuid: newMclc.uuid, name: newMclc.name })
+                    freshRole = await getAccountType(newMclc.uuid)
+                } catch (roleErr) {
+                    console.warn('[AUTH] Failed to refresh role after token refresh:', roleErr.message)
+                }
                 
                 setActivity('Browsing StarHub', 'In Launcher')
                 return { 
                     success: true, 
-                    profile: { name: newMclc.name, id: newMclc.uuid }, 
+                    profile: { 
+                        name: newMclc.name, 
+                        id: newMclc.uuid,
+                        account_type: resolveRole(store, newMclc.uuid, freshRole)
+                    }, 
                     access_token: newMclc 
                 }
             } catch (refreshErr) {
@@ -391,7 +428,7 @@ export function setupAuth(ipcMain, mainWindow) {
                 profile: {
                     name: currentAccount.name,
                     id: currentAccount.uuid,
-                    account_type: 'normal'
+                    account_type: getCachedRole(store, currentAccount.uuid)
                 },
                 access_token: currentAccount.mclc,
                 warning: 'GENERAL_ERROR'

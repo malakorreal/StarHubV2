@@ -88,7 +88,7 @@ export function setActivity(status, instanceName = null, startTimestamp = null, 
     details: details,
     state: state,
     startTimestamp: startTimestamp ? Math.floor(startTimestamp / 1000) : undefined,
-    largeImageKey: 'shubnopeople',
+    largeImageKey: 'malakornewcms',
     largeImageText: 'StarHub',
     instance: false,
     buttons: [

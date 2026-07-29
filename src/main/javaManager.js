@@ -1,6 +1,7 @@
 import fs from 'fs'
 import path from 'path'
 import { app } from 'electron'
+import { execSync } from 'child_process'
 
 export class JavaManager {
     constructor(mainWindow, syncManager) {
@@ -75,8 +76,6 @@ export class JavaManager {
                     // tar.gz extraction logic (if SyncManager doesn't have it, we might need to add it or use child_process)
                     // Let's check if syncManager has extractTarGz or similar.
                     // Based on previous analysis, it only had extractZip.
-                    // I'll use child_process for tar.gz if needed.
-                    const { execSync } = require('child_process')
                     execSync(`tar -xzf "${zipPath}" -C "${javaTargetDir}"`)
                  } else {
                     await this.syncManager.extractZip(zipPath, javaTargetDir, { signal })
